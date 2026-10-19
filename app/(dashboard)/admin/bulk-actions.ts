@@ -7,13 +7,19 @@ import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { client } from '@/lib/db/drizzle';
 import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
 import { processCanceledSeminarPayments } from '@/lib/seminars/cancellation-worker';
-import { archiveMembers, deleteMembers } from '@/lib/admin/member-lifecycle';
+import { archiveMembers, AuthoredContentError, deleteMembers, listReassignmentCandidates, type ReassignmentCandidate } from '@/lib/admin/member-lifecycle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { deleteArticles, requireNewsArticleSchema } from '@/lib/news/articles';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
-export type BulkDeleteState = { error?: string; stepUpRequired?: boolean; success?: string };
+export type BulkDeleteState = {
+  error?: string;
+  stepUpRequired?: boolean;
+  success?: string;
+  /** Selected members authored content: ask who should take it over before deleting. */
+  reassignment?: { accounts: { id: number; email: string; archived: boolean; sources: string[] }[]; candidates: ReassignmentCandidate[] };
+};
 const TABLES = ['members', 'news', 'seminars', 'registrations', 'support'] as const;
 type BulkTable = (typeof TABLES)[number];
 
@@ -129,7 +135,16 @@ export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: For
     const stepUp = await requireFreshStepUp(actor, 'change-security-settings', '/admin');
     if (stepUp.required) return { stepUpRequired: true };
     let deleted = 0;
-    if (table === 'members') deleted = await deleteMembers(ids, actor.id);
+    if (table === 'members') {
+      const reassignTo = String(formData.get('reassign_to') ?? '');
+      if (reassignTo && !/^\d+$/.test(reassignTo)) throw new Error('Invalid replacement author.');
+      try {
+        deleted = await deleteMembers(ids, actor.id, reassignTo ? { reassignAuthoredTo: Number(reassignTo) } : {});
+      } catch (error) {
+        if (error instanceof AuthoredContentError) return { reassignment: { accounts: error.accounts, candidates: await listReassignmentCandidates(ids, actor.id) } };
+        throw error;
+      }
+    }
     else if (table === 'news') { await deleteArticles(ids); deleted = ids.length; }
     else if (table === 'seminars') deleted = await deleteSeminars(ids, actor.id);
     else if (table === 'registrations') deleted = await deleteRegistrations(ids, actor.id);
