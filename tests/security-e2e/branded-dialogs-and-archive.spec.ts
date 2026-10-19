@@ -75,7 +75,7 @@ test('archiving members needs no authenticator code and uses a branded dialog; d
   await context.close();
 });
 
-test('a refused delete explains itself in a branded dialog, not a browser alert', async ({ browser }) => {
+test('deleting a member who authored content asks who takes over, then deletes in one step', async ({ browser }) => {
   test.setTimeout(120_000);
   const sql = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
   await sql`delete from idoc.account_request_limits where purpose like 'mfa_%'`;
@@ -93,14 +93,22 @@ test('a refused delete explains itself in a branded dialog, not a browser alert'
   await row.check();
   await page.getByRole('button', { name: 'Delete selected' }).click();
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  // The replacement author is asked for before the authenticator code, in a branded dialog that can be left.
+  const ask = page.getByRole('dialog', { name: 'Who should take over their content?' });
+  await expect(ask).toBeVisible({ timeout: 30_000 });
+  await expect(ask).toContainText('invitations sent');
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toBeHidden();
+  expect((await sql`select count(*)::int as n from idoc.users where id=${author.id}`)[0].n).toBe(1);
+
+  await page.getByRole('button', { name: 'Delete selected' }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(ask).toBeVisible({ timeout: 30_000 });
+  await ask.getByRole('button', { name: 'Reassign and delete' }).click();
   await page.getByLabel('Authenticator code').fill(totp(E2E_TOTP_SECRET, 1));
   await page.getByRole('button', { name: 'Verify and continue' }).click();
-  // The refusal text is covered by the member-lifecycle integration test; here it must be a branded dialog that can be dismissed.
-  const notice = page.getByRole('dialog', { name: 'Could not delete' });
-  await expect(notice).toBeVisible({ timeout: 30_000 });
-  await expect(notice).toContainText('Archive');
-  await notice.getByRole('button', { name: 'OK' }).click();
-  await expect(notice).toBeHidden();
+  await expect.poll(async () => (await sql`select count(*)::int as n from idoc.users where id=${author.id}`)[0].n, { timeout: 30_000 }).toBe(0);
+  expect((await sql`select count(*)::int as n from idoc.invitations where email='invitee-dialogs@example.test' and invited_by is not null`)[0].n).toBe(1);
   expect(nativeDialogs).toEqual([]);
   await sql.end();
   await context.close();

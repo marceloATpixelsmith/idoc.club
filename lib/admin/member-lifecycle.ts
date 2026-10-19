@@ -16,17 +16,37 @@ async function authoredRecordsMessage(sql: Sql, authored: { user_id: number; sou
       : 'Archive the ones that are not archived yet instead of deleting them, and select only members without created content to delete.');
 }
 
-export async function deleteMembers(ids: string[], actorId: number) {
-  const numeric = ids.map(Number);
-  return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; email: string; profile_id: number | null }[]>`
-      select u.id,u.email,p.id as profile_id from users u
-      left join profiles p on p.user_id=u.id where u.id in ${sql(numeric)} for update of u`;
-    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
-    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
-    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
-    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
-    const authored = await sql<{ user_id: number; source: string }[]>`
+/** Thrown when selected accounts authored content and no replacement author was chosen; carries what the dialog needs to ask. */
+export class AuthoredContentError extends Error {
+  constructor(message: string, readonly accounts: { id: number; email: string; archived: boolean; sources: string[] }[]) {
+    super(message);
+    this.name = 'AuthoredContentError';
+  }
+}
+
+export type ReassignmentCandidate = { id: number; email: string; role: 'super_admin' | 'administrator'; isYou: boolean };
+
+/** Active administrators and super administrators who can take over authorship, excluding the accounts being deleted. */
+export async function listReassignmentCandidates(excludeIds: string[], actorId: number): Promise<ReassignmentCandidate[]> {
+  const excluded = excludeIds.map(Number);
+  const rows = await client<{ id: number; email: string; is_super: boolean }[]>`
+    select u.id,u.email,bool_or(r.role='super_admin') as is_super from users u
+    join application_roles r on r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin')
+    where u.account_state='active' and u.deleted_at is null and u.id not in ${client(excluded.length ? excluded : [0])}
+    group by u.id,u.email order by u.email`;
+  return rows.map((row) => ({ id: row.id, email: row.email, role: row.is_super ? 'super_admin' : 'administrator', isYou: row.id === actorId }));
+}
+
+const AUTHORED_TABLES = [
+  ['news_articles', ['created_by_user_id', 'updated_by_user_id']],
+  ['seminars', ['created_by_user_id', 'updated_by_user_id']],
+  ['content_pages', ['created_by_user_id', 'updated_by_user_id']],
+  ['content_page_revisions', ['created_by_user_id']],
+  ['invitations', ['invited_by']],
+] as const;
+
+async function findAuthored(sql: Sql, numeric: number[]) {
+  return sql<{ user_id: number; source: string }[]>`
       select distinct user_id, source from (
         select created_by_user_id as user_id, 'news articles' as source from news_articles where created_by_user_id in ${sql(numeric)}
         union all select updated_by_user_id, 'news articles' from news_articles where updated_by_user_id in ${sql(numeric)}
@@ -39,7 +59,56 @@ export async function deleteMembers(ids: string[], actorId: number) {
         union all select updated_by, 'support category defaults' from support_category_defaults where updated_by in ${sql(numeric)}
         union all select invited_by, 'invitations sent' from invitations where invited_by in ${sql(numeric)}
       ) authored where user_id is not null order by user_id, source`;
-    if (authored.length) throw new Error(await authoredRecordsMessage(sql, authored));
+}
+
+/** Read-only preview used before the authenticator step, so the replacement-author question does not spend a single-use step-up. */
+export async function previewAuthoredContent(ids: string[], actorId: number) {
+  const numeric = ids.map(Number);
+  const authored = await findAuthored(client as unknown as Sql, numeric);
+  if (!authored.length) return null;
+  const bySource = new Map<number, string[]>();
+  for (const row of authored) bySource.set(row.user_id, [...(bySource.get(row.user_id) ?? []), row.source]);
+  const accounts = await client<{ id: number; email: string; account_state: string }[]>`select id,email,account_state from users where id in ${client([...bySource.keys()])} order by email`;
+  return { accounts: accounts.map((account) => ({ id: account.id, email: account.email, archived: account.account_state === 'deleted', sources: bySource.get(account.id)! })), candidates: await listReassignmentCandidates(ids, actorId) };
+}
+
+export async function deleteMembers(ids: string[], actorId: number, options: { reassignAuthoredTo?: number } = {}) {
+  const numeric = ids.map(Number);
+  return client.begin(async (sql) => {
+    const rows = await sql<{ id: number; email: string; profile_id: number | null }[]>`
+      select u.id,u.email,p.id as profile_id from users u
+      left join profiles p on p.user_id=u.id where u.id in ${sql(numeric)} for update of u`;
+    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
+    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
+    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
+    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
+    const authored = await findAuthored(sql, numeric);
+    if (authored.length && options.reassignAuthoredTo === undefined) {
+      const bySource = new Map<number, string[]>();
+      for (const row of authored) bySource.set(row.user_id, [...(bySource.get(row.user_id) ?? []), row.source]);
+      const accounts = await sql<{ id: number; email: string; account_state: string }[]>`select id,email,account_state from users where id in ${sql([...bySource.keys()])} order by email`;
+      throw new AuthoredContentError(await authoredRecordsMessage(sql, authored), accounts.map((account) => ({ id: account.id, email: account.email, archived: account.account_state === 'deleted', sources: bySource.get(account.id)! })));
+    }
+    if (authored.length) {
+      const target = options.reassignAuthoredTo!;
+      if (numeric.includes(target)) throw new Error('Choose someone who is not being deleted to take over the content.');
+      const [replacement] = await sql<{ id: number; email: string }[]>`
+        select u.id,u.email from users u where u.id=${target} and u.account_state='active' and u.deleted_at is null
+        and exists (select 1 from application_roles r where r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin')) for share`;
+      if (!replacement) throw new Error('The chosen replacement must be an active administrator or super administrator.');
+      for (const [table, columns] of AUTHORED_TABLES) {
+        for (const column of columns) await sql`update ${sql(table)} set ${sql(column)}=${target} where ${sql(column)} in ${sql(numeric)}`;
+      }
+      // support_category_defaults is keyed by (category, administrator): hand the leaving admin's categories to the replacement, then drop theirs.
+      await sql`insert into support_category_defaults(category,administrator_user_id,updated_by) select category,${target},${target} from support_category_defaults where administrator_user_id in ${sql(numeric)} on conflict do nothing`;
+      await sql`delete from support_category_defaults where administrator_user_id in ${sql(numeric)}`;
+      await sql`update support_category_defaults set updated_by=${target} where updated_by in ${sql(numeric)}`;
+      const bySource = new Map<number, string[]>();
+      for (const row of authored) bySource.set(row.user_id, [...(bySource.get(row.user_id) ?? []), row.source]);
+      for (const row of rows.filter((entry) => bySource.has(entry.id))) {
+        await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason) values (${actorId},'admin.member.authored_content_reassigned','user',${String(row.id)},${JSON.stringify({ email: row.email, sources: bySource.get(row.id) })}::jsonb,${JSON.stringify({ reassignedToUserId: replacement.id, reassignedToEmail: replacement.email })}::jsonb,'Authored content reassigned before permanent delete')`;
+      }
+    }
     const profileIds = rows.flatMap((row) => row.profile_id === null ? [] : [row.profile_id]);
     const activeSubscriptions = profileIds.length ? await sql<{ count: number }[]>`select count(*)::int as count from subscriptions where profile_id in ${sql(profileIds)} and status in ('active','trialing','past_due','incomplete')` : [{ count: 0 }];
     if (activeSubscriptions[0]?.count) throw new Error('Cancel active billing subscriptions before permanently deleting selected members.');

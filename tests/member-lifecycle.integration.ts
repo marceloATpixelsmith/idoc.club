@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
-import { archiveMembers, deleteMembers } from '../lib/admin/member-lifecycle.ts';
+import { archiveMembers, deleteMembers, listReassignmentCandidates, previewAuthoredContent } from '../lib/admin/member-lifecycle.ts';
 import { closeHarness, createCompleteGraph, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
@@ -151,4 +151,41 @@ test('permanent deletion names every blocked account, however many are selected'
     assert.doesNotMatch(message, /…and \d+ more/);
     return true;
   });
+});
+
+test('permanent deletion asks for a replacement author and reassigns authored content in one transaction', async () => {
+  const actor = await createUser();
+  const author = await createUser();
+  const replacement = await createUser();
+  const plain = await createUser();
+  await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${actor.id},'super_admin',${actor.id}),(${replacement.id},'administrator',${actor.id})`;
+  const [team] = await sql<{ id: number }[]>`insert into idoc.teams(name) values('Reassign fixture') returning id`;
+  await sql`insert into idoc.invitations(team_id,email,role,invited_by) values(${team.id},'reassign@example.test','member',${author.id})`;
+  await sql`insert into idoc.support_category_defaults(category,administrator_user_id,updated_by) values('other',${author.id},${author.id}),('seminars',${author.id},${author.id}),('seminars',${replacement.id},${actor.id})`;
+
+  await assert.rejects(deleteMembers([String(author.id)], actor.id), (error: unknown) => {
+    assert.equal((error as Error).name, 'AuthoredContentError');
+    assert.deepEqual((error as { accounts: { id: number; sources: string[] }[] }).accounts.map((account) => account.id), [author.id]);
+    return true;
+  });
+  const preview = await previewAuthoredContent([String(author.id)], actor.id);
+  assert.deepEqual(preview?.accounts.map((account) => account.id), [author.id]);
+  assert.equal(await previewAuthoredContent([String(plain.id)], actor.id), null);
+  const candidates = await listReassignmentCandidates([String(author.id)], actor.id);
+  assert.deepEqual(candidates.map((candidate) => candidate.id).sort(), [actor.id, replacement.id].sort());
+  assert.equal(candidates.find((candidate) => candidate.id === actor.id)?.isYou, true);
+
+  for (const invalid of [plain.id, author.id]) {
+    await assert.rejects(deleteMembers([String(author.id)], actor.id, { reassignAuthoredTo: invalid }), /replacement|not being deleted/);
+  }
+  assert.equal((await sql`select count(*)::int as n from idoc.users where id=${author.id}`)[0].n, 1);
+
+  assert.equal(await deleteMembers([String(author.id), String(plain.id)], actor.id, { reassignAuthoredTo: replacement.id }), 2);
+  assert.equal((await sql`select invited_by from idoc.invitations where email='reassign@example.test'`)[0].invited_by, replacement.id);
+  const defaults = await sql`select category,administrator_user_id,updated_by from idoc.support_category_defaults order by category`;
+  assert.deepEqual(defaults.map((row) => [row.category, row.administrator_user_id]), [['other', replacement.id], ['seminars', replacement.id]]);
+  const audit = await sql`select after_json from idoc.audit_log where action='admin.member.authored_content_reassigned' and entity_id=${String(author.id)}`;
+  assert.equal(audit.length, 1);
+  const afterJson = typeof audit[0].after_json === 'string' ? JSON.parse(audit[0].after_json) : audit[0].after_json;
+  assert.equal(afterJson.reassignedToUserId, replacement.id);
 });

@@ -49,6 +49,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 - No browser `alert()`, `confirm()` or `prompt()` is used anywhere; a test fails if one appears. Use `useBrandedDialogs()` (`components/ui/branded-dialogs.tsx`): `alert(message, title?)` for notices and `await confirm({ message, confirmLabel, destructive })` for confirmations. They use the same dialog look as the authenticator prompt and keep line breaks in long messages. Render the returned `dialogs` once in the component.
 - Every dialog can be left. Notices have OK; confirmations have Cancel and also close on Escape or a click away (counted as "no"); the authenticator prompt has Cancel and Escape cancels it. A dialog never traps someone behind a disabled button.
 - Archiving never asks for an authenticator code; permanent deletion does.
+- Permanent member deletion that would orphan authored content does not end in an error notice: the bulk-delete dialog asks which active Administrator or Super Administrator takes the content over (Select, acting admin preselected, Cancel and a destructive **Reassign and delete**), then retries with that choice (see docs/07).
 
 ## 6. Where this is enforced
 
