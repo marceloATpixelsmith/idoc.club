@@ -28,3 +28,14 @@ test('an unreadable URL produces a safe message instead of throwing', () => {
   assert.equal(summarizePromotionCredentials('not a url'), null);
   assert.match(describePasswordRejection(null), /could not be read/);
 });
+
+test('a short or human-chosen password never yields a password-derived value', () => {
+  for (const weak of ['hunter2', 'CorrectHorseBatteryStaple2026', 'abcdefABCDEF0123456789abcdefABCDEFxyz']) {
+    const summary = summarizePromotionCredentials(`postgresql://u:${weak}@h.example/db`)!;
+    assert.equal(summary.passwordSha256Prefix, null);
+    assert.equal(summary.passwordLength, weak.length);
+    const text = describePasswordRejection(summary);
+    assert.doesNotMatch(text, /SHA-256 starts with/);
+    assert.match(text, /openssl rand -hex 24/);
+  }
+});
