@@ -21,8 +21,8 @@ export type GuideInputs = { final: FinalInputs; host: string | null; inputs: Swi
 const LIVE_HOSTS = ['idoc.club', 'www.idoc.club'];
 const onLiveDomain = (host: string | null) => host !== null && LIVE_HOSTS.includes(host);
 
-/** A replay audit only counts when it was written after the current import; an earlier rehearsal does not recover payments made during the cutover. */
-const replayedAfterImport = (final: FinalInputs) => final.replayRun !== null && final.importRun !== null && final.replayRun.at > final.importRun.at;
+/** A replay audit only counts when it was written after the current import and no event failed; an earlier rehearsal does not recover payments made during the cutover. */
+const replayedAfterImport = (final: FinalInputs) => final.replayRun !== null && final.replayRun.failed === 0 && final.importRun !== null && final.replayRun.at > final.importRun.at;
 
 export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
   const imported = inputs.counts.legacyImports > 0;
@@ -188,7 +188,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
         'Run a scan and work through the findings.',
         'Stripe-changing actions stay simulated. Only after the import and replay are verified, optionally add `RECONCILIATION_LIVE_STRIPE_ACTIONS=enabled` (Production) and redeploy.',
       ],
-      auto: true, autoDone: final.scanAt !== null && (final.importRun === null || final.scanAt > final.importRun.at),
+      auto: true, autoDone: final.scanAt !== null && final.replayRun !== null && final.scanAt > final.replayRun.at && replayedAfterImport(final),
       env: [{ action: 'optional, later: add enabled', name: 'RECONCILIATION_LIVE_STRIPE_ACTIONS', scope: 'Production' }],
       id: 'B11', link: { href: '/admin/reconciliation', label: 'Open reconciliation' }, phase: 'B', title: 'Run reconciliation and work the findings', where: 'Reconciliation page',
     }),

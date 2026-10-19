@@ -68,8 +68,10 @@ test('import, webhook, hold, replay, scan and clean-up are each detected from th
   const run = { at: '2026-10-22T10:00:00Z', imported: 1, payments: 1, subscriptions: 1 };
   assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-22T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, true);
   assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-20T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, false);
-  assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T09:00:00Z' }), 'B11').autoDone, false);
-  assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T11:00:00Z' }), 'B11').autoDone, true);
+  const replay = { at: '2026-10-22T12:00:00Z', failed: 0, processed: 2 };
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: replay, scanAt: '2026-10-22T11:00:00Z' }), 'B11').autoDone, false);
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: replay, scanAt: '2026-10-22T13:00:00Z' }), 'B11').autoDone, true);
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: { ...replay, failed: 1 } }), 'B10').autoDone, false);
   assert.equal(byId(guide(imported), 'B12').autoDone, true);
   assert.equal(byId(guide({ ...imported, legacyKeyPresent: true }), 'B12').autoDone, false);
 });
