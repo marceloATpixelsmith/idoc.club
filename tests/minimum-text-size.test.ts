@@ -45,3 +45,11 @@ test('the shared Tailwind text steps stay at or above the floor', () => {
     assert.ok(Number(match[1]) * 16 >= MIN_PX);
   }
 });
+
+test('rich-text editor sizes and the sanitizer respect the floor', async () => {
+  const sizes = readFileSync('components/tiptap/font-size-mark.ts', 'utf8').match(/FONT_SIZES = \[([\d,\s]+)\]/);
+  assert.ok(sizes, 'FONT_SIZES is defined');
+  assert.ok(Math.min(...sizes[1].split(',').map(Number)) >= MIN_PX);
+  const { sanitizeArticleContent } = await import('../lib/news/sanitize.ts');
+  assert.match(sanitizeArticleContent('<span style="font-size: 12px">x</span>'), /font-size: 13px/);
+});
