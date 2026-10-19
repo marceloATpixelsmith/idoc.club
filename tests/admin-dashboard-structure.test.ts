@@ -25,11 +25,16 @@ test('admin dashboard uses branded responsive navigation after server authorizat
 
 test('shared administrator functions precede conditional Super Admin functions', () => {
   assert.ok(navigation.indexOf('const SHARED_ITEMS') < navigation.indexOf('const SUPER_ADMIN_ITEMS'));
-  assert.match(navigation, /isSuperAdmin \? \[\.\.\.SHARED_ITEMS, \.\.\.SUPER_ADMIN_ITEMS\] : SHARED_ITEMS/);
+  assert.match(navigation, /isSuperAdmin \? \[\.\.\.SHARED_ITEMS, \.\.\.superAdminItems\] : SHARED_ITEMS/);
   assert.match(navigation, /Super Admin/);
   for (const icon of ['Users', 'FileDown', 'Building2', 'ShieldCheck']) {
     assert.match(navigation, new RegExp(`icon: ${icon}`));
   }
+});
+
+test('Data promotion is listed only where it can run, the staging application', () => {
+  assert.match(adminLayout, /showDataPromotion=\{process\.env\.DB_SCHEMA === 'idoc_staging'\}/);
+  assert.match(navigation, /showDataPromotion \? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS\.filter\(\(item\) => item\.href !== '\/admin\/operations\/data-promotion'\)/);
 });
 
 test('the manual-payments nav item is gone -- it only told admins to go back to Members and search', () => {

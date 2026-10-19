@@ -89,9 +89,18 @@ function configuration() {
   return { databaseUrl, planSecret };
 }
 
+// Same rule as lib/db/connection-url.ts: remote databases (Render) refuse unencrypted connections, so require TLS unless the URL says otherwise.
+function withRequiredEncryption(databaseUrl: string) {
+  const parsed = new URL(databaseUrl);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (!isLocal && !parsed.searchParams.has('sslmode')) parsed.searchParams.set('sslmode', 'require');
+  return parsed.toString();
+}
+
 function promotionSql() {
   const { databaseUrl } = configuration();
-  promotionConnection ??= postgres(databaseUrl, {
+  promotionConnection ??= postgres(withRequiredEncryption(databaseUrl), {
     connect_timeout: 10,
     connection: { application_name: 'idoc-data-promotion' },
     idle_timeout: 10,
