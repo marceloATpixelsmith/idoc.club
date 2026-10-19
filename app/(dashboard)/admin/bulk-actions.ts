@@ -7,7 +7,7 @@ import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { client } from '@/lib/db/drizzle';
 import { dispatchQueuedEmailAfterResponse } from '@/lib/notifications/immediate-dispatch';
 import { processCanceledSeminarPayments } from '@/lib/seminars/cancellation-worker';
-import { archiveMembers, AuthoredContentError, deleteMembers, listReassignmentCandidates, type ReassignmentCandidate } from '@/lib/admin/member-lifecycle';
+import { archiveMembers, AuthoredContentError, deleteMembers, listReassignmentCandidates, previewAuthoredContent, type ReassignmentCandidate } from '@/lib/admin/member-lifecycle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { deleteArticles, requireNewsArticleSchema } from '@/lib/news/articles';
@@ -132,6 +132,11 @@ export async function bulkDeleteAdminRows(_state: BulkDeleteState, formData: For
     const actor = await requireAccountAccess('administration');
     requireAdministrator(actor);
     const { table, ids } = parseIds(formData);
+    // Ask who takes over authored content before the authenticator step, so one delete costs one single-use step-up.
+    if (table === 'members' && !String(formData.get('reassign_to') ?? '')) {
+      const preview = await previewAuthoredContent(ids, actor.id);
+      if (preview) return { reassignment: preview };
+    }
     const stepUp = await requireFreshStepUp(actor, 'change-security-settings', '/admin');
     if (stepUp.required) return { stepUpRequired: true };
     let deleted = 0;

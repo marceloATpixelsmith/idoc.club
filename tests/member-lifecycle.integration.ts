@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
-import { archiveMembers, deleteMembers, listReassignmentCandidates } from '../lib/admin/member-lifecycle.ts';
+import { archiveMembers, deleteMembers, listReassignmentCandidates, previewAuthoredContent } from '../lib/admin/member-lifecycle.ts';
 import { closeHarness, createCompleteGraph, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
@@ -168,6 +168,9 @@ test('permanent deletion asks for a replacement author and reassigns authored co
     assert.deepEqual((error as { accounts: { id: number; sources: string[] }[] }).accounts.map((account) => account.id), [author.id]);
     return true;
   });
+  const preview = await previewAuthoredContent([String(author.id)], actor.id);
+  assert.deepEqual(preview?.accounts.map((account) => account.id), [author.id]);
+  assert.equal(await previewAuthoredContent([String(plain.id)], actor.id), null);
   const candidates = await listReassignmentCandidates([String(author.id)], actor.id);
   assert.deepEqual(candidates.map((candidate) => candidate.id).sort(), [actor.id, replacement.id].sort());
   assert.equal(candidates.find((candidate) => candidate.id === actor.id)?.isYou, true);

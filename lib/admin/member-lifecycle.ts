@@ -45,17 +45,8 @@ const AUTHORED_TABLES = [
   ['invitations', ['invited_by']],
 ] as const;
 
-export async function deleteMembers(ids: string[], actorId: number, options: { reassignAuthoredTo?: number } = {}) {
-  const numeric = ids.map(Number);
-  return client.begin(async (sql) => {
-    const rows = await sql<{ id: number; email: string; profile_id: number | null }[]>`
-      select u.id,u.email,p.id as profile_id from users u
-      left join profiles p on p.user_id=u.id where u.id in ${sql(numeric)} for update of u`;
-    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
-    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
-    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
-    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
-    const authored = await sql<{ user_id: number; source: string }[]>`
+async function findAuthored(sql: Sql, numeric: number[]) {
+  return sql<{ user_id: number; source: string }[]>`
       select distinct user_id, source from (
         select created_by_user_id as user_id, 'news articles' as source from news_articles where created_by_user_id in ${sql(numeric)}
         union all select updated_by_user_id, 'news articles' from news_articles where updated_by_user_id in ${sql(numeric)}
@@ -68,6 +59,30 @@ export async function deleteMembers(ids: string[], actorId: number, options: { r
         union all select updated_by, 'support category defaults' from support_category_defaults where updated_by in ${sql(numeric)}
         union all select invited_by, 'invitations sent' from invitations where invited_by in ${sql(numeric)}
       ) authored where user_id is not null order by user_id, source`;
+}
+
+/** Read-only preview used before the authenticator step, so the replacement-author question does not spend a single-use step-up. */
+export async function previewAuthoredContent(ids: string[], actorId: number) {
+  const numeric = ids.map(Number);
+  const authored = await findAuthored(client as unknown as Sql, numeric);
+  if (!authored.length) return null;
+  const bySource = new Map<number, string[]>();
+  for (const row of authored) bySource.set(row.user_id, [...(bySource.get(row.user_id) ?? []), row.source]);
+  const accounts = await client<{ id: number; email: string; account_state: string }[]>`select id,email,account_state from users where id in ${client([...bySource.keys()])} order by email`;
+  return { accounts: accounts.map((account) => ({ id: account.id, email: account.email, archived: account.account_state === 'deleted', sources: bySource.get(account.id)! })), candidates: await listReassignmentCandidates(ids, actorId) };
+}
+
+export async function deleteMembers(ids: string[], actorId: number, options: { reassignAuthoredTo?: number } = {}) {
+  const numeric = ids.map(Number);
+  return client.begin(async (sql) => {
+    const rows = await sql<{ id: number; email: string; profile_id: number | null }[]>`
+      select u.id,u.email,p.id as profile_id from users u
+      left join profiles p on p.user_id=u.id where u.id in ${sql(numeric)} for update of u`;
+    if (rows.length !== numeric.length) throw new Error('One or more selected members no longer exist.');
+    if (rows.some((row) => row.id === actorId)) throw new Error('You cannot delete your own administrator account.');
+    const privileged = await sql<{ user_id: number }[]>`select distinct user_id from application_roles where user_id in ${sql(numeric)} and revoked_at is null and role in ('administrator','super_admin')`;
+    if (privileged.length) throw new Error('Administrator accounts cannot be bulk deleted. Revoke their administrator role first.');
+    const authored = await findAuthored(sql, numeric);
     if (authored.length && options.reassignAuthoredTo === undefined) {
       const bySource = new Map<number, string[]>();
       for (const row of authored) bySource.set(row.user_id, [...(bySource.get(row.user_id) ?? []), row.source]);
