@@ -11,6 +11,7 @@ import { requireCsrfToken } from '@/lib/security/csrf';
 import {
   buildPromotionPlan,
   DataPromotionError,
+  describePromotionFailure,
   executePromotionPlan,
   listPromotionCandidates,
   listPromotionHistory,
@@ -80,7 +81,7 @@ export default async function DataPromotionPage({
   try {
     [candidates, history] = await Promise.all([listPromotionCandidates(dataset, search, page), listPromotionHistory()]);
   } catch (error) {
-    configurationError = error instanceof Error ? error.message : 'Data promotion is not configured.';
+    configurationError = describePromotionFailure(error);
   }
 
   if (!configurationError && records.length) {

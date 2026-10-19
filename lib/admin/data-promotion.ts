@@ -3,6 +3,7 @@ import 'server-only';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import postgres from 'postgres';
 import { sanitizeArticleContent } from '@/lib/news/sanitize';
+import { describePasswordRejection, summarizePromotionCredentials } from './data-promotion-credentials';
 
 export type PromotionDataset = 'news' | 'organization' | 'seminar';
 export type PromotionAction = 'create' | 'reject' | 'skip' | 'update';
@@ -73,6 +74,14 @@ export class DataPromotionError extends Error {
   }
 }
 
+/** The message shown on the page. When Postgres rejects the password, add non-secret facts about the credentials the application actually used. */
+export function describePromotionFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Data promotion is not configured.';
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code !== '28P01' && !/password authentication failed/i.test(message)) return message;
+  return message + describePasswordRejection(summarizePromotionCredentials(process.env.DATA_PROMOTION_DATABASE_URL ?? ''));
+}
+
 function configuration() {
   if (process.env.DB_SCHEMA !== 'idoc_staging') {
     throw new DataPromotionError('Data promotion is available only from the staging application.');
@@ -89,9 +98,18 @@ function configuration() {
   return { databaseUrl, planSecret };
 }
 
+// Same rule as lib/db/connection-url.ts: remote databases (Render) refuse unencrypted connections, so require TLS unless the URL says otherwise.
+function withRequiredEncryption(databaseUrl: string) {
+  const parsed = new URL(databaseUrl);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (!isLocal && !parsed.searchParams.has('sslmode')) parsed.searchParams.set('sslmode', 'require');
+  return parsed.toString();
+}
+
 function promotionSql() {
   const { databaseUrl } = configuration();
-  promotionConnection ??= postgres(databaseUrl, {
+  promotionConnection ??= postgres(withRequiredEncryption(databaseUrl), {
     connect_timeout: 10,
     connection: { application_name: 'idoc-data-promotion' },
     idle_timeout: 10,

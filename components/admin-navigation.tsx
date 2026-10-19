@@ -51,10 +51,11 @@ function isActive(pathname: string, href: string) {
   return href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminNavigation({ isSuperAdmin, unreadCount }: { isSuperAdmin: boolean; unreadCount: number }) {
+export function AdminNavigation({ isSuperAdmin, showDataPromotion, unreadCount }: { isSuperAdmin: boolean; showDataPromotion: boolean; unreadCount: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = isSuperAdmin ? [...SHARED_ITEMS, ...SUPER_ADMIN_ITEMS] : SHARED_ITEMS;
+  const superAdminItems = showDataPromotion ? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS.filter((item) => item.href !== '/admin/operations/data-promotion');
+  const items = isSuperAdmin ? [...SHARED_ITEMS, ...superAdminItems] : SHARED_ITEMS;
   const activeHref = items.filter((item) => isActive(pathname, item.href))
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
