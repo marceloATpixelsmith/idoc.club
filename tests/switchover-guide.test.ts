@@ -68,8 +68,10 @@ test('import, webhook, hold, replay, scan and clean-up are each detected from th
   const run = { at: '2026-10-22T10:00:00Z', imported: 1, payments: 1, subscriptions: 1 };
   assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-22T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, true);
   assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-20T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, false);
-  assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T09:00:00Z' }), 'B11').autoDone, false);
-  assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T11:00:00Z' }), 'B11').autoDone, true);
+  const replay = { at: '2026-10-22T12:00:00Z', failed: 0, processed: 2 };
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: replay, scanAt: '2026-10-22T11:00:00Z' }), 'B11').autoDone, false);
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: replay, scanAt: '2026-10-22T13:00:00Z' }), 'B11').autoDone, true);
+  assert.equal(byId(guide(imported, { importRun: run, replayRun: { ...replay, failed: 1 } }), 'B10').autoDone, false);
   assert.equal(byId(guide(imported), 'B12').autoDone, true);
   assert.equal(byId(guide({ ...imported, legacyKeyPresent: true }), 'B12').autoDone, false);
 });
@@ -77,6 +79,7 @@ test('import, webhook, hold, replay, scan and clean-up are each detected from th
 test('the final step needs everything finished', () => {
   const imported = { counts: { legacyImports: 1, profiles: 1, subscriptions: 1, users: 1 }, holdOn: false };
   const done = { hold: false, importRun: { at: 'a', imported: 1, payments: 1, subscriptions: 1 }, keyMode: 'live' as const, replayRun: { at: 'b', failed: 0, processed: 1 }, scanAt: 'c' };
+  assert.equal(byId(guide(imported, { ...done, scanAt: 'a1' }), 'B13').autoDone, false);
   assert.equal(byId(guide(imported, done), 'B13').autoDone, true);
   assert.equal(byId(guide(imported, { ...done, heldEventsPending: 2 }), 'B13').autoDone, false);
   assert.equal(byId(guide(imported, { ...done, keyMode: 'test' }), 'B13').autoDone, false);
