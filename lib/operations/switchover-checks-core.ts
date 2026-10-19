@@ -2,6 +2,7 @@
 
 export type SwitchoverInputs = {
   baseUrlHost: string | null;
+  brevoWebhookKeyPresent: boolean;
   counts: { legacyImports: number; profiles: number; subscriptions: number; users: number };
   googleRedirectHost: string | null;
   holdOn: boolean;
@@ -67,34 +68,37 @@ export function evaluateSwitchover(input: SwitchoverInputs): SwitchoverCheck[] {
     webhook.state === 'ok' ? 'An enabled endpoint for this site listens to every handled event type.'
       : webhook.state === 'unavailable' ? 'Stripe could not be read with the current key, so the endpoint could not be checked. Look in the Stripe dashboard.'
         : webhook.state === 'missing' ? 'No webhook endpoint points at this site\'s /api/stripe/webhook. Create it in the Stripe dashboard (keep it disabled until the switch).'
-          : webhook.state === 'disabled' ? 'The endpoint exists but is disabled. Enable it after the import (docs/30 step B7).'
+          : webhook.state === 'disabled' ? 'The endpoint exists but is disabled. Enable it after the import (wizard step B8).'
             : `The endpoint is missing these event types: ${webhook.missingEvents.join(', ')}.`);
   add('webhook-secret', 'Webhook signing secret', input.webhookSecretPresent ? 'ok' : 'todo', input.webhookSecretPresent ? 'STRIPE_WEBHOOK_SECRET is set.' : 'STRIPE_WEBHOOK_SECRET is not set.');
+
+  add('brevo-webhook-key', 'Brevo webhook key', input.brevoWebhookKeyPresent ? 'ok' : 'todo',
+    input.brevoWebhookKeyPresent ? 'BREVO_WEBHOOK_KEY is set, so Brevo bounce and spam events can be accepted.' : 'BREVO_WEBHOOK_KEY is not set. The Brevo webhook returns an error until it is created (wizard step A4) and production is redeployed.');
 
   const domains: Array<[string, string, string | null]> = [['BASE_URL', 'base URL', input.baseUrlHost], ['GOOGLE_OAUTH_REDIRECT_URI', 'Google sign-in redirect', input.googleRedirectHost], ['QSTASH_CALLBACK_BASE_URL', 'QStash callback', input.qstashHost]];
   const stale = domains.filter(([, , host]) => !onLiveDomain(host));
   add('domain-settings', 'Settings name idoc.club', stale.length === 0 ? 'ok' : 'todo',
     stale.length === 0 ? 'BASE_URL, GOOGLE_OAUTH_REDIRECT_URI and QSTASH_CALLBACK_BASE_URL all use the live domain.'
-      : `Still not on idoc.club: ${stale.map(([name, , host]) => `${name} (${host ?? 'not set'})`).join(', ')}. Change them at the switch (docs/30 step B3).`);
+      : `Still not on idoc.club: ${stale.map(([name, , host]) => `${name} (${host ?? 'not set'})`).join(', ')}. Change them at the switch (wizard step B3).`);
 
-  // After an import has run, the temporary switch and key should be gone (docs/30 step B11), so absence is the finished state.
+  // After an import has run, the temporary switch and key should be gone (wizard step B12), so absence is the finished state.
   const imported = legacyImports > 0;
   add('import-switch', 'Legacy import switched on', input.legacyImportEnabled ? (imported ? 'todo' : 'ok') : imported ? 'ok' : 'todo',
-    imported ? (input.legacyImportEnabled ? 'The import has run; remove LEGACY_IMPORT_ENABLED and redeploy (docs/30 step B11).' : 'The import has run and the switch is off.')
-      : input.legacyImportEnabled ? 'LEGACY_IMPORT_ENABLED is on.' : 'LEGACY_IMPORT_ENABLED is off. Turn it on for the import (docs/30 step B3).');
+    imported ? (input.legacyImportEnabled ? 'The import has run; remove LEGACY_IMPORT_ENABLED and redeploy (wizard step B12).' : 'The import has run and the switch is off.')
+      : input.legacyImportEnabled ? 'LEGACY_IMPORT_ENABLED is on.' : 'LEGACY_IMPORT_ENABLED is off. Turn it on for the import (wizard step B3).');
   add('import-key', 'Read-only Stripe key for the import', input.legacyKeyPresent ? (imported ? 'todo' : 'ok') : imported ? 'ok' : 'todo',
     imported ? (input.legacyKeyPresent ? 'The import has run; remove LEGACY_STRIPE_SECRET_KEY, redeploy and revoke the key in Stripe.' : 'The import has run and the key is removed from Vercel; confirm it is revoked in Stripe.')
       : input.legacyKeyPresent ? 'LEGACY_STRIPE_SECRET_KEY is set. Remove it and revoke the key after the import.' : 'LEGACY_STRIPE_SECRET_KEY is not set. The import needs it for the live Stripe comparison.');
 
   add('hold', 'Member communications and billing hold', input.holdOn ? 'ok' : 'warn',
-    input.holdOn ? 'The hold is on. Keep it on through the import; release it only at step B8.' : 'The hold is OFF: emails and live billing are active. Replay needs it off, the import needs it on.');
+    input.holdOn ? 'The hold is on. Keep it on through the import; release it only at step B9.' : 'The hold is OFF: emails and live billing are active. Replay needs it off, the import needs it on.');
   add('safeguard', 'Live Stripe actions safeguard', input.reconciliationLiveEnabled ? 'warn' : 'ok',
     input.reconciliationLiveEnabled ? 'RECONCILIATION_LIVE_STRIPE_ACTIONS is enabled: a scan can now cancel subscriptions and delete customers in Stripe. Only keep it on once the import is verified.'
       : 'Off (default): reconciliation only simulates Stripe changes.');
   return checks;
 }
 
-// ---- Final verification: run after the import, replay and first scan (docs/30 step B12). Reports the end state of everything the switchover touched. ----
+// ---- Final verification: run after the import, replay and first scan (wizard step B13). Reports the end state of everything the switchover touched. ----
 
 export type FinalInputs = {
   deadLetteredOther: number;
@@ -126,13 +130,13 @@ export function evaluateFinal(input: FinalInputs): SwitchoverCheck[] {
   add('final-import-off', 'Import switched off and key removed', !input.legacyImportEnabled && !input.legacyKeyPresent ? 'ok' : 'todo',
     !input.legacyImportEnabled && !input.legacyKeyPresent ? 'LEGACY_IMPORT_ENABLED and LEGACY_STRIPE_SECRET_KEY are gone. Also confirm the restricted key is revoked in Stripe (this page cannot see that).'
       : 'LEGACY_IMPORT_ENABLED or LEGACY_STRIPE_SECRET_KEY is still set. Remove them, redeploy and revoke the key in Stripe.');
-  add('final-hold', 'Launch hold released', input.hold ? 'todo' : 'ok', input.hold ? 'The hold is still on, so no email or live billing is active yet (docs/30 step B8).' : 'The hold is off: member emails and live billing are active.');
+  add('final-hold', 'Launch hold released', input.hold ? 'todo' : 'ok', input.hold ? 'The hold is still on, so no email or live billing is active yet (wizard step B9).' : 'The hold is off: member emails and live billing are active.');
   add('final-stripe', 'Stripe live and receiving', input.keyMode === 'live' && input.webhook === 'ok' ? (input.webhookEventsLast24h > 0 || input.hold ? 'ok' : 'warn') : 'todo',
     input.keyMode !== 'live' ? 'The Stripe key is not a live-mode key.' : input.webhook !== 'ok' ? 'The webhook endpoint is not enabled for this site with every handled event type.'
       : input.hold ? 'Live key and webhook endpoint are in place. Events received while the hold is on are recorded, not applied.'
         : input.webhookEventsLast24h > 0 ? `${input.webhookEventsLast24h} Stripe events received in the last 24 hours.` : 'No Stripe events were received in the last 24 hours. That may be normal on a quiet day; if a payment just happened, check the endpoint\'s delivery log in Stripe.');
   add('final-held-events', 'Events consumed by the hold', input.heldEventsPending === 0 ? 'ok' : 'todo',
-    input.heldEventsPending === 0 ? 'No event is waiting to be replayed.' : `${input.heldEventsPending} events were recorded but not applied because the hold was on. Replay them (docs/30 step B9).`);
+    input.heldEventsPending === 0 ? 'No event is waiting to be replayed.' : `${input.heldEventsPending} events were recorded but not applied because the hold was on. Replay them (wizard step B10).`);
   add('final-replay', 'Missed events replayed', input.replayRun ? (input.replayRun.failed > 0 ? 'warn' : 'ok') : 'todo',
     input.replayRun ? `Replay on ${input.replayRun.at.slice(0, 16).replace('T', ' ')} UTC applied ${input.replayRun.processed} events${input.replayRun.failed > 0 ? `; ${input.replayRun.failed} FAILED. Preview again to retry them` : ''}.` : 'No replay is recorded. Run a preview on the replay page; if it shows nothing to replay, this is fine.');
   const open = Object.entries(input.openFindings).filter(([, n]) => n > 0);
