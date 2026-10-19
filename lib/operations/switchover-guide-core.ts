@@ -21,6 +21,9 @@ export type GuideInputs = { final: FinalInputs; host: string | null; inputs: Swi
 const LIVE_HOSTS = ['idoc.club', 'www.idoc.club'];
 const onLiveDomain = (host: string | null) => host !== null && LIVE_HOSTS.includes(host);
 
+/** A replay audit only counts when it was written after the current import; an earlier rehearsal does not recover payments made during the cutover. */
+const replayedAfterImport = (final: FinalInputs) => final.replayRun !== null && final.importRun !== null && final.replayRun.at > final.importRun.at;
+
 export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
   const imported = inputs.counts.legacyImports > 0;
   const domainsLive = [inputs.baseUrlHost, inputs.googleRedirectHost, inputs.qstashHost].every(onLiveDomain);
@@ -31,7 +34,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
     // ---- A. Before the day --------------------------------------------------------------------------------------------------------------------------------------
     step({
       actions: ['Approve the Auto-migrate Production Schema run in GitHub if one is waiting. Nothing else to do when this shows done.'],
-      auto: true, autoDone: inputs.ledgerNewest !== null && inputs.ledgerNewest === inputs.journalNewest && inputs.stagingNewest !== null,
+      auto: true, autoDone: inputs.ledgerNewest !== null && inputs.ledgerNewest === inputs.journalNewest && inputs.stagingNewest === inputs.ledgerNewest,
       env: [], id: 'A1', phase: 'A', title: 'Production code and database migrations are current', where: 'GitHub Actions',
     }),
     step({
@@ -54,13 +57,12 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
       ],
       id: 'A3', phase: 'A', title: 'Split the Stripe variables so production and staging have their own', where: 'Vercel project settings',
     }),
-    step({
+    manual({
       actions: [
         'Generate a value: run `openssl rand -hex 32` (letters and numbers only, at least 32 characters).',
         'Add it in Vercel as a Production-only variable. Keep a copy: the same value goes into the Brevo webhook URL in step B5.',
-        'It shows as done after the next production deployment (step B3 does one).',
+        'The site only sees the variable after the next production deployment (step B3 does one), so tick this yourself; the status section below confirms it afterwards.',
       ],
-      auto: true, autoDone: inputs.brevoWebhookKeyPresent,
       env: [{ action: 'add: random value, 32+ characters', name: 'BREVO_WEBHOOK_KEY', scope: 'Production only' }],
       id: 'A4', phase: 'A', title: 'Create the Brevo webhook key', where: 'Vercel project settings',
     }),
@@ -125,7 +127,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
         'The Stripe values must be the live ones, taken from the live dashboard and the live webhook endpoint you created in A9. The site rejects a test key once the base URL is `https://idoc.club`.',
         'Reload this page afterwards; it shows done when all of them are in effect.',
       ],
-      auto: true, autoDone: imported || (domainsLive && inputs.legacyImportEnabled && inputs.legacyKeyPresent && inputs.stripeKeyMode === 'live'),
+      auto: true, autoDone: domainsLive && inputs.stripeKeyMode === 'live' && (imported || (inputs.legacyImportEnabled && inputs.legacyKeyPresent)),
       env: [
         { action: '→ https://idoc.club', name: 'BASE_URL', scope: 'Production' },
         { action: '→ https://idoc.club/api/auth/google/callback', name: 'GOOGLE_OAUTH_REDIRECT_URI', scope: 'Production' },
@@ -178,7 +180,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
     }),
     step({
       actions: ['Enter the export start time from B2, preview, check the counts, apply. A lower count than the number of payments since the export is expected (see B8).'],
-      auto: true, autoDone: final.replayRun !== null, env: [], id: 'B10', link: { href: '/admin/operations/event-replay', label: 'Open Replay Stripe events' },
+      auto: true, autoDone: replayedAfterImport(final), env: [], id: 'B10', link: { href: '/admin/operations/event-replay', label: 'Open Replay Stripe events' },
       phase: 'B', title: 'Replay missed Stripe events', where: 'Replay page',
     }),
     step({
@@ -201,7 +203,7 @@ export function buildGuide({ final, host, inputs }: GuideInputs): GuideStep[] {
     }),
     step({
       actions: ['Reload and read the Final verification section below: every line should be Ready, or a Check you have consciously accepted.'],
-      auto: true, autoDone: imported && final.hold === false && final.heldEventsPending === 0 && final.replayRun !== null && final.scanAt !== null && !final.legacyImportEnabled && !final.legacyKeyPresent && final.keyMode === 'live',
+      auto: true, autoDone: imported && final.hold === false && final.heldEventsPending === 0 && replayedAfterImport(final) && final.scanAt !== null && !final.legacyImportEnabled && !final.legacyKeyPresent && final.keyMode === 'live',
       env: [], id: 'B13', phase: 'B', title: 'Final verification', where: 'This page',
     }),
   ];

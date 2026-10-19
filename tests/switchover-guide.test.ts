@@ -31,15 +31,15 @@ test('no step carries a secret value, only names, scopes and instructions', () =
 test('today\'s production leaves test data, the Stripe split and the webhook key to do first', () => {
   const steps = buildGuide(guide());
   assert.equal(steps.find((step) => step.id === 'A2')!.autoDone, false);
-  assert.equal(steps.find((step) => step.id === 'A4')!.autoDone, false);
-  assert.equal(currentStepId(steps, new Set()), 'A2');
+    assert.equal(currentStepId(steps, new Set()), 'A2');
 });
 
 test('ticking manual steps and clearing the data moves the walkthrough along', () => {
   const steps = buildGuide(guide({ brevoWebhookKeyPresent: true, counts: { legacyImports: 0, profiles: 0, subscriptions: 0, users: 0 } }));
   assert.equal(currentStepId(steps, new Set()), 'A3');
-  assert.equal(currentStepId(steps, new Set(['A3'])), 'A5');
-  assert.equal(currentStepId(steps, new Set(['A3', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'B1', 'B2'])), 'B3');
+  assert.equal(currentStepId(steps, new Set(['A3'])), 'A4');
+  assert.equal(currentStepId(steps, new Set(['A3', 'A4'])), 'A5');
+  assert.equal(currentStepId(steps, new Set(['A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'B1', 'B2'])), 'B3');
 });
 
 test('B3 is done only when the domain settings, live Stripe and the importer are all in effect', () => {
@@ -48,6 +48,10 @@ test('B3 is done only when the domain settings, live Stripe and the importer are
   assert.equal(byId(guide({ ...live, stripeKeyMode: 'test' }), 'B3').autoDone, false);
   assert.equal(byId(guide({ ...live, qstashHost: 'redesign.idoc.club' }), 'B3').autoDone, false);
   assert.equal(byId(guide({ ...live, legacyKeyPresent: false }), 'B3').autoDone, false);
+  const afterImport = { ...live, counts: { legacyImports: 1, profiles: 1, subscriptions: 1, users: 1 }, legacyImportEnabled: false, legacyKeyPresent: false };
+  assert.equal(byId(guide(afterImport), 'B3').autoDone, true);
+  assert.equal(byId(guide({ ...afterImport, stripeKeyMode: 'test' }), 'B3').autoDone, false);
+  assert.equal(byId(guide({ ...afterImport, baseUrlHost: 'redesign.idoc.club' }), 'B3').autoDone, false);
 });
 
 test('DNS is seen as done when the page is loaded from the live domain', () => {
@@ -62,7 +66,8 @@ test('import, webhook, hold, replay, scan and clean-up are each detected from th
   assert.equal(byId(guide({ ...imported, webhook: { missingEvents: [], state: 'ok' } }), 'B8').autoDone, true);
   assert.equal(byId(guide({ ...imported, holdOn: false }), 'B9').autoDone, true);
   const run = { at: '2026-10-22T10:00:00Z', imported: 1, payments: 1, subscriptions: 1 };
-  assert.equal(byId(guide(imported, { replayRun: { at: 'x', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, true);
+  assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-22T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, true);
+  assert.equal(byId(guide(imported, { replayRun: { at: '2026-10-20T12:00:00Z', failed: 0, processed: 2 }, importRun: run }), 'B10').autoDone, false);
   assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T09:00:00Z' }), 'B11').autoDone, false);
   assert.equal(byId(guide(imported, { importRun: run, scanAt: '2026-10-22T11:00:00Z' }), 'B11').autoDone, true);
   assert.equal(byId(guide(imported), 'B12').autoDone, true);
