@@ -8,7 +8,7 @@ import { legacyImportEnabled } from '@/lib/legacy-import/dry-run';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { REPLAYABLE_EVENT_TYPES } from '@/lib/payments/webhook-handlers';
 import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
-import { evaluateFinal, evaluateSwitchover, hostOf, type SwitchoverCheck, type SwitchoverInputs } from './switchover-checks-core';
+import { hostOf, type FinalInputs, type SwitchoverInputs } from './switchover-checks-core';
 
 async function count(query: ReturnType<typeof sql>): Promise<number> {
   const rows = await db.execute<{ n: number }>(query);
@@ -29,8 +29,8 @@ async function webhookState(baseUrl: string | undefined): Promise<SwitchoverInpu
   }
 }
 
-/** Reads this deployment's own state only (settings by presence and host, never values) and runs the pure checklist. Read-only. */
-export async function runSwitchoverChecks(): Promise<SwitchoverCheck[]> {
+/** Reads this deployment's own state only (settings by presence and host, never values). Read-only. */
+export async function gatherSwitchoverInputs(): Promise<SwitchoverInputs> {
   const env = process.env;
   const schema = getDatabaseSchemaName();
   const newest = async (name: string): Promise<number | null> => {
@@ -45,13 +45,13 @@ export async function runSwitchoverChecks(): Promise<SwitchoverCheck[]> {
     count(sql`select count(*)::int as n from subscriptions s join profiles p on p.id = s.profile_id where ${nonAdmin('p.user_id')}`), count(sql`select count(*)::int as n from audit_log where action = 'admin.legacy_import.import'`),
   ]);
   const keyMode = /^(?:sk|rk)_(live|test)_/.exec(env.STRIPE_SECRET_KEY?.trim() ?? '')?.[1] as 'live' | 'test' | undefined;
-  return evaluateSwitchover({
-    baseUrlHost: hostOf(env.BASE_URL), counts: { legacyImports, profiles, subscriptions, users }, googleRedirectHost: hostOf(env.GOOGLE_OAUTH_REDIRECT_URI),
+  return {
+    baseUrlHost: hostOf(env.BASE_URL), brevoWebhookKeyPresent: Boolean(env.BREVO_WEBHOOK_KEY?.trim()), counts: { legacyImports, profiles, subscriptions, users }, googleRedirectHost: hostOf(env.GOOGLE_OAUTH_REDIRECT_URI),
     holdOn: memberCommunicationsDisabled(), ledgerNewest, journalNewest: Math.max(...journal.entries.map((entry) => entry.when)), stagingNewest, legacyImportEnabled: legacyImportEnabled(),
     legacyKeyPresent: Boolean(env.LEGACY_STRIPE_SECRET_KEY?.trim()), qstashHost: hostOf(env.QSTASH_CALLBACK_BASE_URL),
     reconciliationLiveEnabled: env.RECONCILIATION_LIVE_STRIPE_ACTIONS === 'enabled', schema, stripeKeyMode: keyMode ?? null,
     webhook: await webhookState(env.BASE_URL), webhookSecretPresent: Boolean(env.STRIPE_WEBHOOK_SECRET?.trim()),
-  });
+  };
 }
 
 async function latestAudit(action: string): Promise<{ at: string; data: Record<string, number> } | null> {
@@ -59,8 +59,8 @@ async function latestAudit(action: string): Promise<{ at: string; data: Record<s
   return rows[0] ? { at: rows[0].at, data: rows[0].data ?? {} } : null;
 }
 
-/** End-state report for after the import, replay and first scan. Read-only. */
-export async function runFinalVerification(): Promise<SwitchoverCheck[]> {
+/** End-state inputs for after the import, replay and first scan. Read-only. */
+export async function gatherFinalInputs(): Promise<FinalInputs> {
   const env = process.env;
   const pending = (table: string, extra = '') => count(sql.raw(`select count(*)::int as n from ${table} where sent_at is null and dead_lettered_at is null${extra}`));
   const failed = (table: string) => count(sql.raw(`select count(*)::int as n from ${table} where dead_lettered_at is not null and coalesce(last_error_code, '') <> 'member_launch_hold'`));
@@ -76,7 +76,7 @@ export async function runFinalVerification(): Promise<SwitchoverCheck[]> {
   ]);
   const webhook = await webhookState(env.BASE_URL);
   const keyMode = /^(?:sk|rk)_(live|test)_/.exec(env.STRIPE_SECRET_KEY?.trim() ?? '')?.[1] as 'live' | 'test' | undefined;
-  return evaluateFinal({
+  return {
     deadLetteredOther: f1 + f2 + f3 + f4, heldEventsPending: held, hold: memberCommunicationsDisabled(),
     importRun: importRun ? { at: importRun.at, imported: importRun.data.imported ?? 0, payments: importRun.data.payments ?? 0, subscriptions: importRun.data.subscriptions ?? 0 } : null,
     keyMode: keyMode ?? null, legacyImportEnabled: legacyImportEnabled(), legacyKeyPresent: Boolean(env.LEGACY_STRIPE_SECRET_KEY?.trim()), liveActionsEnabled: env.RECONCILIATION_LIVE_STRIPE_ACTIONS === 'enabled',
@@ -84,5 +84,5 @@ export async function runFinalVerification(): Promise<SwitchoverCheck[]> {
     openFindings: Object.fromEntries([...findings].map((row) => [row.kind, row.n])), outboxPending: p1 + p2 + p3 + p4,
     replayRun: replayRun ? { at: replayRun.at, failed: replayRun.data.failedCount ?? 0, processed: replayRun.data.processed ?? 0 } : null,
     scanAt: scan?.at ?? null, webhook: webhook.state, webhookEventsLast24h: events,
-  });
+  };
 }

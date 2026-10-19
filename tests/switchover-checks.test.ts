@@ -4,7 +4,7 @@ import test from 'node:test';
 import { evaluateSwitchover, hostOf, type SwitchoverInputs } from '../lib/operations/switchover-checks-core.ts';
 
 const ready: SwitchoverInputs = {
-  baseUrlHost: 'idoc.club', counts: { legacyImports: 0, profiles: 0, subscriptions: 0, users: 0 }, googleRedirectHost: 'idoc.club', holdOn: true, ledgerNewest: 1792350000000, journalNewest: 1792350000000, stagingNewest: 1792350000000,
+  baseUrlHost: 'idoc.club', brevoWebhookKeyPresent: true, counts: { legacyImports: 0, profiles: 0, subscriptions: 0, users: 0 }, googleRedirectHost: 'idoc.club', holdOn: true, ledgerNewest: 1792350000000, journalNewest: 1792350000000, stagingNewest: 1792350000000,
   legacyImportEnabled: true, legacyKeyPresent: true, qstashHost: 'idoc.club', reconciliationLiveEnabled: false, schema: 'idoc_production', stripeKeyMode: 'live',
   webhook: { missingEvents: [], state: 'ok' }, webhookSecretPresent: true,
 };
@@ -32,6 +32,11 @@ test('a test key, missing migrations, a released hold and the live-actions switc
   assert.equal(status({ ...ready, stagingNewest: null }, 'migrations'), 'warn');
   assert.equal(status({ ...ready, holdOn: false }, 'hold'), 'warn');
   assert.equal(status({ ...ready, reconciliationLiveEnabled: true }, 'safeguard'), 'warn');
+});
+
+test('a missing Brevo webhook key is a to-do', () => {
+  assert.equal(status({ ...ready, brevoWebhookKeyPresent: false }, 'brevo-webhook-key'), 'todo');
+  assert.equal(status(ready, 'brevo-webhook-key'), 'ok');
 });
 
 test('webhook states and non-production schemas are reported', () => {
