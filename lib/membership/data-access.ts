@@ -11,7 +11,8 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSession } from '@/lib/auth/session';
-import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { getMarketingPreference, settleOnboardingMarketingOptIn } from './marketing-preference';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
@@ -80,14 +81,15 @@ export async function getPrivateMember(profileId: number) {
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return null;
   requireOwnerOrAdmin(actor, profile.userId);
-  const [roles, entitlement, subscription, account] = await Promise.all([
+  const [roles, entitlement, subscription, account, marketing] = await Promise.all([
     db.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
     db.select().from(memberships).where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1),
     db.select({ cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd, currentPeriodEnd: subscriptions.currentPeriodEnd, status: subscriptions.status })
       .from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.createdAt)).limit(1),
     db.select({ email: sql<string>`coalesce(${users.emailDisplay}, ${users.email})` }).from(users).where(eq(users.id, profile.userId)).limit(1),
+    getMarketingPreference(profile.id),
   ]);
-  return { email: account[0]?.email ?? '', entitlement: entitlement[0] ?? null, profile, roles, subscription: subscription[0] ?? null };
+  return { email: account[0]?.email ?? '', entitlement: entitlement[0] ?? null, marketing, profile, roles, subscription: subscription[0] ?? null };
 }
 
 export async function getOwnPrivateMember() {
@@ -164,7 +166,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
     });
     return { email: account.email, profile };
   });
-  if (consent.keepUpdated) await subscribeToMarketingAudience(result.email);
+  if (consent.keepUpdated) await settleOnboardingMarketingOptIn(result.profile.id, result.email);
   return result.profile;
 }
 

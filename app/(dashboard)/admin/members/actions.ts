@@ -2,6 +2,7 @@
 
 import { updateMemberProfile, requireAccountAccess } from '@/lib/membership/data-access';
 import { requireSuperAdmin } from '@/lib/membership/authorization';
+import { changeMarketingPreference } from '@/lib/membership/marketing-preference';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { adminBoardProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
 import { uploadCloudinaryImage } from '@/lib/news/thumbnail';
@@ -65,7 +66,20 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
       isBoardMember: formData.get('isBoardMember') === '1',
     });
     await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, reason });
-    return { success: 'Profile updated and audit entry recorded.' };
+    // An administrator can only switch marketing email off for a member; opting in is the member's own
+    // consent (docs/19). The toggle is submitted only while the member is opted in, so an unchecked box
+    // is an explicit switch-off. Isolated from the profile correction above.
+    let marketingNote = '';
+    if (formData.get('keepUpdatedPresent') === '1' && formData.get('keepUpdated') !== '1') {
+      try {
+        const actor = await requireAccountAccess('administration');
+        const result = await changeMarketingPreference({ actorId: actor.id, desired: false, profileId, reason, source: 'admin' });
+        if (result.status === 'opted_out' && !result.synced) marketingNote = ' Email updates were switched off here, but the email provider could not be reached yet.';
+      } catch {
+        marketingNote = ' The email update preference could not be changed; try again.';
+      }
+    }
+    return { success: `Profile updated and audit entry recorded.${marketingNote}` };
   } catch (error) {
     if (error instanceof Error && error.message === 'An administrative reason is required for this correction.') return { error: error.message };
     return friendlyError(error, 'The profile could not be updated safely.');
