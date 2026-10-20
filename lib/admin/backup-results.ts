@@ -76,3 +76,9 @@ export function parseBackupSelection(value: unknown): string | null {
   if (value === 'latest') return 'latest';
   return typeof value === 'string' && OBJECT_PATTERN.test(value) ? value : null;
 }
+
+export type RunState = 'queued' | 'running' | 'completed' | 'failed';
+/** True while a backup workflow run is waiting or executing, so a second on-demand backup is not queued behind it. */
+export function backupInProgress(runs: Array<{ state: RunState }>): boolean {
+  return runs.some((run) => run.state === 'queued' || run.state === 'running');
+}
