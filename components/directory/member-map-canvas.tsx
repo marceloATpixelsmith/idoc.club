@@ -24,6 +24,9 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
       try {
         const maplibre = await import('maplibre-gl');
         if (cancelled) return;
+        // MapLibre v6 resolves its worker next to the library file, which Next's bundler does not emit,
+        // so serve the matching worker from public/ (kept in sync by tests/directory.test.ts).
+        maplibre.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
         const map = new maplibre.Map({
           attributionControl: false,
           container: element,
@@ -88,7 +91,8 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
           map.getCanvas().style.cursor = '';
           popup.remove();
         });
-        map.on('error', () => {
+        map.on('error', (event) => {
+          console.warn('Members map error:', event.error?.message);
           if (!map.loaded()) setFailed(true);
         });
         teardown = () => map.remove();
