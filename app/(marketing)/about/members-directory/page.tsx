@@ -42,12 +42,12 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
 
   return <>
     <PageHeader eyebrow="Members" title="Members Directory" intro="Explore IDOC's worldwide member concentration. Active members can search and contact other members in the directory." />
-    <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
+    <section className="mx-auto max-w-7xl px-5 pb-12 pt-8 lg:px-8">
       {user ? <nav aria-label="Members directory views" className="flex gap-4 border-b border-border">
         <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'map' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory">Map / Infographic</Link>
         <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'directory' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory?tab=directory">Search Directory</Link>
       </nav> : null}
-      {activeTab === 'map' ? <div className="mt-8">
+      {activeTab === 'map' ? <div className="mt-6">
         {!concentration?.ok ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The members map is temporarily unavailable. Please try again shortly.</p>
           : concentration.areas.length === 0 ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">Not enough member data is available yet to show the map. Check back soon.</p>
           : <ConcentrationMap areas={concentration.areas} />}

@@ -15,12 +15,12 @@ const dashboardTabs = readFileSync('app/(dashboard)/dashboard/dashboard-tabs.tsx
 const securityDoc = readFileSync('docs/05-security-and-privacy-requirements.md', 'utf8');
 
 test('the public map query never selects a name, email, address, or exact coordinate field', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select c.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /first_name|last_name|email|address|postal_code|latitude|longitude|\blat\b|\blng\b/i);
 });
 
 test('the public map never exposes a raw profile id or sequential database identifier', () => {
-  const select = aggregateSource.slice(aggregateSource.indexOf('select p.country_code'), aggregateSource.indexOf('from profiles'));
+  const select = aggregateSource.slice(aggregateSource.indexOf('select c.country_code'), aggregateSource.indexOf('from profiles'));
   assert.doesNotMatch(select, /p\.id\b/);
   assert.doesNotMatch(aggregateSource, /profileId|userId/);
 });
@@ -29,8 +29,8 @@ test('the public map is genuinely public: it never requires authentication or au
   assert.doesNotMatch(aggregateSource, /requireAccountAccess|requireAdministrator|requireSuperAdmin|getUser\(/);
 });
 
-test('a documented minimum aggregation threshold suppresses any area below it, and no merged/grand total figure is exposed alongside it', () => {
-  assert.match(aggregateSource, /export const DIRECTORY_MIN_AGGREGATION_THRESHOLD = 5/);
+test('the documented minimum aggregation threshold is 1 (a single-member country is shown), and no merged/grand total figure is exposed', () => {
+  assert.match(aggregateSource, /export const DIRECTORY_MIN_AGGREGATION_THRESHOLD = 1/);
   assert.match(aggregateSource, /having count\(\*\) >= \$\{DIRECTORY_MIN_AGGREGATION_THRESHOLD\}/);
   // No "other"/"rest of world" merged bucket and no un-thresholded total in the actual query or
   // returned shape -- both would let a reader back-calculate a suppressed area's size from
@@ -230,7 +230,7 @@ test('the map camera fits the world responsively instead of a fixed desktop-size
 });
 
 test('the public map excludes blank or malformed country codes so a bad legacy value cannot crash the page', () => {
-  assert.match(aggregateSource, /where p\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
+  assert.match(aggregateSource, /where c\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
   assert.match(readFileSync('lib/membership/countries.ts', 'utf8'), /try \{[\s\S]*englishRegionNames\.of[\s\S]*\} catch/);
 });
 
@@ -245,4 +245,10 @@ test('the bundled MapLibre worker matches the installed maplibre-gl version and 
 
 test('the members map page shows no descriptive footnote text beneath the map', () => {
   assert.doesNotMatch(publicPageSource, /This infographic shows only/);
+});
+
+test('the map country is the National Federation country, falling back to the address country', () => {
+  assert.match(aggregateSource, /min\(r\.national_federation_country_code\) from professional_roles r where r\.profile_id = p\.id/);
+  assert.match(aggregateSource, /nullif\(p\.country_code, ''\)/);
+  assert.match(aggregateSource, /group by c\.country_code/);
 });

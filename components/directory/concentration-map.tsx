@@ -16,7 +16,7 @@ export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
   const summary = areas.slice(0, 5).map((area) => `${countryNameForCode(area.countryCode)} (${area.memberCount})`).join(', ');
 
   return (
-    <figure className="mt-10">
+    <figure>
       <MemberMapCanvas dots={dots} summary={summary} />
       <div className="sr-only">
         <table>
