@@ -44,7 +44,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
     <PageHeader eyebrow="Members" title="Members Directory" intro="Explore IDOC's worldwide member concentration. Active members can search and contact other members in the directory." />
     <section className="mx-auto max-w-7xl px-5 pb-12 pt-8 lg:px-8">
       {user ? <nav aria-label="Members directory views" className="flex gap-4 border-b border-border">
-        <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'map' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory">Map / Infographic</Link>
+        <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'map' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory">Map</Link>
         <Link className={`pb-3 text-xs uppercase tracking-[0.14em] ${activeTab === 'directory' ? 'border-b-2 border-gold text-foreground' : 'text-muted-foreground'}`} href="/about/members-directory?tab=directory">Search Directory</Link>
       </nav> : null}
       {activeTab === 'map' ? <div className="mt-6">

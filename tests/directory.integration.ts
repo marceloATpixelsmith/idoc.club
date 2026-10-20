@@ -51,7 +51,8 @@ beforeEach(resetIdoc);
 after(closeHarness);
 
 test('public map: a country with a single entitled member is rendered with a count of 1', async () => {
-  await entitledMemberIn('FR');
+  // No professional role, so there is no National Federation and the address country is used.
+  await entitledMemberIn('FR', []);
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
   assert.equal(result.areas.find((area) => area.countryCode === 'FR')?.memberCount, 1);
@@ -68,9 +69,9 @@ test('public map: an area reaching the documented minimum threshold is rendered 
 
 test('public map: blank or non-ISO country values are never rendered even above the threshold', async () => {
   for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) {
-    await entitledMemberIn('');
-    await entitledMemberIn('XX');
-    await entitledMemberIn('DE');
+    await entitledMemberIn('', []);
+    await entitledMemberIn('XX', []);
+    await entitledMemberIn('DE', []);
   }
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
@@ -78,8 +79,8 @@ test('public map: blank or non-ISO country values are never rendered even above 
 });
 
 test('public map: small countries sit alongside large ones and no merged bucket or total is returned', async () => {
-  for (let index = 0; index < 3; index += 1) await entitledMemberIn('DE');
-  await entitledMemberIn('LI');
+  for (let index = 0; index < 3; index += 1) await entitledMemberIn('DE', []);
+  await entitledMemberIn('LI', []);
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
   assert.deepEqual(result.areas, [{ countryCode: 'DE', memberCount: 3 }, { countryCode: 'LI', memberCount: 1 }]);
@@ -167,6 +168,16 @@ test('paid directory: only active, non-admin member accounts appear in directory
   const listing = await asMember(searcher.id, () => listMemberDirectory());
   assert.equal(listing.total, 1);
   assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`), ['Grace Hopper']);
+});
+
+test('paid directory: an imported member who has not activated their account is listed, with email and contact hidden unless they opted in', async () => {
+  const { user: imported } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Imported', lastName: 'Member' });
+  await sql`update idoc.users set account_state='migrated_pending' where id=${imported.id}`;
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
+  const listing = await asMember(searcher.id, () => listMemberDirectory({ q: 'Imported' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].firstName, 'Imported');
+  assert.equal(listing.rows[0].email, null);
 });
 
 test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {

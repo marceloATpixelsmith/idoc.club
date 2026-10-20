@@ -78,7 +78,7 @@ test('the paid member directory returns email only for the re-authorized member 
   // The email is returned only for members who opted in (default: not shown); search and sort honor the same rule.
   assert.match(select, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
   assert.match(memberDirectorySource, /\(p\.directory_email_opt_in and coalesce\(u\.email_display, u\.email\) ilike/);
-  assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state = 'active'/);
+  assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state in \('active', 'migrated_pending'\)/);
   assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
   assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
 });
@@ -136,7 +136,7 @@ test('the dashboard navigation omits Directory while the public website retains 
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
   assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
-  assert.match(memberRouteSource, /Map \/ Infographic/);
+  assert.match(memberRouteSource, />Map<\/Link>/);
   assert.match(memberRouteSource, /Search Directory/);
   assert.match(memberRouteSource, /if \(activeTab === 'directory' && user\)/);
   assert.match(memberRouteSource, /getPublicMemberConcentration/);
@@ -251,4 +251,9 @@ test('the map country is the National Federation country, falling back to the ad
   assert.match(aggregateSource, /min\(r\.national_federation_country_code\) from professional_roles r where r\.profile_id = p\.id/);
   assert.match(aggregateSource, /nullif\(p\.country_code, ''\)/);
   assert.match(aggregateSource, /group by c\.country_code/);
+});
+
+test('the signed-in members directory map tab is labelled just "Map"', () => {
+  assert.match(publicPageSource, />Map<\/Link>/);
+  assert.doesNotMatch(publicPageSource, /Map \/ Infographic/);
 });
