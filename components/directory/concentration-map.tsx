@@ -1,50 +1,26 @@
 import { countryNameForCode } from '@/lib/membership/countries';
 import type { ConcentrationArea } from '@/lib/directory/aggregate';
+import { buildMemberMapDots } from '@/lib/directory/map-dots';
+import { MemberMapCanvas } from './member-map-canvas';
 
 /**
- * Server-rendered infographic (plain inline SVG, no client JS and no mapping/geocoding library --
- * this codebase stores country codes, not coordinates, and never derives or exposes exact
- * coordinates per docs/05). Bars are proportional to each area's already-thresholded member count.
- * A real HTML table with the same rows always renders beneath it -- not a decorative aria-only
- * duplicate -- so the same information is available with images/SVG disabled, with a screen reader,
- * or when printed, satisfying the "accessible fallback content" requirement outright rather than
- * relying on aria attributes alone.
+ * Interactive MapLibre dot map (bundled Natural Earth country shapes, no external tile or style
+ * requests). One gold dot per country sits at a fixed country center, sized so dot area is
+ * proportional to the already-thresholded member count -- this codebase stores country codes, not
+ * coordinates, and never derives or exposes exact coordinates per docs/05. A real HTML table with the
+ * same rows always renders beneath it -- not a decorative aria-only duplicate -- so the same
+ * information is available with WebGL disabled, with a screen reader, or when printed.
  */
 export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
-  const maxCount = Math.max(...areas.map((area) => area.memberCount));
-  const barHeight = 28;
-  const gap = 10;
-  const chartHeight = areas.length * (barHeight + gap);
+  const dots = buildMemberMapDots(areas, countryNameForCode);
   const summary = areas.slice(0, 5).map((area) => `${countryNameForCode(area.countryCode)} (${area.memberCount})`).join(', ');
 
   return (
     <figure className="mt-10">
-      <svg
-        aria-label={`Member concentration by country. Leading countries: ${summary}.`}
-        className="w-full"
-        height={chartHeight}
-        role="img"
-        viewBox={`0 0 400 ${chartHeight}`}
-      >
-        {areas.map((area, index) => {
-          const y = index * (barHeight + gap);
-          const width = Math.max((area.memberCount / maxCount) * 260, 4);
-          return (
-            <g key={area.countryCode}>
-              <text className="fill-muted-foreground text-xs" x="0" y={y + barHeight / 2 + 4}>
-                {countryNameForCode(area.countryCode)}
-              </text>
-              <rect className="fill-gold" height={barHeight - 8} rx="2" width={width} x="120" y={y + 4} />
-              <text className="fill-foreground text-xs" x={128 + width} y={y + barHeight / 2 + 4}>
-                {area.memberCount}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <figcaption className="sr-only">
-        Number of currently entitled IDOC members per country. Countries with fewer than the
-        published minimum are not shown.
+      <MemberMapCanvas dots={dots} summary={summary} />
+      <figcaption className="mt-3 text-xs text-muted-foreground">
+        Dot size is proportional to the number of currently entitled IDOC members in each country. Countries with fewer than the
+        published minimum are not shown. Country boundaries: Natural Earth.
       </figcaption>
 
       <div className="mt-8 overflow-x-auto border border-border">

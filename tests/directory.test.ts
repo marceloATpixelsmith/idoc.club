@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { COUNTRY_CENTROIDS } from '../lib/directory/country-centroids.ts';
+import { buildMemberMapDots, dotRadius, MAP_DOT_MAX_RADIUS, MAP_DOT_MIN_RADIUS } from '../lib/directory/map-dots.ts';
 
 const aggregateSource = readFileSync('lib/directory/aggregate.ts', 'utf8');
 const memberDirectorySource = readFileSync('lib/directory/member-directory.ts', 'utf8');
@@ -45,8 +47,8 @@ test('a query failure degrades to an "unavailable" result rather than throwing o
 });
 
 test('the concentration map renders a real, always-visible data table as accessible fallback content, not just an aria label', () => {
-  assert.match(concentrationMapSource, /role="img"/);
-  assert.match(concentrationMapSource, /aria-label=/);
+  assert.match(readFileSync('components/directory/member-map-canvas.tsx', 'utf8'), /role="img"/);
+  assert.match(readFileSync('components/directory/member-map-canvas.tsx', 'utf8'), /aria-label=/);
   assert.match(concentrationMapSource, /<table/);
   assert.doesNotMatch(concentrationMapSource, /<table[^>]*aria-hidden/);
 });
@@ -188,4 +190,39 @@ test('Reset appears for search-only state and cancels a pending debounced search
 test('security documentation describes the bounded page-size choices and reachable-record cap', () => {
   assert.match(securityDoc, /10, 25, 50, or 100 rows per page/);
   assert.match(securityDoc, /total reachable depth is capped at 5,000 records/);
+});
+
+test('map dots sit at fixed country centers with area proportional to the member count', () => {
+  const dots = buildMemberMapDots([
+    { countryCode: 'US', memberCount: 100 },
+    { countryCode: 'DE', memberCount: 25 },
+    { countryCode: 'ZZ', memberCount: 9 },
+  ], (code) => code);
+  assert.deepEqual(dots.map((dot) => dot.countryCode), ['US', 'DE']);
+  assert.equal(dots[0].radius, MAP_DOT_MAX_RADIUS);
+  assert.ok(Math.abs(dots[1].radius - MAP_DOT_MAX_RADIUS / 2) < 0.1);
+  assert.equal(dotRadius(1, 10000), MAP_DOT_MIN_RADIUS);
+  assert.deepEqual(Object.keys(dots[0]).sort(), ['countryCode', 'countryName', 'lat', 'lng', 'memberCount', 'radius']);
+});
+
+test('the dot map is MapLibre with bundled brand-colored shapes and makes no external tile request', () => {
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  assert.match(canvas, /import\('maplibre-gl'\)/);
+  assert.match(canvas, /'\/geo\/world-countries\.geojson'/);
+  assert.doesNotMatch(canvas, /https?:\/\//);
+  assert.match(canvas, /OCEAN = '#050c20'/);
+  assert.match(canvas, /GOLD = '#d3af37'/);
+});
+
+test('country centers sit inside plausible bounds for their country (regression: Ashmore/Cartier overwrote Australia)', () => {
+  const [auLng, auLat] = COUNTRY_CENTROIDS.AU;
+  assert.ok(auLng > 125 && auLng < 150 && auLat < -20 && auLat > -35);
+  const [usLng, usLat] = COUNTRY_CENTROIDS.US;
+  assert.ok(usLng < -90 && usLng > -110 && usLat > 35 && usLat < 45);
+});
+
+test('the map camera fits the world responsively instead of a fixed desktop-sized minimum zoom', () => {
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  assert.match(canvas, /bounds: \[\[-170, -56\], \[180, 80\]\]/);
+  assert.match(canvas, /minZoom: -1,/);
 });
