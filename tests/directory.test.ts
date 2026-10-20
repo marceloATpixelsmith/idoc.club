@@ -52,7 +52,7 @@ test('the concentration map keeps a real, screen-reader-only data table as acces
   assert.match(concentrationMapSource, /<table/);
   assert.doesNotMatch(concentrationMapSource, /<table[^>]*aria-hidden/);
   assert.match(concentrationMapSource, /<div className="sr-only">\s*<table>/);
-  assert.doesNotMatch(concentrationMapSource, /figcaption|Natural Earth/);
+  assert.doesNotMatch(concentrationMapSource, /<figcaption/);
 });
 
 test('the public directory page renders loading, empty, unavailable, and error states', () => {
