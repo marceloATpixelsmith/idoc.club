@@ -8,9 +8,10 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { readMaintenanceState, setMaintenanceMode } from '@/lib/admin/maintenance-mode';
-import { BackupToolError, dispatchBackup, dispatchRestoreDrill, listBackupRequests, listBackupRuns, listBackups, listDrillRequests, listDrillRuns, recordBackupRequest, recordDrillRequest, type BackupEntry, type BackupRunEntry, type DrillRunEntry } from '@/lib/admin/backup-tool';
+import { BackupToolError, dispatchBackup, dispatchRestoreDrill, listBackupRequests, listBackupRuns, listBackups, listDrillRequests, listDrillRuns, recordDrillRequest, reserveBackupRequest, type BackupEntry, type BackupRunEntry, type DrillRunEntry } from '@/lib/admin/backup-tool';
 import { backupInProgress, drillIsFullPass, parseBackupSelection } from '@/lib/admin/backup-results';
 import { formatTableDate } from '@/lib/format';
+import { AdminFormSection } from '@/components/admin/admin-form-section';
 
 const PATH = '/admin/operations/backups';
 
@@ -66,7 +67,7 @@ async function backupAction(_state: BackupsActionState, formData: FormData): Pro
     const stepUp = await requireFreshStepUp(actor, 'change-security-settings', PATH);
     if (stepUp.required) return { stepUpRequired: true };
     if (backupInProgress(await listBackupRuns(3))) return { error: 'A backup is already queued or running. Wait for it to finish, then refresh this page.' };
-    await recordBackupRequest(actor.id);
+    if (!(await reserveBackupRequest(actor.id))) return { error: 'A backup was requested a moment ago. Wait a couple of minutes, then refresh this page.' };
     await dispatchBackup();
     revalidatePath(PATH);
     return { success: 'Backup started. It takes a few minutes; refresh this page to see it appear under Latest backup. It backs up both IDOC schemas and never changes live data.' };
@@ -134,11 +135,7 @@ export default async function BackupsPage() {
             )}
           </section>
 
-          <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Back up now</h2>
-              <p className="text-sm text-muted-foreground">Starts the same encrypted backup of both IDOC schemas that runs every night, stored offsite. Needs your authenticator code. It never changes live data.{running ? ' A backup is running now.' : ''}</p>
-            </div>
+          <AdminFormSection description={`Starts the same encrypted backup of both IDOC schemas that runs every night, stored offsite. Needs your authenticator code. It never changes live data.${running ? ' A backup is running now.' : ''}`} title="Back up now">
             <BackupForm action={backupAction} disabled={running} />
             {backupRuns.length === 0 ? null : (
               <ul className="space-y-1 text-sm text-muted-foreground">
@@ -153,15 +150,11 @@ export default async function BackupsPage() {
                 })}
               </ul>
             )}
-          </section>
+          </AdminFormSection>
 
-          <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Run a restore drill</h2>
-              <p className="text-sm text-muted-foreground">Needs your authenticator code. The drill downloads the chosen backup, checks its checksum, restores it into a throwaway database and compares row counts.</p>
-            </div>
+          <AdminFormSection description="Needs your authenticator code. The drill downloads the chosen backup, checks its checksum, restores it into a throwaway database and compares row counts." title="Run a restore drill">
             <DrillForm action={drillAction} disabled={backups.length === 0} options={options} />
-          </section>
+          </AdminFormSection>
 
           <section className="space-y-3 rounded-lg border border-border bg-surface/40 p-5">
             <h2 className="text-lg font-semibold text-foreground">Drill results</h2>

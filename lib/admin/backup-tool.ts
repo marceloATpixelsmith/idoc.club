@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, users } from '@/lib/db/schema';
 import { parseBackupManifest, parseDrillResult, type BackupManifest, type DrillResult, type RunState } from './backup-results';
@@ -83,8 +83,20 @@ export async function dispatchBackup(): Promise<void> {
   });
 }
 
-export async function recordBackupRequest(actorId: number): Promise<void> {
-  await db.insert(auditLog).values({ actorId, action: 'admin.backup.requested', entityType: 'backup', entityId: 'on-demand', afterJson: { workflow: BACKUP_WORKFLOW } });
+/** Seconds during which a second on-demand backup is refused. GitHub's runs list can lag a few seconds behind a dispatch, so the
+ * run check alone cannot stop two overlapping submissions; this reservation is made under a database lock and is visible at once. */
+const BACKUP_REQUEST_COOLDOWN_SECONDS = 120;
+
+/** Records the audit row for an on-demand backup, unless one was recorded in the last two minutes. Returns whether this request holds the reservation. */
+export async function reserveBackupRequest(actorId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('idoc-on-demand-backup'))`);
+    const [recent] = await tx.select({ id: auditLog.id }).from(auditLog)
+      .where(and(eq(auditLog.action, 'admin.backup.requested'), gt(auditLog.createdAt, sql`now() - make_interval(secs => ${BACKUP_REQUEST_COOLDOWN_SECONDS})`))).limit(1);
+    if (recent) return false;
+    await tx.insert(auditLog).values({ actorId, action: 'admin.backup.requested', entityType: 'backup', entityId: 'on-demand', afterJson: { workflow: BACKUP_WORKFLOW } });
+    return true;
+  });
 }
 
 export async function listBackupRequests(limit = 8) {

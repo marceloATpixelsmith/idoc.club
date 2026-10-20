@@ -54,8 +54,8 @@ test('the Backups page is Super Admin only, CSRF-checked, step-up protected and 
   assert.match(page, /requireCsrfToken\(formData/);
   assert.equal((page.match(/requireFreshStepUp\(actor, 'change-security-settings'/g) ?? []).length, 3); // maintenance, drill, backup
   assert.match(page, /recordDrillRequest\(actor\.id, selection\)[\s\S]*dispatchRestoreDrill\(selection\)/); // audited before dispatch
-  assert.match(page, /recordBackupRequest\(actor\.id\)[\s\S]*dispatchBackup\(\)/); // on-demand backup: audited before dispatch
-  assert.match(page, /backupInProgress\(await listBackupRuns\(3\)\)[\s\S]*recordBackupRequest/); // refused while one is queued or running
+  assert.match(page, /reserveBackupRequest\(actor\.id\)[\s\S]*dispatchBackup\(\)/); // on-demand backup: audited before dispatch
+  assert.match(page, /backupInProgress\(await listBackupRuns\(3\)\)[\s\S]*reserveBackupRequest/); // refused while one is queued or running
   const tool = readFileSync('lib/admin/backup-tool.ts', 'utf8');
   assert.doesNotMatch(tool, /R2_|AWS_|IDOC_BACKUP|PASSPHRASE|MIGRATION_DATABASE/);
   assert.match(tool, /GITHUB_BACKUP_TOOL_TOKEN/);
