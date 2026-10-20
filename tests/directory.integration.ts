@@ -169,6 +169,16 @@ test('paid directory: only active, non-admin member accounts appear in directory
   assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`), ['Grace Hopper']);
 });
 
+test('paid directory: an imported member who has not activated their account is listed, with email and contact hidden unless they opted in', async () => {
+  const { user: imported } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Imported', lastName: 'Member' });
+  await sql`update idoc.users set account_state='migrated_pending' where id=${imported.id}`;
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
+  const listing = await asMember(searcher.id, () => listMemberDirectory({ q: 'Imported' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].firstName, 'Imported');
+  assert.equal(listing.rows[0].email, null);
+});
+
 test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {
   const { user: listedUser } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' }, { directoryEmailOptIn: true });
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
