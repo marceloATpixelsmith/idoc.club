@@ -670,3 +670,52 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
     transition: none;
   }
 }
+
+/* Avatar (initials) menu: the same 3D perspective flip as the header nav dropdowns. Radix keeps the
+ * content mounted while the closing animation runs, so open and close are separate keyframes. The
+ * perspective() transform function stands in for a perspective parent, which a portaled menu lacks.
+ * Unlayered so it wins over the shared menu's tw-animate utilities. */
+.idoc-flip-content {
+  transform-origin: top center;
+  backface-visibility: hidden;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+}
+
+.idoc-flip-content[data-state='open'] {
+  animation: idoc-flip-open 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.idoc-flip-content[data-state='closed'] {
+  animation: idoc-flip-close 0.22s ease-in both;
+}
+
+@keyframes idoc-flip-open {
+  from {
+    opacity: 0;
+    transform: perspective(800px) rotateX(-90deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: perspective(800px) rotateX(0deg);
+  }
+}
+
+@keyframes idoc-flip-close {
+  from {
+    opacity: 1;
+    transform: perspective(800px) rotateX(0deg);
+  }
+
+  to {
+    opacity: 0;
+    transform: perspective(800px) rotateX(-90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-flip-content[data-state='open'],
+  .idoc-flip-content[data-state='closed'] {
+    animation: none;
+  }
+}
