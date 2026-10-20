@@ -231,3 +231,12 @@ test('the public map excludes blank or malformed country codes so a bad legacy v
   assert.match(aggregateSource, /where p\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
   assert.match(readFileSync('lib/membership/countries.ts', 'utf8'), /try \{[\s\S]*englishRegionNames\.of[\s\S]*\} catch/);
 });
+
+test('the bundled MapLibre worker matches the installed maplibre-gl version and the canvas points at it', () => {
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  assert.match(canvas, /setWorkerUrl\('\/maplibre\/maplibre-gl-worker\.mjs'\)/);
+  assert.ok(
+    readFileSync('public/maplibre/maplibre-gl-worker.mjs').equals(readFileSync('node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs')),
+    'public/maplibre/maplibre-gl-worker.mjs must be re-copied from node_modules/maplibre-gl/dist after a maplibre-gl upgrade',
+  );
+});

@@ -16,7 +16,9 @@ const CHECKED_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.md', '.json'
 // would exempt these the same way (via .eslintignore/.prettierignore); enforcing whitespace hygiene
 // on drizzle-kit's own generated snapshot JSON or the pnpm lockfile would fight the tool that writes
 // them, not this codebase's own authoring discipline.
-const EXCLUDED_PREFIXES = ['lib/db/migrations/meta/', 'pnpm-lock.yaml'];
+// public/maplibre/ holds a byte-for-byte copy of the maplibre-gl worker (minified, no trailing
+// newline); tests/directory.test.ts asserts it equals node_modules/maplibre-gl/dist.
+const EXCLUDED_PREFIXES = ['lib/db/migrations/meta/', 'pnpm-lock.yaml', 'public/maplibre/'];
 // Released migrations (and their snapshots) are checksum-frozen by tests/migration-immutability.test.ts
 // -- this whitespace check must never ask for a byte of them to change, so it excludes exactly the
 // path set that immutability contract itself protects, read live from the same source of truth
