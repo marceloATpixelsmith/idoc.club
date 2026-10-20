@@ -108,11 +108,11 @@ test('the website directory keeps unauthorized and failure states generic', () =
   assert.match(memberRouteSource, /directory could not be loaded/i);
 });
 
-test('the paid directory page offers email links and actions without rendering a database identifier', () => {
+test('the paid directory page offers bold, non-underlined gold-on-hover email links and no Contact column, without rendering a database identifier', () => {
   assert.doesNotMatch(memberPageSource, /row\.original\.(id|profileId|userId)\b/);
   assert.match(memberPageSource, /href=\{`mailto:\$\{row\.original\.email\}`\}/);
-  assert.match(memberPageSource, /aria-label=\{`Email \$\{row\.original\.firstName\} \$\{row\.original\.lastName\}`\}/);
-  assert.match(memberPageSource, /id: 'actions'/);
+  assert.match(memberPageSource, /className="font-bold no-underline transition-colors hover:text-gold focus-visible:text-gold" href=\{`mailto:/);
+  assert.doesNotMatch(memberPageSource, /id: 'actions'|CONTACT|Email member|(?<![-\w])underline(?![-\w])/);
 });
 
 test('directory facets use the shared table toolbar and omit the redundant Country column and filter', () => {
@@ -170,13 +170,13 @@ test('multiple membership-type facets stay grouped with the other access and sea
   assert.match(memberDirectorySource, /conditions\.push\(sql`\(\$\{sql\.join\(filters\.membershipType/);
 });
 
-test('directory defaults to the requested separate name, member detail, email, and contact columns', () => {
+test('directory defaults to the requested separate name, member detail and email columns, with no Contact column', () => {
   const columnBlock = memberPageSource.slice(memberPageSource.indexOf('id: \'firstName\''), memberPageSource.indexOf('], []),'));
   const ids = [...columnBlock.matchAll(/id: \'([^\']+)\'/g)].map((match) => match[1]);
-  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions']);
-  assert.match(memberPageSource, /columnOrder: \['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'\]/);
+  assert.deepEqual(ids, ['firstName', 'lastName', 'type', 'region', 'federation', 'email']);
+  assert.match(memberPageSource, /columnOrder: \['firstName', 'lastName', 'type', 'region', 'federation', 'email'\]/);
   assert.match(columnBlock, /header: header\('Member Type'\)/);
-  assert.match(columnBlock, /header: \(\) => <span>CONTACT<\/span>/);
+  assert.doesNotMatch(columnBlock, /CONTACT/);
 });
 
 test('descending name sorting applies the same direction to last and first names', () => {
