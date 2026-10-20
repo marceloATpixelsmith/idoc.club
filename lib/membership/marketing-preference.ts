@@ -85,23 +85,34 @@ export async function changeMarketingPreference(input: {
 }
 
 /**
- * Best-effort follow-up to an opted-in onboarding (the consent row already records the choice, so a
- * provider problem changes nothing). Where Mailchimp cannot take the member straight to subscribed,
- * the stored flag is corrected so it never claims a subscription that does not exist: a member who
- * earlier unsubscribed themselves is sent a confirmation email (flag false until they click it), and
- * an undeliverable address is recorded as opted out. Never throws and never affects onboarding.
+ * Best-effort follow-up to an opted-in onboarding. The flag is true only while Mailchimp holds the
+ * member as subscribed, so anything short of that corrects it: a member who earlier unsubscribed
+ * themselves is sent a confirmation email (flag false, pending, until they click it); an undeliverable
+ * address, an unreachable or unconfigured Mailchimp, or the launch hold leave the flag false so the
+ * member can simply switch the profile toggle on later. The original onboarding choice stays on record
+ * in the audit entry written with the correction. Never throws and never affects onboarding.
  */
 export async function settleOnboardingMarketingOptIn(profileId: number, email: string): Promise<void> {
   try {
     const outcome = await requestMarketingOptIn(email);
-    if (outcome !== 'pending' && outcome !== 'cleaned') return;
+    if (outcome === 'subscribed') return;
     const now = new Date();
-    await db.update(onboardingConsents).set({
-      keepUpdatedChangedAt: now,
-      keepUpdatedOptIn: false,
-      keepUpdatedPendingAt: outcome === 'pending' ? now : null,
-      keepUpdatedSource: 'member',
-    }).where(eq(onboardingConsents.profileId, profileId));
+    await db.transaction(async (tx) => {
+      await tx.update(onboardingConsents).set({
+        keepUpdatedChangedAt: now,
+        keepUpdatedOptIn: false,
+        keepUpdatedPendingAt: outcome === 'pending' ? now : null,
+        keepUpdatedSource: 'member',
+      }).where(eq(onboardingConsents.profileId, profileId));
+      await tx.insert(auditLog).values({
+        action: 'member.marketing_preference.changed',
+        actorId: null,
+        afterJson: { optIn: false, pending: outcome === 'pending', source: 'member' },
+        beforeJson: { onboardingChoice: true, optIn: true, outcome },
+        entityId: String(profileId),
+        entityType: 'profile',
+      });
+    });
   } catch {
     // Marketing sync is deliberately isolated from onboarding and billing.
   }
@@ -153,26 +164,32 @@ export async function applyMailchimpMarketingStatus(
       .innerJoin(users, eq(users.id, profiles.userId))
       .where(inArray(sql`lower(${users.email})`, chunk));
     const optingOut = status !== 'subscribed';
-    const rows = await db.update(onboardingConsents).set({
-      keepUpdatedChangedAt: now,
-      keepUpdatedOptIn: !optingOut,
-      keepUpdatedPendingAt: null,
-      keepUpdatedSource: source,
-    }).where(and(
-      inArray(onboardingConsents.profileId, matching),
-      optingOut
-        ? or(eq(onboardingConsents.keepUpdatedOptIn, true), isNotNull(onboardingConsents.keepUpdatedPendingAt))
-        : isNotNull(onboardingConsents.keepUpdatedPendingAt),
-    )).returning({ profileId: onboardingConsents.profileId });
-    if (rows.length === 0) continue;
-    await db.insert(auditLog).values(rows.map(({ profileId }) => ({
-      action: 'member.marketing_preference.changed',
-      actorId: null,
-      afterJson: { mailchimpStatus: status, optIn: !optingOut, source },
-      beforeJson: null,
-      entityId: String(profileId),
-      entityType: 'profile',
-    })));
+    // The update and its audit rows commit together: a retry after a failure must still find the
+    // rows to change, otherwise the audit entry would be lost for good.
+    const rows = await db.transaction(async (tx) => {
+      const updated = await tx.update(onboardingConsents).set({
+        keepUpdatedChangedAt: now,
+        keepUpdatedOptIn: !optingOut,
+        keepUpdatedPendingAt: null,
+        keepUpdatedSource: source,
+      }).where(and(
+        inArray(onboardingConsents.profileId, matching),
+        optingOut
+          ? or(eq(onboardingConsents.keepUpdatedOptIn, true), isNotNull(onboardingConsents.keepUpdatedPendingAt))
+          : isNotNull(onboardingConsents.keepUpdatedPendingAt),
+      )).returning({ profileId: onboardingConsents.profileId });
+      if (updated.length > 0) {
+        await tx.insert(auditLog).values(updated.map(({ profileId }) => ({
+          action: 'member.marketing_preference.changed',
+          actorId: null,
+          afterJson: { mailchimpStatus: status, optIn: !optingOut, source },
+          beforeJson: null,
+          entityId: String(profileId),
+          entityType: 'profile',
+        })));
+      }
+      return updated;
+    });
     changed.push(...rows.map(({ profileId }) => profileId));
   }
   return changed;

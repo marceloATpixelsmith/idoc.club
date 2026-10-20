@@ -3,6 +3,7 @@ import 'server-only';
 import { applyMailchimpMarketingStatus } from '@/lib/membership/marketing-preference';
 import { parseMailchimpWebhook, verifyMailchimpWebhookKey } from '@/lib/notifications/mailchimp-marketing-webhook';
 import { logError, logWarn } from '@/lib/observability/logger';
+import { mailchimpWebhookKeyForServer } from '@/lib/runtime/configuration';
 
 // Mailchimp requests the URL with GET to confirm it resolves before accepting it in the audience's
 // Webhooks settings; a bare 200 keeps that check passing without a body or authentication.
@@ -15,8 +16,12 @@ export async function GET() {
  * route only ever writes onboarding_consents; it never touches transactional email, billing or
  * entitlement. */
 export async function POST(request: Request) {
-  const webhookKey = process.env.MAILCHIMP_WEBHOOK_KEY?.trim();
-  if (!webhookKey) return Response.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  // Fail closed: the query-string key is this endpoint's only authentication, so an unset or too-short
+  // (under 32 characters) value must reject every delivery rather than accept a guessable key.
+  let webhookKey: string;
+  try { webhookKey = mailchimpWebhookKeyForServer(); } catch {
+    return Response.json({ error: 'Webhook configuration unavailable.' }, { status: 503 });
+  }
 
   const providedKey = new URL(request.url).searchParams.get('key');
   if (!verifyMailchimpWebhookKey(providedKey, webhookKey)) {

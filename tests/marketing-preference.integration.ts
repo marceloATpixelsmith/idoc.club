@@ -6,7 +6,7 @@ import { POST as webhookPost } from '../app/api/mailchimp/webhook/route.ts';
 import { changeMarketingPreference, getMarketingPreference, reconcileMarketingPreferences, settleOnboardingMarketingOptIn } from '../lib/membership/marketing-preference.ts';
 
 const originalFetch = globalThis.fetch;
-const WEBHOOK_KEY = 'mailchimp-route-test-key';
+const WEBHOOK_KEY = 'mailchimp-route-test-key-with-at-least-32-characters';
 let mailchimp: Record<string, string>;
 let calls: { body?: Record<string, unknown>; method: string; url: string }[];
 
@@ -108,6 +108,8 @@ test('the webhook rejects a wrong key, an unconfigured key and another audience,
   assert.equal((await webhookPost(webhookRequest(event('profile', subject.email)))).status, 200);
   assert.equal((await webhookPost(webhookRequest(event('unsubscribe', 'nobody@example.test')))).status, 200);
   assert.equal((await getMarketingPreference(subject.profileId))?.optIn, true);
+  process.env.MAILCHIMP_WEBHOOK_KEY = 'too-short';
+  assert.equal((await webhookPost(webhookRequest(event('unsubscribe', subject.email), 'too-short'))).status, 503);
   delete process.env.MAILCHIMP_WEBHOOK_KEY;
   assert.equal((await webhookPost(webhookRequest(event('unsubscribe', subject.email)))).status, 503);
   assert.equal((await getMarketingPreference(subject.profileId))?.optIn, true);
@@ -217,6 +219,17 @@ test('onboarding corrects the stored flag when Mailchimp needs confirmation, and
   await settleOnboardingMarketingOptIn(fresh.profileId, fresh.email);
   assert.equal((await getMarketingPreference(fresh.profileId))?.optIn, true);
 
+  // Mailchimp unreachable or held: the flag must not claim a subscription that does not exist, and the
+  // original onboarding choice is kept in the audit entry.
+  const unsynced = await member(true);
   globalThis.fetch = (async () => { throw new Error('network down'); }) as typeof fetch;
-  await settleOnboardingMarketingOptIn(fresh.profileId, fresh.email);
+  await settleOnboardingMarketingOptIn(unsynced.profileId, unsynced.email);
+  const corrected = await getMarketingPreference(unsynced.profileId);
+  assert.deepEqual({ optIn: corrected?.optIn, pending: corrected?.pending }, { optIn: false, pending: false });
+  const [audit] = await sql`select before_json from idoc.audit_log where entity_id=${String(unsynced.profileId)} and action='member.marketing_preference.changed'`;
+  assert.equal(audit.before_json.onboardingChoice, true);
+  const held = await member(true);
+  process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
+  await settleOnboardingMarketingOptIn(held.profileId, held.email);
+  assert.equal((await getMarketingPreference(held.profileId))?.optIn, false);
 });
