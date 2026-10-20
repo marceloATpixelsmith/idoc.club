@@ -34,7 +34,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
 
   if (activeTab === 'directory' && user) {
     try {
-      listing = await listMemberDirectory(parseDirectoryView((await cookies()).get(DIRECTORY_VIEW_COOKIE)?.value));
+      listing = await listMemberDirectory(parseDirectoryView((await cookies()).get(DIRECTORY_VIEW_COOKIE)?.value, user.id));
     } catch (error) {
       if (error instanceof DirectoryRateLimitedError || error instanceof Error) unavailable = true;
     }

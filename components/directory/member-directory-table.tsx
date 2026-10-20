@@ -57,6 +57,8 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const [search, setSearch] = useState(Array.isArray(filters.q) ? '' : filters.q ?? '');
   const searchRef = useRef(search);
   const [isPending, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState(false);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   // Saves the view to a cookie and refetches via a same-URL router.refresh() -- deliberately never
   // writes search, filters, sort or page to the URL.
@@ -70,10 +72,21 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       region: filterToken(state.columnFilters, 'region'),
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
     };
-    void fetch('/api/directory/view', {
-      body: JSON.stringify(view), credentials: 'same-origin', method: 'PUT',
-      headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() },
-    }).finally(() => startTransition(() => router.refresh()));
+    // Saves are chained so an older request can never land after (and overwrite) a newer one. The
+    // table refreshes only after a successful save; a failure keeps the member's current controls.
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        const response = await fetch('/api/directory/view', {
+          body: JSON.stringify(view), credentials: 'same-origin', method: 'PUT',
+          headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() },
+        });
+        if (!response.ok) throw new Error('save failed');
+        setSaveError(false);
+        startTransition(() => router.refresh());
+      } catch {
+        setSaveError(true);
+      }
+    });
   }
 
   const { table } = useDataTable({
@@ -162,6 +175,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const hasFilters = table.getState().columnFilters.length > 0;
   const hasSearch = Boolean(search.trim());
   return <>
+    {saveError ? <p className="mt-5 text-sm text-destructive" role="alert">Your search could not be saved. Please try again.</p> : null}
     <DataTableToolbar
       className="mt-5 rounded-xl border bg-background p-3"
       table={table}

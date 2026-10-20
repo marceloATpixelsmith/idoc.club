@@ -15,11 +15,16 @@ export function directoryViewCookieOptions() {
   };
 }
 
-export function parseDirectoryView(raw: string | undefined): MemberDirectoryFilters {
+/** The cookie is browser-wide and outlives sign-out, so it carries the owning user id and is ignored
+ * for anyone else: a shared browser never shows member A's search text to member B. */
+export function parseDirectoryView(raw: string | undefined, userId: number): MemberDirectoryFilters {
   if (!raw) return {};
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? normalizedView(parsed as MemberDirectoryFilters) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const { userId: owner, view } = parsed as { userId?: unknown; view?: unknown };
+    return owner === userId && view && typeof view === 'object' && !Array.isArray(view)
+      ? normalizedView(view as MemberDirectoryFilters) : {};
   } catch {
     return {};
   }
@@ -30,6 +35,6 @@ function normalizedView(input: MemberDirectoryFilters): MemberDirectoryFilters {
   return { federation, membershipType, page, pageSize, q, region, sort: JSON.stringify(sort) };
 }
 
-export function serializeDirectoryView(input: unknown): string {
-  return JSON.stringify(normalizedView(input && typeof input === 'object' ? input as MemberDirectoryFilters : {}));
+export function serializeDirectoryView(input: unknown, userId: number): string {
+  return JSON.stringify({ userId, view: normalizedView(input && typeof input === 'object' ? input as MemberDirectoryFilters : {}) });
 }

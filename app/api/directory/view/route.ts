@@ -8,7 +8,7 @@ import { requireCsrfTokenValue } from '@/lib/security/csrf';
 
 async function authorize(request: Request) {
   await requireCsrfTokenValue(request.headers.get('x-idoc-csrf'), await rawCanonicalSessionId(), await rawCanonicalUserId());
-  await requireAccountAccess('member');
+  return requireAccountAccess('member');
 }
 
 function failure(error: unknown) {
@@ -18,9 +18,9 @@ function failure(error: unknown) {
 
 export async function PUT(request: Request) {
   try {
-    await authorize(request);
+    const actor = await authorize(request);
     const response = new NextResponse(null, { status: 204 });
-    response.cookies.set(DIRECTORY_VIEW_COOKIE, serializeDirectoryView(await request.json()), directoryViewCookieOptions());
+    response.cookies.set(DIRECTORY_VIEW_COOKIE, serializeDirectoryView(await request.json(), actor.id), directoryViewCookieOptions());
     return response;
   } catch (error) {
     return failure(error);
