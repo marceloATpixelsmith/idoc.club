@@ -242,3 +242,7 @@ test('the bundled MapLibre worker matches the installed maplibre-gl version and 
     'public/maplibre/maplibre-gl-worker.mjs must be re-copied from node_modules/maplibre-gl/dist after a maplibre-gl upgrade',
   );
 });
+
+test('the members map page shows no descriptive footnote text beneath the map', () => {
+  assert.doesNotMatch(publicPageSource, /This infographic shows only/);
+});

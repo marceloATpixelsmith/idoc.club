@@ -51,7 +51,6 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
         {!concentration?.ok ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The members map is temporarily unavailable. Please try again shortly.</p>
           : concentration.areas.length === 0 ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">Not enough member data is available yet to show the map. Check back soon.</p>
           : <ConcentrationMap areas={concentration.areas} />}
-        <p className="mt-8 text-xs leading-relaxed text-muted-foreground">This infographic shows only privacy-thresholded country totals. It never exposes names, profiles, contact details, exact addresses, coordinates, identifiers, or small-group totals.</p>
       </div> : !user ? <div className="mt-8 border border-gold/40 bg-surface/50 p-6">
         <h2 className="font-semibold">Active membership required</h2>
         <p className="mt-2 text-sm text-muted-foreground">Directory results are available only to signed-in active members.</p>
