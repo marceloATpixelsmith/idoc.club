@@ -130,7 +130,7 @@ The demographics/onboarding form (§1.1) gates its submit action on two required
 
 - **Required** — "I have read and agree to the Terms Of Service and acknowledge that IDOC membership costs €80 for 12 months. I will choose at payment whether to renew automatically each year, and I may change that renewal choice later in Billing Settings."
 - **Required** — "This site collects names, emails and other user information. I consent to the terms set forth in the Privacy Policy."
-- **Optional, checked by default** — "Keep me updated on IDOC events, workshops, and certifications" (if left unchecked, the member still receives account-standing, payment, security, and renewal messages per §11 — they only miss event/workshop/certification communications). Checking this subscribes the member to the corresponding Mailchimp Marketing audience; leaving it unchecked (or later opting out) does not affect the account-standing/payment/security/renewal messages members cannot opt out of.
+- **Optional, checked by default** — "Keep me updated on IDOC events, workshops, and certifications" (if left unchecked, the member still receives account-standing, payment, security, and renewal messages per §11 — they only miss event/workshop/certification communications). Checking this subscribes the member to the corresponding Mailchimp Marketing audience; leaving it unchecked (or later opting out) does not affect the account-standing/payment/security/renewal messages members cannot opt out of. The setting stays editable on My Profile and in the administrator member drawer and follows Mailchimp unsubscribes (docs/19); it never affects system email.
 
 # 2. Pricing
 

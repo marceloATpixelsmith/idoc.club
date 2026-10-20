@@ -11,7 +11,7 @@ test('an entitled member sees the dashboard menu and My Membership shows status,
   await expect(page.getByText('Type', { exact: true })).toBeVisible();
   await expect(page.getByText('Payment history')).toBeVisible();
   for (const label of ['My Profile', 'My Security']) {
-    await expect(page.getByRole('link', { name: label })).toBeVisible();
+    await expect(page.getByLabel('My Dashboard').getByRole('link', { name: label })).toBeVisible();
   }
   await context.close();
 });
@@ -106,7 +106,7 @@ test('an administrator with no member profile sees the dashboard menu and an hon
   await expect(page.getByText('Pay for your IDOC membership')).toHaveCount(0);
   await expect(page.getByText('You have no member profile')).toBeVisible();
   for (const label of ['My Profile', 'My Security']) {
-    await expect(page.getByRole('link', { name: label })).toBeVisible();
+    await expect(page.getByLabel('My Dashboard').getByRole('link', { name: label })).toBeVisible();
   }
   // Seminars is a public website page, not a dashboard tab.
   await page.goto('/seminars');

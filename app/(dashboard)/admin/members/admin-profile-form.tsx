@@ -14,7 +14,7 @@ import { saveMemberProfileByAdminForm } from './actions';
 import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 
 type Role = { feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null; nationalFederationCountryCode: string | null; officialStatuses: string[] | null; roleType: string };
-type Member = { profile: Record<string, unknown>; roles: Role[] };
+type Member = { marketing?: { optIn: boolean; pending: boolean } | null; profile: Record<string, unknown>; roles: Role[] };
 // Matches lib/db/schema.ts's profiles column lengths (memberProfileSchema enforces the same limits
 // server-side; this is the client-side half of the same requirement).
 const FIELD_MAX_LENGTH: Record<string, number> = {
@@ -86,6 +86,30 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           </CardContent>
         </Card>
       )}
+      {member.marketing ? (
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Email preferences</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {member.marketing.optIn ? <>
+              <input name="keepUpdatedPresent" type="hidden" value="1" />
+              <FormToggle
+                defaultChecked
+                description="Switching this off unsubscribes the member from IDOC news and updates. Only the member can turn it back on, from their profile. Account, billing and security emails are always sent."
+                id="keepUpdated"
+                label="Keep me updated by email"
+                name="keepUpdated"
+                value="1"
+              />
+            </> : <p className="text-sm text-muted-foreground">
+              {member.marketing.pending
+                ? 'The member asked to receive IDOC updates and has not yet clicked the confirmation email.'
+                : 'The member is not subscribed to IDOC news and updates. Only the member can opt in, from their profile.'}
+            </p>}
+          </CardContent>
+        </Card>
+      ) : null}
       <Card className="md:col-span-2">
         <CardHeader>
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Board</CardTitle>

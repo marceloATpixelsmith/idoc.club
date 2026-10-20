@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 73, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0078, still apply once');
+    assert.equal(count, 74, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0079, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -356,7 +356,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0078_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0079_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
@@ -376,6 +376,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.reconciliation_ignores'] = currentSnapshot.tables['idoc.reconciliation_ignores'];
   // Migration 0077 removed the unused missing_refund reconciliation type from the kind constraint.
   expectedSchema['idoc.reconciliation_findings'] = currentSnapshot.tables['idoc.reconciliation_findings'];
+  // Migration 0079 added the marketing-preference sync columns to the onboarding consent record.
+  expectedSchema['idoc.onboarding_consents'] = currentSnapshot.tables['idoc.onboarding_consents'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
@@ -402,6 +404,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     order by ordinal_position`;
   assert.deepEqual(consentColumns.map(({ column_name }) => column_name), [
     'profile_id', 'terms_accepted_at', 'privacy_accepted_at', 'keep_updated_opt_in', 'created_at',
+    'keep_updated_changed_at', 'keep_updated_pending_at', 'keep_updated_source',
   ]);
 
   for (const [qualifiedName, expectedTable] of Object.entries<any>(expectedSchema)) {

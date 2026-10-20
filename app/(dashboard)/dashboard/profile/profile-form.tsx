@@ -1,10 +1,12 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { AuthPendingLabel } from '@/components/auth/pending-label';
 import { useFreshStepUpAction } from '@/components/auth/fresh-step-up-action';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
+import { FormToggle } from '@/components/ui/form-toggle';
 import { Input } from '@/components/ui/input';
 import { InternationalPhoneInput } from '@/components/ui/international-phone-input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +16,8 @@ import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership
 import { saveOwnAccountAndProfileForm } from '@/app/(dashboard)/account/actions';
 
 type Role = { feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null; nationalFederationCountryCode: string | null; officialStatuses: string[] | null; roleType: string };
-type Member = { profile: Record<string, unknown>; roles: Role[] };
+type Marketing = { optIn: boolean; pending: boolean };
+type Member = { marketing?: Marketing | null; profile: Record<string, unknown>; roles: Role[] };
 type Classification = 'judge' | 'judge_steward' | 'steward' | 'veterinarian';
 
 type AddressSuggestion = {
@@ -69,6 +72,11 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
   const [geolocationBias, setGeolocationBias] = useState<{ lat: number; lon: number } | null>(null);
 
   const [state, submit, pending, stepUpDialog] = useFreshStepUpAction(saveOwnAccountAndProfileForm, {});
+  const router = useRouter();
+  // The marketing choice can end somewhere other than what was toggled (an opt-in waiting on the
+  // Mailchimp confirmation email, or one Mailchimp refused), so re-read it after every save.
+  useEffect(() => { if (state.success) router.refresh(); }, [router, state.success]);
+  const marketing = member?.marketing ?? null;
 
   useEffect(() => {
     // A one-time, best-effort bias hint for ranking autocomplete suggestions -- never blocks or
@@ -202,6 +210,24 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
               <p className="mt-1 pl-6 text-xs text-muted-foreground">Opting into showing your email in the directory is a great way for members to be able to get in touch with you for things like judging opportunities etc.</p>
             </div>
           </fieldset>
+
+          {marketing ? (
+            <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
+              <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Email preferences</legend>
+              <input name="keepUpdatedPresent" type="hidden" value="1" />
+              <FormToggle
+                defaultChecked={marketing.optIn || marketing.pending}
+                description={marketing.pending
+                  ? 'We emailed you a confirmation link. Click it to start receiving IDOC news and updates; until then you will not receive them.'
+                  : 'News and updates from IDOC. Account, billing and security emails are always sent regardless of this setting.'}
+                id="keepUpdated"
+                key={`${marketing.optIn}-${marketing.pending}`}
+                label="Keep me updated by email"
+                name="keepUpdated"
+                value="1"
+              />
+            </fieldset>
+          ) : null}
 
           <fieldset className="space-y-4 border-0 border-t border-border p-0 pt-6">
             <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Address</legend>
