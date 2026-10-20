@@ -89,7 +89,7 @@ function NavDropdown({
         <svg
           aria-hidden="true"
           viewBox="0 0 8 5"
-          className={`h-[5px] w-2 fill-current transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+          className={`h-[5px] w-2 fill-current transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
         >
           <path d="M0 0h8L4 5z" />
         </svg>
