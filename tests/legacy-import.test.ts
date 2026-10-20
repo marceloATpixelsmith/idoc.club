@@ -157,6 +157,9 @@ test('planLegacyImport applies the agreed rules', () => {
     assert.equal(byId.get(id)!.exclusion, null, `user ${id} expired a year or more ago: still imported`);
     assert.equal(byId.get(id)!.membership.status, 'expired');
   }
+  assert.ok(byId.get('8')!.exceptions.includes('expired_with_active_subscription'), 'an expired member with an active legacy subscription needs a decision');
+  assert.equal(byId.get('10')!.exceptions.includes('expired_with_active_subscription'), false);
+  assert.equal(byId.get('1')!.exceptions.includes('expired_with_active_subscription'), false, 'an active member with an active subscription is normal');
   assert.equal(byId.get('11')!.exclusion, null, 'one day inside the year is kept');
   assert.equal(byId.get('11')!.membership.status, 'expired');
   for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
@@ -188,6 +191,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
   assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email'));
+  assert.equal(review.get('expired_with_active_subscription')?.count, 1);
   assert.equal(review.has('no_account_record'), false, 'people with no account are deleted people: handled, not a decision');
   const orphans = expected.get('no_account_record')!;
   assert.deepEqual(orphans.rows.map((row) => row.legacy_user_id), ['96', '97', '98', '99']);

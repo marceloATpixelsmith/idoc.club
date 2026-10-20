@@ -76,7 +76,7 @@ export type ExceptionCode =
   | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
   | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
   | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
-  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
+  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'expired_with_active_subscription' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
 
 export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time' | 'duplicate_payment_row_removed' | 'non_stripe_payment_reference';
 export type ExclusionCode = 'never_paid';
@@ -110,6 +110,7 @@ export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
   invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', kind: 'review', remedy: null, held: false },
   multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', kind: 'review', remedy: null, held: false },
   active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', kind: 'review', remedy: null, held: false },
+  expired_with_active_subscription: { text: 'Membership has expired but the legacy record still has an active subscription (is Stripe still billing them?)', kind: 'review', remedy: null, held: false },
   duplicate_payment_reference: { text: 'The same Stripe payment reference appears on transactions of DIFFERENT members', kind: 'review', remedy: null, held: false },
   duplicate_payment_reference_same_member: { text: 'The same Stripe payment reference appears on the SAME member with a different amount or outcome (cannot tell which row is right)', kind: 'review', remedy: null, held: false },
 };
@@ -292,6 +293,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       const reference = text(activeSubs[0].subscr_id);
       if (reference.startsWith('sub_')) subscriptionId = reference; else exceptions.add('invalid_subscription_reference');
     }
+    if (membershipStatus === 'expired' && activeSubs.length > 0) exceptions.add('expired_with_active_subscription');
     const customers = [...new Set(stripeCustomersByUser.get(legacyUserId) ?? [])];
     if (customers.length > 1) exceptions.add('multiple_stripe_customers');
     const customerId = customers.length === 1 ? customers[0] : null;
