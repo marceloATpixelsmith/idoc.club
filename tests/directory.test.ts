@@ -136,7 +136,7 @@ test('the dashboard navigation omits Directory while the public website retains 
 
 test('the entitled-member directory defaults to the privacy-safe map and searches only on the explicit second tab', () => {
   assert.match(memberRouteSource, /activeTab = user && first\(params\.tab\) === 'directory' \? 'directory' : 'map'/);
-  assert.match(memberRouteSource, /Map \/ Infographic/);
+  assert.match(memberRouteSource, />Map<\/Link>/);
   assert.match(memberRouteSource, /Search Directory/);
   assert.match(memberRouteSource, /if \(activeTab === 'directory' && user\)/);
   assert.match(memberRouteSource, /getPublicMemberConcentration/);
@@ -251,4 +251,9 @@ test('the map country is the National Federation country, falling back to the ad
   assert.match(aggregateSource, /min\(r\.national_federation_country_code\) from professional_roles r where r\.profile_id = p\.id/);
   assert.match(aggregateSource, /nullif\(p\.country_code, ''\)/);
   assert.match(aggregateSource, /group by c\.country_code/);
+});
+
+test('the signed-in members directory map tab is labelled just "Map"', () => {
+  assert.match(publicPageSource, />Map<\/Link>/);
+  assert.doesNotMatch(publicPageSource, /Map \/ Infographic/);
 });
