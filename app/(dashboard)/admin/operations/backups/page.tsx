@@ -1,15 +1,15 @@
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-import { DrillForm, MaintenanceForm, type BackupsActionState } from './backups-forms';
+import { BackupForm, DrillForm, MaintenanceForm, type BackupsActionState } from './backups-forms';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { readMaintenanceState, setMaintenanceMode } from '@/lib/admin/maintenance-mode';
-import { BackupToolError, dispatchRestoreDrill, listBackups, listDrillRequests, listDrillRuns, recordDrillRequest, type BackupEntry, type DrillRunEntry } from '@/lib/admin/backup-tool';
-import { drillIsFullPass, parseBackupSelection } from '@/lib/admin/backup-results';
+import { BackupToolError, dispatchBackup, dispatchRestoreDrill, listBackupRequests, listBackupRuns, listBackups, listDrillRequests, listDrillRuns, recordBackupRequest, recordDrillRequest, type BackupEntry, type BackupRunEntry, type DrillRunEntry } from '@/lib/admin/backup-tool';
+import { backupInProgress, drillIsFullPass, parseBackupSelection } from '@/lib/admin/backup-results';
 import { formatTableDate } from '@/lib/format';
 
 const PATH = '/admin/operations/backups';
@@ -59,6 +59,22 @@ async function drillAction(_state: BackupsActionState, formData: FormData): Prom
   }
 }
 
+async function backupAction(_state: BackupsActionState, formData: FormData): Promise<BackupsActionState> {
+  'use server';
+  try {
+    const actor = await authorize(formData);
+    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', PATH);
+    if (stepUp.required) return { stepUpRequired: true };
+    if (backupInProgress(await listBackupRuns(3))) return { error: 'A backup is already queued or running. Wait for it to finish, then refresh this page.' };
+    await recordBackupRequest(actor.id);
+    await dispatchBackup();
+    revalidatePath(PATH);
+    return { success: 'Backup started. It takes a few minutes; refresh this page to see it appear under Latest backup. It backs up both IDOC schemas and never changes live data.' };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
 function backupTime(stamp: string) {
   const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
   return match ? `${formatTableDate(`${match[1]}-${match[2]}-${match[3]}`)} ${match[4]}:${match[5]} UTC` : stamp;
@@ -72,13 +88,16 @@ export default async function BackupsPage() {
   const maintenance = await readMaintenanceState();
   let backups: BackupEntry[] = [];
   let drills: DrillRunEntry[] = [];
+  let backupRuns: BackupRunEntry[] = [];
   let configurationError: string | null = null;
   try {
-    [backups, drills] = await Promise.all([listBackups(), listDrillRuns()]);
+    [backups, drills, backupRuns] = await Promise.all([listBackups(), listDrillRuns(), listBackupRuns()]);
   } catch (error) {
     configurationError = error instanceof BackupToolError ? error.message : 'GitHub could not be reached. Try again shortly.';
   }
   const requests = await listDrillRequests();
+  const backupRequests = await listBackupRequests();
+  const running = backupInProgress(backupRuns);
   const newest = backups[0]?.manifest;
   const options = backups.map(({ manifest }) => ({ value: manifest.object, label: `${manifest === newest ? 'Latest — ' : ''}${manifest.kind === 'daily' ? 'Daily' : 'Pre-migration'} ${backupTime(manifest.startedAtUtc)} (${megabytes(manifest.sizeBytes)})` }));
 
@@ -111,7 +130,28 @@ export default async function BackupsPage() {
             {newest ? (
               <p className="text-sm text-muted-foreground">{backupTime(newest.startedAtUtc)} · {megabytes(newest.sizeBytes)} · {newest.tableCount} tables · {newest.totalRows.toLocaleString('en-GB')} rows</p>
             ) : (
-              <p className="text-sm text-amber-200">No backup with a manifest has been recorded yet. Run “IDOC R2 Schema Backups” in GitHub Actions once, then refresh.</p>
+              <p className="text-sm text-amber-200">No backup with a manifest has been recorded yet. Press Back up now below, then refresh.</p>
+            )}
+          </section>
+
+          <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Back up now</h2>
+              <p className="text-sm text-muted-foreground">Starts the same encrypted backup of both IDOC schemas that runs every night, stored offsite. Needs your authenticator code. It never changes live data.{running ? ' A backup is running now.' : ''}</p>
+            </div>
+            <BackupForm action={backupAction} disabled={running} />
+            {backupRuns.length === 0 ? null : (
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {backupRuns.map((run) => {
+                  const label = run.state === 'queued' ? 'QUEUED' : run.state === 'running' ? 'RUNNING' : run.state === 'completed' ? 'DONE' : 'FAILED';
+                  return (
+                    <li key={run.id}>
+                      <span className={run.state === 'completed' ? 'text-emerald-300' : run.state === 'failed' ? 'text-red-300' : 'text-amber-200'}>{label}</span> · run #{run.runNumber} · {formatTableDate(run.startedAt)}{' '}
+                      <a className="text-gold underline" href={run.runUrl} rel="noreferrer" target="_blank">workflow log</a>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
 
@@ -153,10 +193,11 @@ export default async function BackupsPage() {
       )}
 
       <section className="space-y-3 rounded-lg border border-border bg-surface/40 p-5">
-        <h2 className="text-lg font-semibold text-foreground">Who started drills</h2>
-        {requests.length === 0 ? <p className="text-sm text-muted-foreground">No drill requests yet.</p> : (
+        <h2 className="text-lg font-semibold text-foreground">Who started drills and backups</h2>
+        {requests.length === 0 && backupRequests.length === 0 ? <p className="text-sm text-muted-foreground">No drill or on-demand backup requests yet.</p> : (
           <ul className="space-y-1 text-sm text-muted-foreground">
-            {requests.map((request) => <li key={request.id}>{formatTableDate(request.createdAt)} · {request.by} · {request.selection}</li>)}
+            {backupRequests.map((request) => <li key={`backup-${request.id}`}>{formatTableDate(request.createdAt)} · {request.by} · on-demand backup</li>)}
+            {requests.map((request) => <li key={request.id}>{formatTableDate(request.createdAt)} · {request.by} · restore drill · {request.selection}</li>)}
           </ul>
         )}
       </section>

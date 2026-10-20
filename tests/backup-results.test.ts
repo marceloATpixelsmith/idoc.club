@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { drillIsFullPass, parseBackupManifest, parseBackupSelection, parseDrillResult } from '../lib/admin/backup-results.ts';
+import { backupInProgress, drillIsFullPass, parseBackupManifest, parseBackupSelection, parseDrillResult } from '../lib/admin/backup-results.ts';
 
 const object = 'idoc/ayni_space/daily/20261016T071700Z-38916434347-1/idoc-both-schemas.dump.gpg';
 const manifest = { version: 1, object, startedAtUtc: '20261016T071700Z', kind: 'daily', sha256: 'a'.repeat(64), sizeBytes: 1234, tableCount: 2, counts: { 'idoc_production.members': 10, 'idoc_staging.members': 3 } };
@@ -52,10 +52,20 @@ test('the Backups page is Super Admin only, CSRF-checked, step-up protected and 
   const page = readFileSync('app/(dashboard)/admin/operations/backups/page.tsx', 'utf8');
   assert.equal((page.match(/requireSuperAdmin\(actor\)/g) ?? []).length, 2); // the page and the shared action authorizer
   assert.match(page, /requireCsrfToken\(formData/);
-  assert.equal((page.match(/requireFreshStepUp\(actor, 'change-security-settings'/g) ?? []).length, 2);
+  assert.equal((page.match(/requireFreshStepUp\(actor, 'change-security-settings'/g) ?? []).length, 3); // maintenance, drill, backup
   assert.match(page, /recordDrillRequest\(actor\.id, selection\)[\s\S]*dispatchRestoreDrill\(selection\)/); // audited before dispatch
+  assert.match(page, /recordBackupRequest\(actor\.id\)[\s\S]*dispatchBackup\(\)/); // on-demand backup: audited before dispatch
+  assert.match(page, /backupInProgress\(await listBackupRuns\(3\)\)[\s\S]*recordBackupRequest/); // refused while one is queued or running
   const tool = readFileSync('lib/admin/backup-tool.ts', 'utf8');
   assert.doesNotMatch(tool, /R2_|AWS_|IDOC_BACKUP|PASSPHRASE|MIGRATION_DATABASE/);
   assert.match(tool, /GITHUB_BACKUP_TOOL_TOKEN/);
+  assert.match(tool, /dispatchBackup[\s\S]*BACKUP_WORKFLOW\}\/dispatches[\s\S]*ref: 'main'/); // the backup runs the main-branch workflow, with no caller-chosen inputs
   assert.doesNotMatch(tool, /console\.|logError\(.*token/i);
+});
+
+test('a second on-demand backup is refused while one is queued or running', () => {
+  assert.equal(backupInProgress([]), false);
+  assert.equal(backupInProgress([{ state: 'completed' }, { state: 'failed' }]), false);
+  assert.equal(backupInProgress([{ state: 'completed' }, { state: 'queued' }]), true);
+  assert.equal(backupInProgress([{ state: 'running' }]), true);
 });

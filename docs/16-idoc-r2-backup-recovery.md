@@ -250,11 +250,11 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 ## Super Admin backup and restore-drill tool
 
-**Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) runs a **restore drill**, and (3) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
+**Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) starts an **on-demand backup** (the same workflow as the nightly run, dispatched on `main`; audited, step-up protected, refused while one is queued or running), (3) runs a **restore drill**, and (4) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
 
 **One-person operation.** IDOC has a single operator, so no second approver is required. The controls are instead: Super Admin role, fresh privileged TOTP step-up for every action, an explicit confirmation, an immutable audit row, and the existing GitHub environment protections.
 
-**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the drill workflow and read its result. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
+**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the backup and drill workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
 
 **How a drill works.**
 1. The Super Admin presses *Run restore drill* (choose the latest backup or a listed one), passes TOTP, confirms. The app records an audit row and dispatches the `IDOC Restore Drill` workflow on `main`.

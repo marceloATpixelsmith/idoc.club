@@ -67,3 +67,19 @@ export function DrillForm({ action, options, disabled }: { action: Action; optio
     </>
   );
 }
+
+export function BackupForm({ action, disabled }: { action: Action; disabled: boolean }) {
+  const router = useRouter();
+  const [state, run, pending, challenge] = useFreshStepUpAction<BackupsActionState>(action, {});
+  useEffect(() => { if (state.success) router.refresh(); }, [router, state.success]);
+  return (
+    <>
+      <form action={run} className="space-y-4">
+        <CsrfField />
+        <Button disabled={pending || disabled} type="submit">{pending ? 'Verifying…' : 'Back up now'}</Button>
+      </form>
+      <Result state={state} />
+      {challenge}
+    </>
+  );
+}

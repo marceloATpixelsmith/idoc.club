@@ -3,7 +3,7 @@ import 'server-only';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, users } from '@/lib/db/schema';
-import { parseBackupManifest, parseDrillResult, type BackupManifest, type DrillResult } from './backup-results';
+import { parseBackupManifest, parseDrillResult, type BackupManifest, type DrillResult, type RunState } from './backup-results';
 
 const BACKUP_WORKFLOW = 'idoc-r2-backups.yml';
 const DRILL_WORKFLOW = 'idoc-restore-drill.yml';
@@ -65,13 +65,44 @@ export async function listBackups(limit = 10): Promise<BackupEntry[]> {
   return entries.filter((entry): entry is BackupEntry => entry !== null);
 }
 
-export type DrillRunEntry = { id: number; runNumber: number; state: 'queued' | 'running' | 'completed' | 'failed'; startedAt: string; runUrl: string; result: DrillResult | null };
+function runState(run: RawRun): RunState {
+  if (run.status !== 'completed') return run.status === 'queued' ? 'queued' : 'running';
+  return run.conclusion === 'success' ? 'completed' : 'failed';
+}
+
+export type BackupRunEntry = { id: number; runNumber: number; state: RunState; startedAt: string; runUrl: string };
+/** Recent runs of the backup workflow, scheduled and on-demand alike, whatever their outcome. */
+export async function listBackupRuns(limit = 5): Promise<BackupRunEntry[]> {
+  const runs = await listRuns(BACKUP_WORKFLOW, limit);
+  return runs.map((run) => ({ id: run.id, runNumber: run.run_number, state: runState(run), startedAt: run.created_at, runUrl: run.html_url }));
+}
+
+export async function dispatchBackup(): Promise<void> {
+  await github(`/actions/workflows/${BACKUP_WORKFLOW}/dispatches`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }),
+  });
+}
+
+export async function recordBackupRequest(actorId: number): Promise<void> {
+  await db.insert(auditLog).values({ actorId, action: 'admin.backup.requested', entityType: 'backup', entityId: 'on-demand', afterJson: { workflow: BACKUP_WORKFLOW } });
+}
+
+export async function listBackupRequests(limit = 8) {
+  const rows = await db.select({ id: auditLog.id, createdAt: auditLog.createdAt, actorId: auditLog.actorId })
+    .from(auditLog).where(eq(auditLog.action, 'admin.backup.requested')).orderBy(desc(auditLog.createdAt)).limit(limit);
+  const ids = [...new Set(rows.map((row) => row.actorId).filter((id): id is number => id !== null))];
+  const names = ids.length ? await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, ids)) : [];
+  const byId = new Map(names.map((row) => [row.id, row.email]));
+  return rows.map((row) => ({ id: row.id, createdAt: row.createdAt, by: row.actorId ? byId.get(row.actorId) ?? 'unknown' : 'system' }));
+}
+
+export type DrillRunEntry = { id: number; runNumber: number; state: RunState; startedAt: string; runUrl: string; result: DrillResult | null };
 export async function listDrillRuns(limit = 8): Promise<DrillRunEntry[]> {
   const runs = await listRuns(DRILL_WORKFLOW, limit);
   return Promise.all(runs.map(async (run) => {
     const completed = run.status === 'completed';
     const message = completed ? await runAnnotation(run.id, 'idoc-restore-result').catch(() => null) : null;
-    const state = !completed ? (run.status === 'queued' ? 'queued' : 'running') : run.conclusion === 'success' ? 'completed' : 'failed';
+    const state = runState(run);
     return { id: run.id, runNumber: run.run_number, state, startedAt: run.created_at, runUrl: run.html_url, result: message ? parseDrillResult(message) : null };
   }));
 }
