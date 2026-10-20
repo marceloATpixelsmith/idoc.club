@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
+import { buildMemberRows } from '../lib/legacy-import/import-rows.ts';
 import { parseMysqlDump, DumpParseError } from '../lib/legacy-import/mysql-dump.ts';
 import { checkedKeysFromPhpArray } from '../lib/legacy-import/php-serialized.ts';
 import { reduceDumpText, isNeededLegacyTable } from '../lib/legacy-import/reduce-dump.ts';
@@ -157,9 +158,6 @@ test('planLegacyImport applies the agreed rules', () => {
     assert.equal(byId.get(id)!.exclusion, null, `user ${id} expired a year or more ago: still imported`);
     assert.equal(byId.get(id)!.membership.status, 'expired');
   }
-  assert.ok(byId.get('8')!.exceptions.includes('expired_with_active_subscription'), 'an expired member with an active legacy subscription needs a decision');
-  assert.equal(byId.get('10')!.exceptions.includes('expired_with_active_subscription'), false);
-  assert.equal(byId.get('1')!.exceptions.includes('expired_with_active_subscription'), false, 'an active member with an active subscription is normal');
   assert.equal(byId.get('11')!.exclusion, null, 'one day inside the year is kept');
   assert.equal(byId.get('11')!.membership.status, 'expired');
   for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
@@ -191,7 +189,6 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
   assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email'));
-  assert.equal(review.get('expired_with_active_subscription')?.count, 1);
   assert.equal(review.has('no_account_record'), false, 'people with no account are deleted people: handled, not a decision');
   const orphans = expected.get('no_account_record')!;
   assert.deepEqual(orphans.rows.map((row) => row.legacy_user_id), ['96', '97', '98', '99']);
@@ -372,4 +369,31 @@ test('a completed payment whose reference is not a Stripe ID is imported as lega
   assert.equal(member('3').payments[0]?.source, 'stripe');
   assert.equal(member('2').notes.includes('non_stripe_payment_reference'), false);
   assert.ok(summarizePlan(plan).expected.some((group) => group.key === 'non_stripe_payment_reference'));
+});
+
+test('a live paid Stripe subscription decides the paid-through date; a stale or unpaid one does not', () => {
+  const hal = planLegacyImport(buildDump(), { asOf: '2026-10-16' }).members.find((member) => member.legacyUserId === '8')!;
+  assert.equal(hal.membership.status, 'expired');
+  assert.equal(hal.stripe.subscriptionId, 'sub_hal');
+  const forms = { normalizeEmail: (email: string) => email.toLowerCase(), emailDisplayForm: (email: string) => email };
+  const snapshot = (status: string, currentPeriodEnd: string) => ({
+    subscriptions: [{ id: 'sub_hal', customerId: 'cus_hal', status, email: 'hal@example.com', priceId: 'price_x', currentPeriodEnd, cancelAtPeriodEnd: false }],
+    customerIds: new Set<string>(), chargeRefs: new Set<string>(), truncated: { subscriptions: false, customers: false, charges: false },
+  });
+  const today = '2026-10-20';
+
+  const live = buildMemberRows(hal, snapshot('active', '2026-11-20'), forms, today);
+  assert.equal(live.membership.status, 'active');
+  assert.equal(live.membership.validUntil, '2026-11-20');
+  assert.equal(live.membership.graceEndsOn, null);
+  assert.match(live.membership.notes ?? '', /live Stripe subscription/);
+  assert.equal(live.renewal.currentMode, 'recurring');
+
+  assert.equal(buildMemberRows(hal, snapshot('trialing', '2026-11-20'), forms, today).membership.status, 'active');
+  for (const [status, end] of [['past_due', '2026-11-20'], ['canceled', '2026-11-20'], ['active', '2026-10-01']] as const) {
+    const kept = buildMemberRows(hal, snapshot(status, end), forms, today);
+    assert.equal(kept.membership.status, 'expired', `${status} ending ${end} does not make them paid up`);
+    assert.equal(kept.membership.validUntil, hal.membership.paidThrough ?? kept.membership.validUntil);
+  }
+  assert.equal(buildMemberRows(hal, { ...snapshot('active', '2026-11-20'), subscriptions: [] }, forms, today).membership.status, 'expired');
 });
