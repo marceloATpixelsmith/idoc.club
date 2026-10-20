@@ -50,11 +50,11 @@ async function entitledMemberIn(countryCode: string, roles: RoleFixture[] = [jud
 beforeEach(resetIdoc);
 after(closeHarness);
 
-test('public map: an area below the documented minimum threshold is never rendered', async () => {
-  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD - 1; index += 1) await entitledMemberIn('FR');
+test('public map: a country with a single entitled member is rendered with a count of 1', async () => {
+  await entitledMemberIn('FR');
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
-  assert.equal(result.areas.some((area) => area.countryCode === 'FR'), false);
+  assert.equal(result.areas.find((area) => area.countryCode === 'FR')?.memberCount, 1);
 });
 
 test('public map: an area reaching the documented minimum threshold is rendered with its exact count', async () => {
@@ -77,14 +77,21 @@ test('public map: blank or non-ISO country values are never rendered even above 
   assert.deepEqual(result.areas.map((area) => area.countryCode), ['DE']);
 });
 
-test('public map: a below-threshold area is fully absent, not merged into any other area or a visible total', async () => {
-  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) await entitledMemberIn('DE');
-  await entitledMemberIn('LI'); // one Liechtenstein member -- below threshold, must vanish entirely
+test('public map: small countries sit alongside large ones and no merged bucket or total is returned', async () => {
+  for (let index = 0; index < 3; index += 1) await entitledMemberIn('DE');
+  await entitledMemberIn('LI');
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
-  assert.equal(result.areas.length, 1);
-  assert.equal(result.areas[0].countryCode, 'DE');
-  assert.equal(result.areas[0].memberCount, DIRECTORY_MIN_AGGREGATION_THRESHOLD);
+  assert.deepEqual(result.areas, [{ countryCode: 'DE', memberCount: 3 }, { countryCode: 'LI', memberCount: 1 }]);
+  assert.equal('total' in result, false);
+});
+
+test('public map: members are placed by National Federation country, falling back to the address country', async () => {
+  await entitledMemberIn('DE', [{ ...judgeRole, nationalFederationCountryCode: 'NL' } as RoleFixture]);
+  await entitledMemberIn('DE', []);
+  const result = await getPublicMemberConcentration();
+  assert.ok(result.ok);
+  assert.deepEqual(result.areas.map((area) => `${area.countryCode}:${area.memberCount}`).sort(), ['DE:1', 'NL:1']);
 });
 
 test('public map: only currently-entitled members are counted, matching every other member surface\'s access rule', async () => {
