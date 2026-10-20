@@ -28,9 +28,12 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
           attributionControl: false,
           container: element,
           cooperativeGestures: true,
-          center: [10, 25],
+          // Fit the whole world (minus Antarctica) at any container width, so a narrow phone starts
+          // zoomed out rather than cropped to a desktop-sized world; users can still zoom in.
+          bounds: [[-170, -56], [180, 80]],
+          fitBoundsOptions: { padding: 8 },
           maxZoom: 5,
-          minZoom: 0.8,
+          minZoom: -1,
           renderWorldCopies: false,
           style: {
             version: 8,
@@ -105,5 +108,5 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
   if (failed) {
     return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser. The member counts are listed below.</p>;
   }
-  return <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="h-[420px] w-full overflow-hidden border border-border sm:h-[520px]" ref={container} role="img" />;
+  return <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />;
 }

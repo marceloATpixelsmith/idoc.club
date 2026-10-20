@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { COUNTRY_CENTROIDS } from '../lib/directory/country-centroids.ts';
 import { buildMemberMapDots, dotRadius, MAP_DOT_MAX_RADIUS, MAP_DOT_MIN_RADIUS } from '../lib/directory/map-dots.ts';
 
 const aggregateSource = readFileSync('lib/directory/aggregate.ts', 'utf8');
@@ -211,4 +212,17 @@ test('the dot map is MapLibre with bundled brand-colored shapes and makes no ext
   assert.doesNotMatch(canvas, /https?:\/\//);
   assert.match(canvas, /OCEAN = '#050c20'/);
   assert.match(canvas, /GOLD = '#d3af37'/);
+});
+
+test('country centers sit inside plausible bounds for their country (regression: Ashmore/Cartier overwrote Australia)', () => {
+  const [auLng, auLat] = COUNTRY_CENTROIDS.AU;
+  assert.ok(auLng > 125 && auLng < 150 && auLat < -20 && auLat > -35);
+  const [usLng, usLat] = COUNTRY_CENTROIDS.US;
+  assert.ok(usLng < -90 && usLng > -110 && usLat > 35 && usLat < 45);
+});
+
+test('the map camera fits the world responsively instead of a fixed desktop-sized minimum zoom', () => {
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  assert.match(canvas, /bounds: \[\[-170, -56\], \[180, 80\]\]/);
+  assert.match(canvas, /minZoom: -1,/);
 });
