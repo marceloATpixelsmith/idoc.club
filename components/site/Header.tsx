@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
@@ -80,22 +80,21 @@ function NavDropdown({
         <ChevronDown className="size-3" />
       </Link>
 
-      {/* Always mounted so the 3D flip can animate both ways; the pt-2 strip bridges the gap between
-       * trigger and panel so the pointer never leaves the hover area while crossing it. */}
-      <div className="idoc-flip-menu absolute left-0 top-full z-[60] min-w-[16rem] pt-2" data-open={open}>
-        <ul className="idoc-flip-menu__panel flex flex-col border border-border bg-background/95 backdrop-blur-md">
-          {items.map((item, index) => (
-            <li key={item.href} className="idoc-flip-menu__item" style={{ '--flip-index': index } as CSSProperties}>
-              <Link
-                href={item.href}
-                tabIndex={open ? 0 : -1}
-                className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
-              >
-                {item.label}
-              </Link>
-            </li>
+      {/* Always mounted so the 3D flip can animate both ways. The container's top padding is the
+       * hover bridge across the gap between trigger and panel. */}
+      <div className="idoc-flip-menu" data-open={open}>
+        <div className="idoc-flip-menu__panel border border-border bg-background/95 backdrop-blur-md">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              tabIndex={open ? 0 : -1}
+              className={`idoc-flip-menu__link block px-4 py-2.5 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+            >
+              {item.label}
+            </Link>
           ))}
-        </ul>
+        </div>
       </div>
     </div>
   );
