@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
@@ -10,6 +10,7 @@ import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
 import { Input } from '@/components/ui/input';
 import { CountryFlag } from '@/components/ui/country-flag';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { countryNameForCode, COUNTRY_OPTIONS } from '@/lib/membership/countries';
@@ -52,25 +53,27 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   rows: DirectoryMemberRow[];
   total: number;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [search, setSearch] = useState(Array.isArray(filters.q) ? '' : filters.q ?? '');
   const searchRef = useRef(search);
   const [isPending, startTransition] = useTransition();
 
+  // Saves the view to a cookie and refetches via a same-URL router.refresh() -- deliberately never
+  // writes search, filters, sort or page to the URL.
   function navigate(state: DataTableLiveState, query = searchRef.current) {
-    const params = new URLSearchParams({ tab: 'directory' });
-    if (query.trim()) params.set('q', query.trim());
-    const membershipType = filterToken(state.columnFilters, 'type');
-    const federation = filterToken(state.columnFilters, 'federation');
-    const region = filterToken(state.columnFilters, 'region');
-    if (membershipType) params.set('membershipType', membershipType);
-    if (federation) params.set('federation', federation);
-    if (region) params.set('region', region);
-    if (state.pagination.pageIndex > 0) params.set('page', String(state.pagination.pageIndex + 1));
-    if (state.pagination.pageSize !== 25) params.set('pageSize', String(state.pagination.pageSize));
-    if (state.sorting.length) params.set('sort', JSON.stringify(state.sorting));
-    startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
+    const view = {
+      federation: filterToken(state.columnFilters, 'federation'),
+      membershipType: filterToken(state.columnFilters, 'type'),
+      page: state.pagination.pageIndex + 1,
+      pageSize: state.pagination.pageSize,
+      q: query.trim() || undefined,
+      region: filterToken(state.columnFilters, 'region'),
+      sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
+    };
+    void fetch('/api/directory/view', {
+      body: JSON.stringify(view), credentials: 'same-origin', method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() },
+    }).finally(() => startTransition(() => router.refresh()));
   }
 
   const { table } = useDataTable({
