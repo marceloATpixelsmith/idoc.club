@@ -620,3 +620,63 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
   margin-block: 1rem;
   max-width: 100%;
 }
+
+/* Header dropdowns (About IDOC / My IDOC): a 3D perspective flip. The panel hangs from its top edge
+ * and swings down out of the trigger row like a hinged card, then its items cascade in. */
+.idoc-flip-menu {
+  perspective: 900px;
+  perspective-origin: 50% 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: visibility 0s linear 0.4s;
+}
+
+.idoc-flip-menu[data-open='true'] {
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.idoc-flip-menu__panel {
+  transform-origin: top center;
+  transform: rotateX(-90deg);
+  opacity: 0;
+  backface-visibility: hidden;
+  box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.55);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.25s ease;
+}
+
+.idoc-flip-menu[data-open='true'] .idoc-flip-menu__panel {
+  transform: rotateX(0deg);
+  opacity: 1;
+}
+
+.idoc-flip-menu__item {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.idoc-flip-menu[data-open='true'] .idoc-flip-menu__item {
+  opacity: 1;
+  transform: translateY(0);
+  transition-duration: 0.3s;
+  transition-delay: calc(0.12s + var(--flip-index, 0) * 45ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-flip-menu,
+  .idoc-flip-menu__panel,
+  .idoc-flip-menu__item {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+
+  .idoc-flip-menu__panel {
+    transform: none;
+  }
+}
