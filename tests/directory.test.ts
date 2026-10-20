@@ -46,11 +46,13 @@ test('a query failure degrades to an "unavailable" result rather than throwing o
   assert.match(aggregateSource, /logError\('directory_map_query_failed'\)/);
 });
 
-test('the concentration map renders a real, always-visible data table as accessible fallback content, not just an aria label', () => {
+test('the concentration map keeps a real, screen-reader-only data table as accessible content, not just an aria label', () => {
   assert.match(readFileSync('components/directory/member-map-canvas.tsx', 'utf8'), /role="img"/);
   assert.match(readFileSync('components/directory/member-map-canvas.tsx', 'utf8'), /aria-label=/);
   assert.match(concentrationMapSource, /<table/);
   assert.doesNotMatch(concentrationMapSource, /<table[^>]*aria-hidden/);
+  assert.match(concentrationMapSource, /<div className="sr-only">\s*<table>/);
+  assert.doesNotMatch(concentrationMapSource, /figcaption|Natural Earth/);
 });
 
 test('the public directory page renders loading, empty, unavailable, and error states', () => {

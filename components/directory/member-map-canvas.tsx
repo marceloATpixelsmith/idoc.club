@@ -98,7 +98,7 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
         teardown = () => map.remove();
         if (cancelled) teardown();
       } catch {
-        // Typically WebGL being unavailable; the data table beneath remains the full fallback.
+        // Typically WebGL being unavailable; the screen-reader table in ConcentrationMap still carries the data.
         if (!cancelled) setFailed(true);
       }
     })();
@@ -110,7 +110,7 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
   }, [dots]);
 
   if (failed) {
-    return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser. The member counts are listed below.</p>;
+    return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser.</p>;
   }
   return <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />;
 }
