@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
@@ -60,6 +60,9 @@ function NavDropdown({
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLAnchorElement>(null);
+  // Escape hands focus back to the trigger; without this guard that refocus would reopen the menu.
+  const escapedRef = useRef(false);
   const active = items.some((item) => isItemActive(pathname, item.href));
 
   return (
@@ -67,28 +70,41 @@ function NavDropdown({
       className="relative"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
+      onFocus={() => {
+        if (!escapedRef.current) setOpen(true);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        escapedRef.current = true;
+        setOpen(false);
+        triggerRef.current?.focus();
+        escapedRef.current = false;
+      }}
     >
-      <Link href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
+      <Link ref={triggerRef} href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
         {label}
         <ChevronDown className="size-3" />
       </Link>
 
-      {open && (
-        <div className="absolute left-0 top-full z-[60] min-w-[16rem] border border-border bg-background/95 pt-2 backdrop-blur-md">
-          <ul className="flex flex-col">
-            {items.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+      {/* Always mounted so the 3D flip can animate both ways. The container's top padding is the
+       * hover bridge across the gap between trigger and panel. */}
+      <div className="idoc-flip-menu" data-open={open}>
+        <div className="idoc-flip-menu__panel border border-border bg-background/95 backdrop-blur-md">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              tabIndex={open ? 0 : -1}
+              className={`idoc-flip-menu__link block px-4 py-2.5 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
