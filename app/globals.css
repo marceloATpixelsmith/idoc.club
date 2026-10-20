@@ -630,6 +630,8 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
   left: 50%;
   z-index: 60;
   transform: translateX(-50%);
+  /* Hug the widest item: an absolutely positioned box would otherwise shrink to the narrow trigger. */
+  width: max-content;
   padding-top: 10px;
   perspective: 800px;
   transform-style: preserve-3d;
@@ -644,7 +646,6 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 16rem;
   padding: 6px;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);

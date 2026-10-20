@@ -105,7 +105,7 @@ export function AuthenticatedUserMenu({
       </div>
       <DropdownMenuContent
         align="end"
-        className="idoc-flip-content flex min-w-48 flex-col gap-1 rounded-xl p-1.5"
+        className="idoc-flip-content flex w-max min-w-0 flex-col gap-1 rounded-xl p-1.5"
         onPointerEnter={openForMouse}
         onPointerLeave={closeForMouse}
       >
