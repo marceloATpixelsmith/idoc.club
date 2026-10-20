@@ -226,3 +226,8 @@ test('the map camera fits the world responsively instead of a fixed desktop-size
   assert.match(canvas, /bounds: \[\[-170, -56\], \[180, 80\]\]/);
   assert.match(canvas, /minZoom: -1,/);
 });
+
+test('the public map excludes blank or malformed country codes so a bad legacy value cannot crash the page', () => {
+  assert.match(aggregateSource, /where p\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
+  assert.match(readFileSync('lib/membership/countries.ts', 'utf8'), /try \{[\s\S]*englishRegionNames\.of[\s\S]*\} catch/);
+});

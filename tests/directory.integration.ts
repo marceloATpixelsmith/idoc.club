@@ -66,6 +66,17 @@ test('public map: an area reaching the documented minimum threshold is rendered 
   assert.equal(germany.memberCount, DIRECTORY_MIN_AGGREGATION_THRESHOLD);
 });
 
+test('public map: blank or non-ISO country values are never rendered even above the threshold', async () => {
+  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) {
+    await entitledMemberIn('');
+    await entitledMemberIn('XX');
+    await entitledMemberIn('DE');
+  }
+  const result = await getPublicMemberConcentration();
+  assert.ok(result.ok);
+  assert.deepEqual(result.areas.map((area) => area.countryCode), ['DE']);
+});
+
 test('public map: a below-threshold area is fully absent, not merged into any other area or a visible total', async () => {
   for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) await entitledMemberIn('DE');
   await entitledMemberIn('LI'); // one Liechtenstein member -- below threshold, must vanish entirely
