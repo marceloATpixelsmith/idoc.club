@@ -272,6 +272,8 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 3. In Vercel add `GITHUB_BACKUP_TOOL_TOKEN` (Sensitive, server-only) for **Production** and for **Preview scoped to the `staging` branch**; redeploy. Optional `GITHUB_BACKUP_TOOL_REPOSITORY` (default `marceloATpixelsmith/idoc.club`).
 4. Migration `0074_maintenance_mode` must be applied (staging applies itself; Production uses the reviewer-approved workflow).
 
+**Caching.** To keep the page fast, the application keeps GitHub's run lists for 30 seconds per server instance (starting a backup or a restore drill clears them at once) and keeps a finished run's manifest or result for the life of the instance. A run that has just finished can therefore take up to 30 seconds to appear; reload the page after that.
+
 **Reading a result.** The Backups page shows **PASS** only when the workflow finished, the downloaded file's SHA-256 matched the manifest, every manifest table was restored, and every table's restored row count equalled the count recorded in the same snapshot as the dump. Anything else is **FAIL** with the reason, and the "workflow log" link opens the GitHub run. The same result is the `idoc-restore-result` annotation on the run, and each request is recorded in the audit log (`admin.restore_drill.requested`).
 
 **Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.

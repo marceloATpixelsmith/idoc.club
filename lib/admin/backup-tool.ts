@@ -37,19 +37,44 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
 
 type RawRun = { id: number; status: string; conclusion: string | null; created_at: string; updated_at: string; html_url: string; run_number: number };
 
+// Per-instance caches for the GitHub reads behind the Backups page, which otherwise made a run list plus two sequential calls per run
+// (jobs, then annotations) on every render and again after every action. A completed run's annotation never changes, so it is kept
+// for the life of the instance; run lists are kept for a short time and dropped whenever this instance dispatches a workflow.
+const RUN_LIST_CACHE_MS = 30_000;
+const CACHE_MAX_ENTRIES = 200;
+const runListCache = new Map<string, { at: number; runs: RawRun[] }>();
+const annotationCache = new Map<string, string>();
+
+function clearRunListCache() { runListCache.clear(); }
+export function resetBackupToolCachesForTests() { runListCache.clear(); annotationCache.clear(); }
+
 async function listRuns(workflow: string, limit: number, success?: boolean): Promise<RawRun[]> {
+  const key = `${workflow}:${limit}:${success ? 'success' : 'all'}`;
+  const hit = runListCache.get(key);
+  if (hit && Date.now() - hit.at < RUN_LIST_CACHE_MS) return hit.runs;
   const query = new URLSearchParams({ per_page: String(limit), ...(success ? { status: 'success' } : {}) });
   const body = await (await github(`/actions/workflows/${workflow}/runs?${query}`)).json() as { workflow_runs?: RawRun[] };
-  return Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
+  const runs = Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
+  if (runListCache.size >= CACHE_MAX_ENTRIES) runListCache.clear();
+  runListCache.set(key, { at: Date.now(), runs });
+  return runs;
 }
 
-/** The first job's annotations of one run, filtered to the notice with the given title. */
+/** The first job's annotations of one COMPLETED run, filtered to the notice with the given title. Only a found message is cached, so
+ * a transient failure or a run whose notice is not written yet is read again next time. */
 async function runAnnotation(runId: number, title: string): Promise<string | null> {
+  const cacheKey = `${runId}:${title}`;
+  const cached = annotationCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const jobs = await (await github(`/actions/runs/${runId}/jobs?per_page=5`)).json() as { jobs?: Array<{ id: number }> };
   for (const job of jobs.jobs ?? []) {
     const annotations = await (await github(`/check-runs/${job.id}/annotations?per_page=50`)).json() as Array<{ title?: string; message?: string }>;
     const found = Array.isArray(annotations) ? annotations.find((item) => item.title === title && typeof item.message === 'string') : undefined;
-    if (found?.message) return found.message;
+    if (found?.message) {
+      if (annotationCache.size >= CACHE_MAX_ENTRIES) annotationCache.clear();
+      annotationCache.set(cacheKey, found.message);
+      return found.message;
+    }
   }
   return null;
 }
@@ -81,6 +106,7 @@ export async function dispatchBackup(): Promise<void> {
   await github(`/actions/workflows/${BACKUP_WORKFLOW}/dispatches`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }),
   });
+  clearRunListCache();
 }
 
 /** Seconds during which a second on-demand backup is refused. GitHub's runs list can lag a few seconds behind a dispatch, so the
@@ -123,6 +149,7 @@ export async function dispatchRestoreDrill(selection: string): Promise<void> {
   await github(`/actions/workflows/${DRILL_WORKFLOW}/dispatches`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main', inputs: { backup: selection } }),
   });
+  clearRunListCache();
 }
 
 export async function recordDrillRequest(actorId: number, selection: string): Promise<void> {
