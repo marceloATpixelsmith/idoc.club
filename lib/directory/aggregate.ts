@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { logError } from '@/lib/observability/logger';
+import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
 
 /**
  * Minimum number of currently-entitled members a geographic area (country) must have before it is
@@ -33,7 +34,7 @@ type ConcentrationRow = { country_code: string; member_count: number };
  * not every account ever created. A query failure is caught and reported as an "unavailable" result
  * rather than propagating -- this is public, unauthenticated surface area, so a transient database
  * hiccup should degrade to a friendly message, not an opaque error page. Profiles whose country is blank
- * or not a two-letter code (legacy imports can leave it empty) are excluded, since they cannot be named
+ * or not a canonical ISO 3166-1 code (legacy imports can leave it empty or malformed) are excluded, since they cannot be named
  * or placed on the map and would otherwise form their own group.
  */
 export async function getPublicMemberConcentration(): Promise<ConcentrationResult> {
@@ -45,7 +46,7 @@ export async function getPublicMemberConcentration(): Promise<ConcentrationResul
         select status, valid_until, grace_ends_on from memberships
         where profile_id = p.id order by valid_until desc, id desc limit 1
       ) m on true
-      where p.country_code ~ '^[A-Z]{2}$'
+      where p.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
         and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
       group by p.country_code
       having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
