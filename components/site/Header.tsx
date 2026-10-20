@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { Suspense, useRef, useState } from 'react';
-import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
+import { Menu, X, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
@@ -86,7 +86,13 @@ function NavDropdown({
     >
       <Link ref={triggerRef} href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
         {label}
-        <ChevronDown className="size-3" />
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 8 5"
+          className={`h-[5px] w-2 fill-current transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="M0 0h8L4 5z" />
+        </svg>
       </Link>
 
       {/* Always mounted so the 3D flip can animate both ways. The container's top padding is the
