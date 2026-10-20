@@ -76,17 +76,16 @@ export type ExceptionCode =
   | 'no_membership_product' | 'product_profile_mismatch' | 'unmapped_legacy_value' | 'incomplete_profile'
   | 'blank_expiry_on_paid_transaction' | 'multiple_active_subscriptions'
   | 'active_subscription_not_newest' | 'invalid_subscription_reference' | 'invalid_stripe_customer_id'
-  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
+  | 'multiple_stripe_customers' | 'active_subscription_without_stripe_customer' | 'expired_with_active_subscription' | 'duplicate_payment_reference' | 'duplicate_payment_reference_same_member';
 
 export type NoteCode = 'country_filled_from_federation' | 'technical_delegate_defaulted_no' | 'product_changed_over_time' | 'duplicate_payment_row_removed' | 'non_stripe_payment_reference';
-export type ExclusionCode = 'expired_over_a_year' | 'never_paid';
+export type ExclusionCode = 'never_paid';
 
 /** "expected": the plan already has a remedy, nothing to decide. "review": a person has to look at it and decide. */
 export type IssueKind = 'expected' | 'review';
 export interface IssueInfo { text: string; kind: IssueKind; remedy: string | null; held: boolean }
 
 export const EXCLUSION_INFO: Record<ExclusionCode, string> = {
-  expired_over_a_year: 'Expired for a year or more: not imported (they can sign up again)',
   never_paid: 'No completed payment on record: not imported (they can sign up again)',
 };
 
@@ -111,6 +110,7 @@ export const ISSUE_INFO: Record<ExceptionCode | NoteCode, IssueInfo> = {
   invalid_stripe_customer_id: { text: 'Stored Stripe customer ID does not look like cus_...', kind: 'review', remedy: null, held: false },
   multiple_stripe_customers: { text: 'More than one different Stripe customer ID stored for the member', kind: 'review', remedy: null, held: false },
   active_subscription_without_stripe_customer: { text: 'Active subscription but no stored Stripe customer ID', kind: 'review', remedy: null, held: false },
+  expired_with_active_subscription: { text: 'Membership has expired but the legacy record still has an active subscription (is Stripe still billing them?)', kind: 'review', remedy: null, held: false },
   duplicate_payment_reference: { text: 'The same Stripe payment reference appears on transactions of DIFFERENT members', kind: 'review', remedy: null, held: false },
   duplicate_payment_reference_same_member: { text: 'The same Stripe payment reference appears on the SAME member with a different amount or outcome (cannot tell which row is right)', kind: 'review', remedy: null, held: false },
 };
@@ -181,14 +181,6 @@ const isoDay = (value: string | null | undefined): string | null => {
 function addDays(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-/** The same calendar date one year earlier (29 February falls back to 28 February). */
-function yearBefore(day: string): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  const month = date.getUTCMonth();
-  date.setUTCFullYear(date.getUTCFullYear() - 1);
-  if (date.getUTCMonth() !== month) date.setUTCDate(0);
   return date.toISOString().slice(0, 10);
 }
 function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
@@ -288,9 +280,8 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
     const lastPaidOn = paid.map((payment) => payment.paidOn).filter(Boolean).sort().pop() ?? null;
     let membershipStatus: PlannedMember['membership']['status'] = 'unknown';
     if (paidThrough) membershipStatus = paidThrough >= options.asOf ? 'active' : addDays(paidThrough, GRACE_DAYS) >= options.asOf ? 'grace' : 'expired';
-    // Cleanup rules: nobody with no completed payment, or expired for a year or more, is imported or counted.
-    const exclusion: ExclusionCode | null = paid.length === 0 ? 'never_paid'
-      : paidThrough !== null && paidThrough <= yearBefore(options.asOf) ? 'expired_over_a_year' : null;
+    // Cleanup rule: nobody with no completed payment is imported or counted. Expired members are imported however long ago they lapsed.
+    const exclusion: ExclusionCode | null = paid.length === 0 ? 'never_paid' : null;
 
     // Subscriptions: the newest active one is the live one; anything else is history.
     const userSubs = (subsByUser.get(legacyUserId) ?? []).slice().sort(byCreated);
@@ -302,6 +293,7 @@ export function planLegacyImport(dump: ParsedDump, options: { asOf: string }): L
       const reference = text(activeSubs[0].subscr_id);
       if (reference.startsWith('sub_')) subscriptionId = reference; else exceptions.add('invalid_subscription_reference');
     }
+    if (membershipStatus === 'expired' && activeSubs.length > 0) exceptions.add('expired_with_active_subscription');
     const customers = [...new Set(stripeCustomersByUser.get(legacyUserId) ?? [])];
     if (customers.length > 1) exceptions.add('multiple_stripe_customers');
     const customerId = customers.length === 1 ? customers[0] : null;

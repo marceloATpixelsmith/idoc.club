@@ -153,8 +153,13 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.ok(byId.get('7')!.exceptions.includes('invalid_email') && byId.get('7')!.held, 'an address the application would reject is held');
 
   // Cleanup rules.
-  assert.equal(byId.get('8')!.exclusion, 'expired_over_a_year');
-  assert.equal(byId.get('10')!.exclusion, 'expired_over_a_year', 'exactly one year ago counts as a year or more');
+  for (const id of ['8', '10']) {
+    assert.equal(byId.get(id)!.exclusion, null, `user ${id} expired a year or more ago: still imported`);
+    assert.equal(byId.get(id)!.membership.status, 'expired');
+  }
+  assert.ok(byId.get('8')!.exceptions.includes('expired_with_active_subscription'), 'an expired member with an active legacy subscription needs a decision');
+  assert.equal(byId.get('10')!.exceptions.includes('expired_with_active_subscription'), false);
+  assert.equal(byId.get('1')!.exceptions.includes('expired_with_active_subscription'), false, 'an active member with an active subscription is normal');
   assert.equal(byId.get('11')!.exclusion, null, 'one day inside the year is kept');
   assert.equal(byId.get('11')!.membership.status, 'expired');
   for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
@@ -167,25 +172,26 @@ test('planLegacyImport applies the agreed rules', () => {
 test('summarizePlan leaves removed members out of every figure and separates expected from review', () => {
   const report = summarizePlan(planLegacyImport(buildDump(), { asOf: '2026-10-16' }));
   assert.equal(report.legacyUsers, 14);
-  assert.equal(report.removedByRules, 5);
-  assert.equal(report.inScope, 9);
+  assert.equal(report.removedByRules, 3);
+  assert.equal(report.inScope, 11);
   assert.equal(report.held, 4);
-  assert.equal(report.importable, 5);
-  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3]]);
-  assert.deepEqual(report.membershipStatus, { active: 3, expired: 2 });
-  assert.equal(report.profile.needsOnboarding, 3);
-  assert.equal(report.payments.paid, 5, 'payments of held and removed members are not counted');
+  assert.equal(report.importable, 7);
+  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['never_paid', 3]]);
+  assert.deepEqual(report.membershipStatus, { active: 3, expired: 4 });
+  assert.equal(report.profile.needsOnboarding, 5);
+  assert.equal(report.payments.paid, 7, 'payments of held and removed members are not counted');
   assert.equal(report.payments.ignoredFailedOrPending, 1);
-  assert.equal(report.stripe.withActiveSubscription, 1, 'the removed member with an active subscription is not counted');
-  assert.deepEqual(report.subscriptionsByStatus, { active: 3, cancelled: 1 });
+  assert.equal(report.stripe.withActiveSubscription, 2);
+  assert.deepEqual(report.subscriptionsByStatus, { active: 4, cancelled: 1 });
 
   const expected = new Map(report.expected.map((item) => [item.key, item]));
   const review = new Map(report.review.map((item) => [item.key, item]));
-  assert.equal(expected.get('incomplete_profile')?.count, 7, 'removed members are not counted as incomplete');
+  assert.equal(expected.get('incomplete_profile')?.count, 9, 'removed members are not counted as incomplete');
   assert.ok(expected.get('incomplete_profile')?.remedy);
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
   assert.ok(review.has('multiple_active_subscriptions') && review.has('invalid_email'));
+  assert.equal(review.get('expired_with_active_subscription')?.count, 1);
   assert.equal(review.has('no_account_record'), false, 'people with no account are deleted people: handled, not a decision');
   const orphans = expected.get('no_account_record')!;
   assert.deepEqual(orphans.rows.map((row) => row.legacy_user_id), ['96', '97', '98', '99']);
@@ -198,7 +204,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.equal(dup.rows.length, 2);
   assert.ok(dup.rows.every((row) => dup.columns.every((column) => column in row)));
   assert.deepEqual(dup.rows.map((row) => row.email).sort(), ['dup@example.com', 'dup@example.com']);
-  assert.equal(report.excluded[1].rows.length, 3);
+  assert.equal(report.excluded[0].rows.length, 3);
 
   // People's details may be downloaded, but never password hashes or Stripe payment references.
   const serialized = JSON.stringify(report);

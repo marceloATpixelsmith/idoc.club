@@ -31,7 +31,7 @@ function Counts({ title, counts }: { title: string; counts: Record<string, numbe
 const STATUS_LABELS: Record<string, string> = {
   active: 'active (paid through a future date)',
   grace: 'grace (paid-through date passed within the last 5 days; still has full access)',
-  expired: 'expired less than a year ago (imported; must pay to renew)',
+  expired: 'expired (imported; must pay to renew)',
   unknown: 'unknown (has a completed payment but no expiry date; see "Needs a decision")',
 };
 function labelled(counts: Record<string, number>, labels: Record<string, string>): Record<string, number> {
