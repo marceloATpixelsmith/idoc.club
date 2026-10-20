@@ -35,8 +35,6 @@ const TIME_BUDGET_MS = 45_000;
 const CHARGE_CONCURRENCY = 8;
 const LIVE_SUBSCRIPTION = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
 const DEAD_SUBSCRIPTION = new Set(['canceled', 'incomplete_expired']);
-/** Live in Stripe but not paid up: these never extend a membership on import, so an expired member holding one needs a decision. */
-const NOT_PAID_UP_SUBSCRIPTION = new Set(['past_due', 'unpaid', 'paused']);
 
 export function legacyStripeKey(env: Record<string, string | undefined> = process.env): string | null {
   const key = env.LEGACY_STRIPE_SECRET_KEY?.trim();
@@ -125,7 +123,6 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
   const defs: Array<{ key: string; text: string; remedy: string | null; rows: ReportRow[] }> = [
     { key: 'stripe_subscription_missing', text: 'Legacy active subscription not found in live Stripe', remedy: null, rows: [] },
     { key: 'stripe_cancelled_legacy_active', text: 'Active in the legacy data but cancelled in live Stripe', remedy: null, rows: [] },
-    { key: 'stripe_not_paid_up_for_expired', text: 'Membership has expired and the Stripe subscription is past due, unpaid or paused (it does not extend the membership: is Stripe still billing them?)', remedy: null, rows: [] },
     { key: 'stripe_live_legacy_inactive', text: 'Not active in the legacy data but still billing in live Stripe', remedy: null, rows: [] },
     { key: 'stripe_customer_mismatch', text: 'The Stripe subscription belongs to a different customer than the legacy record', remedy: null, rows: [] },
     { key: 'stripe_customer_missing', text: 'Stored Stripe customer ID not found in live Stripe', remedy: null, rows: [] },
@@ -141,8 +138,9 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     if (subId && !stripeSub && !snapshot.truncated.subscriptions) by.stripe_subscription_missing.rows.push(row(member, {}));
     if (stripeSub) {
       const detail = { subscriptionId: stripeSub.id, customerId: stripeSub.customerId, status: stripeSub.status };
-      if (DEAD_SUBSCRIPTION.has(stripeSub.status)) by.stripe_cancelled_legacy_active.rows.push(row(member, detail));
-      if (NOT_PAID_UP_SUBSCRIPTION.has(stripeSub.status) && member.membership.status === 'expired') by.stripe_not_paid_up_for_expired.rows.push(row(member, detail));
+      // An expired member whose subscription has ended in Stripe is consistent: they are imported as expired. Only a member who would be
+      // imported with access (active or grace) or with an unknown paid-through date conflicts with a cancelled subscription.
+      if (DEAD_SUBSCRIPTION.has(stripeSub.status) && member.membership.status !== 'expired') by.stripe_cancelled_legacy_active.rows.push(row(member, detail));
       if (customerId && stripeSub.customerId !== customerId) by.stripe_customer_mismatch.rows.push(row(member, detail));
     }
     if (!snapshot.truncated.customers && customerId && !snapshot.customerIds.has(customerId)) by.stripe_customer_missing.rows.push(row(member, { customerId }));

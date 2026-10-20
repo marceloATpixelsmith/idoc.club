@@ -398,16 +398,24 @@ test('a live paid Stripe subscription decides the paid-through date; a stale or 
   assert.equal(buildMemberRows(hal, { ...snapshot('active', '2026-11-20'), subscriptions: [] }, forms, today).membership.status, 'expired');
 });
 
-test('an expired member whose Stripe subscription is not paid up needs a decision; a paid-up one does not', async () => {
+test('a cancelled or unpaid Stripe subscription only needs a decision when the member would be imported with access', async () => {
   const { reconcileWithStripe } = await import('../lib/legacy-import/stripe-reconcile.ts');
   const plan = planLegacyImport(buildDump(), { asOf: '2026-10-16' });
   const hal = plan.members.find((member) => member.legacyUserId === '8')!;
+  const ada = plan.members.find((member) => member.legacyUserId === '1')!;
   assert.equal(hal.membership.status, 'expired');
-  const snapshot = (status: string) => ({
-    subscriptions: [{ id: 'sub_hal', customerId: hal.stripe.customerId ?? 'cus_hal', status, email: 'hal@example.com', priceId: 'price_x', currentPeriodEnd: '2026-11-20', cancelAtPeriodEnd: false }],
+  assert.equal(ada.membership.status, 'active');
+  const snapshot = (id: string, status: string) => ({
+    subscriptions: [{ id, customerId: 'cus_x', status, email: 'x@example.com', priceId: 'price_x', currentPeriodEnd: '2026-11-20', cancelAtPeriodEnd: false }],
     customerIds: new Set<string>(), chargeRefs: new Set<string>(), truncated: { subscriptions: false, customers: false, charges: false },
   });
-  const flagged = (status: string) => reconcileWithStripe(plan.members, snapshot(status), plan.orphans).groups.find((group) => group.key === 'stripe_not_paid_up_for_expired');
-  for (const status of ['past_due', 'unpaid', 'paused']) assert.ok(flagged(status)?.rows.some((row) => row.legacy_user_id === '8'), `${status} is flagged`);
-  for (const status of ['active', 'trialing']) assert.equal(flagged(status), undefined, `${status} extends the membership instead`);
+  const group = (id: string, status: string, key: string) => reconcileWithStripe(plan.members, snapshot(id, status), plan.orphans).groups.find((candidate) => candidate.key === key);
+  // Expired in the legacy data and cancelled, past due, unpaid or paused in Stripe: consistent, imported as expired, nothing to decide.
+  for (const status of ['canceled', 'past_due', 'unpaid', 'paused']) {
+    const listed = reconcileWithStripe(plan.members, snapshot('sub_hal', status), plan.orphans).groups
+      .filter((candidate) => ['stripe_cancelled_legacy_active', 'stripe_not_paid_up_for_expired'].includes(candidate.key) && candidate.rows.some((row) => row.legacy_user_id === '8'));
+    assert.deepEqual(listed, [], `expired + ${status} is not a decision`);
+  }
+  // Active in the legacy data but cancelled in Stripe: a real conflict.
+  assert.ok(group('sub_new', 'canceled', 'stripe_cancelled_legacy_active')?.rows.some((row) => row.legacy_user_id === '1'));
 });
