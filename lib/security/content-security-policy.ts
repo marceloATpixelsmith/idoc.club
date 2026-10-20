@@ -21,6 +21,8 @@ export function contentSecurityPolicy(
     "default-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
+    // MapLibre (members map) runs its tile/geometry worker from a blob: URL.
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "img-src 'self' data: https://res.cloudinary.com",

@@ -18,3 +18,8 @@ test('CSP permits only the configured HTTPS Sentry ingestion origin', () => {
   assert.doesNotMatch(policy, /public@|\/456/);
   assert.doesNotMatch(contentSecurityPolicy('nonce', 'production', 'http://unsafe.example/1'), /unsafe\.example/);
 });
+
+test('CSP allows the members map worker only from self or a blob URL', () => {
+  const policy = contentSecurityPolicy('nonce', 'production');
+  assert.match(policy, /worker-src 'self' blob:(;|$)/);
+});
