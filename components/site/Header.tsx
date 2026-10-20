@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
@@ -60,6 +60,9 @@ function NavDropdown({
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLAnchorElement>(null);
+  // Escape hands focus back to the trigger; without this guard that refocus would reopen the menu.
+  const escapedRef = useRef(false);
   const active = items.some((item) => isItemActive(pathname, item.href));
 
   return (
@@ -67,15 +70,21 @@ function NavDropdown({
       className="relative"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onFocus={() => {
+        if (!escapedRef.current) setOpen(true);
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') setOpen(false);
+        if (event.key !== 'Escape') return;
+        escapedRef.current = true;
+        setOpen(false);
+        triggerRef.current?.focus();
+        escapedRef.current = false;
       }}
     >
-      <Link href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
+      <Link ref={triggerRef} href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
         {label}
         <ChevronDown className="size-3" />
       </Link>
