@@ -43,11 +43,31 @@ function dates(input: RevenueFilters): { from: string | null; to: string | null 
 // whether the webhook recorded it or an administrator registered it manually.
 export const REVENUE_SOURCE_FILTERS = ['stripe', 'bank_transfer', 'cash'] as const;
 
-export async function getRevenueReport(input: RevenueFilters = {}) {
+type RevenueReport = Awaited<ReturnType<typeof computeRevenueReport>>;
+const REPORT_CACHE_MAX_ENTRIES = 20;
+const reportCache = new Map<string, { at: number; report: RevenueReport }>();
+
+/** `cacheSeconds` lets a summary view (the Admin Dashboard's overview) reuse one report per server instance for a short time instead
+ * of running three aggregates over every payment on each load. Authorization always runs first and is never cached. The Revenue page
+ * passes nothing and stays live. */
+export async function getRevenueReport(input: RevenueFilters = {}, options: { cacheSeconds?: number } = {}) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const range = dates(input);
   const source = firstValue(input.source);
   const origin = firstValue(input.origin);
+  if (!options.cacheSeconds) return computeRevenueReport(range, source, origin);
+  const key = JSON.stringify([range, source ?? null, origin ?? null]);
+  const hit = reportCache.get(key);
+  if (hit && Date.now() - hit.at < options.cacheSeconds * 1000) return hit.report;
+  const report = await computeRevenueReport(range, source, origin);
+  if (reportCache.size >= REPORT_CACHE_MAX_ENTRIES) reportCache.clear();
+  reportCache.set(key, { at: Date.now(), report });
+  return report;
+}
+
+export function resetRevenueReportCacheForTests() { reportCache.clear(); }
+
+async function computeRevenueReport(range: { from: string | null; to: string | null }, source: string | undefined, origin: string | undefined) {
   const conditions = [sql`source <> 'complimentary'`];
   if (range.from) conditions.push(sql`paid_at >= (${range.from}::date::timestamp at time zone 'UTC')`);
   if (range.to) conditions.push(sql`paid_at < ((${range.to}::date::timestamp at time zone 'UTC') + interval '1 day')`);

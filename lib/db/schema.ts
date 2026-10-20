@@ -323,7 +323,11 @@ export const professionalRoles = idocSchema.table('professional_roles', {
   effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
   effectiveTo: timestamp('effective_to', { withTimezone: true }),
   verifiedBy: integer('verified_by').references(() => users.id),
-}, (table) => [check('professional_roles_type_check', sql`${table.roleType} in ('judge', 'steward', 'veterinarian')`)]);
+}, (table) => [
+  check('professional_roles_type_check', sql`${table.roleType} in ('judge', 'steward', 'veterinarian')`),
+  // Every roster, directory and onboarding read selects a profile's current roles: without this each lateral lookup scans the table.
+  index('professional_roles_current_profile_idx').on(table.profileId).where(sql`${table.effectiveTo} is null`),
+]);
 
 export const memberships = idocSchema.table('memberships', {
   id: serial('id').primaryKey(),
@@ -340,6 +344,9 @@ export const memberships = idocSchema.table('memberships', {
 }, (table) => [
   check('memberships_status_check', sql`${table.status} in ('active', 'grace', 'expired', 'canceled', 'suspended', 'complimentary', 'review_required')`),
   check('memberships_dates_check', sql`${table.validUntil} >= ${table.startsOn}`),
+  // The latest membership of a profile (newest valid_until first) is read on every signed-in request by middleware, the account
+  // gate, authorization and the header, and per member by the roster and directory.
+  index('memberships_profile_latest_idx').on(table.profileId, table.validUntil.desc().nullsFirst(), table.id.desc().nullsFirst()),
 ]);
 
 export const profileChangeHistory = idocSchema.table('profile_change_history', {
@@ -815,6 +822,9 @@ export const payments = idocSchema.table('payments', {
     sql`(${table.source} in ('stripe_recurring', 'stripe_one_time') and ${table.externalPaymentId} is not null)
       or (${table.source} in ('stripe_manual', 'bank_transfer', 'cash', 'complimentary', 'legacy_import') and ${table.administratorId} is not null)`,
   ),
+  // A member's payment history and last payment (roster), and the revenue report's date-range filters.
+  index('payments_profile_paid_at_idx').on(table.profileId, table.paidAt),
+  index('payments_paid_at_idx').on(table.paidAt),
 ]);
 
 

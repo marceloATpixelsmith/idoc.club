@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { sql, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { ISO_COUNTRY_CODES, IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
@@ -230,12 +231,25 @@ function queryParts(raw: MemberFilters) {
   return { effectiveStatus, filters, order, where: sql.join(conditions, sql` and `) };
 }
 
-const from = sql`from users u left join profiles p on p.user_id = u.id
-  left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
-  left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,(select array_agg(distinct oc.concat_status order by oc.concat_status) from (select role_type||':'||st concat_status from professional_roles r2, unnest(r2.official_statuses) st where r2.profile_id=p.id and r2.effective_to is null) oc) official_statuses,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true
-  left join lateral (select max(paid_at) last_payment_at from payments where profile_id=p.id) payment on true
-  left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from application_roles where user_id=u.id and revoked_at is null) app_roles on true
-  left join lateral (select true has_support_history from support_conversations where member_user_id=u.id limit 1) support on true`;
+// Each lateral join below returns exactly one row per member (an aggregate without GROUP BY, or LIMIT 1), so a join the filters
+// never reference cannot change how many rows match. The page query needs all of them for its columns and sorts; the count query
+// below includes only the ones its WHERE clause actually reads, which skips the per-member work on the role, payment and support tables.
+const baseFrom = sql`from users u left join profiles p on p.user_id = u.id`;
+const lateralJoins: Record<'m' | 'roles' | 'payment' | 'app_roles' | 'support', SQL> = {
+  m: sql`left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true`,
+  roles: sql`left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,(select array_agg(distinct oc.concat_status order by oc.concat_status) from (select role_type||':'||st concat_status from professional_roles r2, unnest(r2.official_statuses) st where r2.profile_id=p.id and r2.effective_to is null) oc) official_statuses,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true`,
+  payment: sql`left join lateral (select max(paid_at) last_payment_at from payments where profile_id=p.id) payment on true`,
+  app_roles: sql`left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from application_roles where user_id=u.id and revoked_at is null) app_roles on true`,
+  support: sql`left join lateral (select true has_support_history from support_conversations where member_user_id=u.id limit 1) support on true`,
+};
+const lateralAliases = Object.keys(lateralJoins) as (keyof typeof lateralJoins)[];
+const from = sql`${baseFrom} ${sql.join(lateralAliases.map((alias) => lateralJoins[alias]), sql` `)}`;
+const sqlDialect = new PgDialect();
+function countFrom(where: SQL): SQL {
+  const text = sqlDialect.sqlToQuery(where).sql;
+  const needed = lateralAliases.filter((alias) => new RegExp(`\\b${alias}\\.`).test(text));
+  return needed.length ? sql`${baseFrom} ${sql.join(needed.map((alias) => lateralJoins[alias]), sql` `)}` : baseFrom;
+}
 
 async function authorize() { const actor = await requireAccountAccess('administration'); requireAdministrator(actor); return actor; }
 
@@ -245,7 +259,7 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
     db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
-    db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
+    db.execute<{ count: number }>(sql`select count(*)::int count ${countFrom(where)} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
 }

@@ -20,7 +20,9 @@ test('canonical cookie authentication requires an active persisted registry row 
   assert.match(session, /if \(!record\) return false/);
   assert.match(session, /await touchSession\(session\.sessionId, session\.user\.id, now\)/);
 
-  const getSessionStart = session.indexOf('export async function getSession()');
+  // getSession is memoized per server render with React's cache(), so its declaration is `export const getSession = cache(async function getSession() {`.
+  assert.match(session, /export const getSession = cache\(async function getSession\(\) \{/);
+  const getSessionStart = session.indexOf('async function getSession()');
   const notCanonical = session.indexOf('if (!canonicalValue) return null;', getSessionStart);
   const registryValidation = session.indexOf('return (await registeredSessionIsValid(session)) ? session : null;', notCanonical);
   assert.ok(getSessionStart >= 0 && notCanonical > getSessionStart && registryValidation > notCanonical);
