@@ -1,7 +1,6 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Mail } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
@@ -9,7 +8,6 @@ import { DataTableActionsRow } from '@/components/data-table/data-table-actions-
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
@@ -109,19 +107,12 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       },
       {
         id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
-        cell: ({ row }) => row.original.email ? <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a> : '—',
-      },
-      {
-        id: 'actions', enableHiding: false, enableSorting: false, size: 80,
-        header: () => <span>CONTACT</span>,
-        cell: ({ row }) => row.original.email ? <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
-          <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
-        </Button> : null,
+        cell: ({ row }) => row.original.email ? <a className="font-bold no-underline transition-colors hover:text-gold focus-visible:text-gold" href={`mailto:${row.original.email}`}>{row.original.email}</a> : '—',
       },
     ], []),
     data: rows,
     initialState: {
-      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'],
+      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email'],
       columnFilters: initialFilterState(filters),
       pagination: { pageIndex: filters.page - 1, pageSize },
       sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],

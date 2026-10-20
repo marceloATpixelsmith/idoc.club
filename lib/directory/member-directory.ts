@@ -105,8 +105,8 @@ function queryParts(raw: MemberDirectoryFilters) {
 }
 
 // Imported legacy members whose account is still `migrated_pending` (not yet activated) are listed like
-// any other current member: appearing here is not consent-gated. Only the email and the contact button
-// are, and both come from `directory_email_opt_in` (default off) in the select below.
+// any other current member: appearing here is not consent-gated. Only the email (shown as a mailto
+// link) is, and both come from `directory_email_opt_in` (default off) in the select below.
 const from = sql`from profiles p
   join users u on u.id = p.user_id and u.deleted_at is null and u.account_state in ('active', 'migrated_pending')
   and not exists (select 1 from application_roles ar where ar.user_id = u.id and ar.revoked_at is null and ar.role in ('administrator', 'super_admin'))
