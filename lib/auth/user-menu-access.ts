@@ -1,12 +1,10 @@
 import 'server-only';
 
-import { desc, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { memberships, profiles } from '@/lib/db/schema';
 import { AuthorizationError, isAdministrator } from '@/lib/membership/authorization';
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { requireAccountAccess } from '@/lib/membership/data-access';
+import { loadAccountFacts } from '@/lib/membership/session-gate-loader';
 import { getUser } from '@/lib/db/queries';
 
 export type MainNavAccess = {
@@ -35,11 +33,9 @@ const LOGGED_OUT: MainNavAccess = { entitled: false, memberSupport: false, showA
  * never needs (a Codex review finding on this pull request: the original version's per-page-load
  * cost compounded to 20+ SQL statements once the dashboard's own nested layout repeated it). */
 async function isCurrentlyEntitled(userId: number): Promise<boolean> {
-  const [profile] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1);
-  if (!profile) return false;
-  const [latest] = await db.select({ status: memberships.status, validUntil: memberships.validUntil })
-    .from(memberships).where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1);
-  return latest ? isEntitled(latest, new Date().toISOString().slice(0, 10)) : false;
+  // Shares the per-render account-facts read that requireAccountAccess() above already made, so this adds no query.
+  const latest = (await loadAccountFacts(userId))?.latestMembership;
+  return latest ? isEntitled({ status: latest.status, validUntil: latest.validUntil }, new Date().toISOString().slice(0, 10)) : false;
 }
 
 /** Everything the site header needs to decide what its main navigation shows a visitor: whether

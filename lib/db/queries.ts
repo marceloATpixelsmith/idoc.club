@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from './drizzle';
 import { auditLog, profiles, users } from './schema';
@@ -73,7 +74,9 @@ export async function getAccountStateUser(): Promise<AccountStateUser | null> {
   return { accountState: user.accountState as 'active' | 'onboarding', id: user.id };
 }
 
-export async function getUser() {
+/** Memoized per server render (React cache): the root layout's header data, the page layouts and the page each ask for the signed-in
+ * user. Outside a render (Server Actions, Route Handlers, tests) every call reads afresh. */
+export const getUser = cache(async function getUser() {
   const sessionData = await getSession();
   if (!sessionData) return null;
 
@@ -90,7 +93,7 @@ export async function getUser() {
   }
 
   return user[0];
-}
+});
 
 /** Powers My Security's Activity card with the member's own real security history -- audit_log
  * rows they themselves caused, restricted to SECURITY_ACTIVITY_LABELS' curated allow-list so this

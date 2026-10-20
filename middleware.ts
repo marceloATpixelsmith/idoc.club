@@ -10,6 +10,7 @@ import {
   verifyToken,
 } from '@/lib/auth/session';
 import { RETURN_TO_COOKIE_NAME, returnToCookieOptions, returnToFromRequestUrl } from '@/lib/auth/return-to-path';
+import { sessionActivityNeedsTouch } from '@/lib/auth/session-activity';
 import { touchSession } from '@/lib/auth/session-registry';
 import { readActiveSession } from '@/lib/auth/session-registry';
 import { paymentOnlyAllows, paymentOnlyDestination } from '@/lib/membership/session-gate';
@@ -149,6 +150,8 @@ export async function middleware(request: NextRequest) {
 
   try {
     const parsed = await verifyToken(canonicalCookie.value);
+    // The registry row's last activity when this request already read it (see the gate below); unknown otherwise, which touches.
+    let lastActivityAt: string | undefined;
 
     // Membership gate (docs/02): a signed-in member who has not paid, or whose membership lapsed,
     // sees only the payment page; a member whose canceled membership has run past its paid-through
@@ -160,8 +163,14 @@ export async function middleware(request: NextRequest) {
       let gate: Awaited<ReturnType<typeof loadSessionGate>> | null = null;
       try {
         // Only a session the registry still honors is gated; an invalid one is left to the
-        // existing handling, which sends it to sign in.
-        if (await readActiveSession(parsed.sessionId, parsed.user.id)) gate = await loadSessionGate(parsed.user.id);
+        // existing handling, which sends it to sign in. The two reads do not depend on each other,
+        // so they run concurrently (one round trip of latency); the gate is simply ignored for a
+        // session the registry no longer honors.
+        const [activeSession, loadedGate] = await Promise.all([
+          readActiveSession(parsed.sessionId, parsed.user.id),
+          loadSessionGate(parsed.user.id),
+        ]);
+        if (activeSession) { gate = loadedGate; lastActivityAt = activeSession.lastActivityAt; }
       } catch { /* best-effort policy layer */ }
       const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url), 307);
       if (gate?.gate === 'ended') {
@@ -202,7 +211,11 @@ export async function middleware(request: NextRequest) {
       // (getSession(), called by every actual protected render/action) remains the sole source of
       // truth for whether the session is allowed to do anything, so a transient DB error here must
       // never fall through to the catch below and sign a perfectly valid session out.
-      try { await touchSession(parsed.sessionId, parsed.user.id, now); } catch { /* best-effort only */ }
+      // Skipped while the row's last activity is under a minute old (the Active sessions list needs minute resolution, not
+      // per-request resolution), which removes an UPDATE round trip from nearly every request in a burst of navigation.
+      if (sessionActivityNeedsTouch(lastActivityAt, now)) {
+        try { await touchSession(parsed.sessionId, parsed.user.id, now); } catch { /* best-effort only */ }
+      }
     }
 
     return finish(res);
