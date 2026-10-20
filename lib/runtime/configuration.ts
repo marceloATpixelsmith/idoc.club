@@ -99,6 +99,9 @@ export function brevoFromEmailForServer(environment: Environment = process.env) 
 // instead required as a query parameter on the webhook URL configured in Brevo's dashboard, so an
 // attacker who doesn't know it cannot forge delivery/bounce events toward this endpoint.
 export function brevoWebhookKeyForServer(environment: Environment = process.env) { return secret(environment, 'BREVO_WEBHOOK_KEY'); }
+// Like Brevo, Mailchimp does not sign webhook deliveries: this shared secret is required as a query
+// parameter on the webhook URL configured on the Mailchimp audience (docs/19).
+export function mailchimpWebhookKeyForServer(environment: Environment = process.env) { return secret(environment, 'MAILCHIMP_WEBHOOK_KEY'); }
 export function rateLimitHashKeyForServer(environment: Environment = process.env) { return secret(environment, 'RATE_LIMIT_HASH_KEY'); }
 export function turnstileSecretKeyForServer(environment: Environment = process.env) { return secret(environment, 'TURNSTILE_SECRET_KEY'); }
 

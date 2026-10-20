@@ -12,6 +12,7 @@ export const QSTASH_JOBS = {
   'reconciliation-scan': '0 7 * * *',
   'data-retention-purge': '0 8 * * *',
   'news-scheduled-publish': '15 8 * * *',
+  'marketing-preference-sync': '30 8 * * *',
   'new-relic-weekly-health-check': '0 8 * * 1',
   // Staging only: the route 404s elsewhere, so the schedule script registers it for the staging host alone.
   'postgres-metrics-export': '0 * * * *',

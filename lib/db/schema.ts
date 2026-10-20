@@ -303,6 +303,11 @@ export const onboardingConsents = idocSchema.table('onboarding_consents', {
   termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }).notNull(),
   privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }).notNull(),
   keepUpdatedOptIn: boolean('keep_updated_opt_in').notNull(),
+  // docs/19: when/why the marketing choice last changed after onboarding, and whether an opt-in
+  // is waiting on the member to click Mailchimp's confirmation email (opt-in stays false until then).
+  keepUpdatedChangedAt: timestamp('keep_updated_changed_at', { withTimezone: true }),
+  keepUpdatedPendingAt: timestamp('keep_updated_pending_at', { withTimezone: true }),
+  keepUpdatedSource: varchar('keep_updated_source', { length: 40 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
