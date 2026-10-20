@@ -62,3 +62,7 @@ Source-level tests pin the shared drawer hook, the per-record keys, the half-wid
 - The Super Admin Email Previews page shows distinct FEI and non-FEI registration confirmations and four FEI registration-status change variants, using the actual registration-email body renderer. Payment-confirmed and refund-confirmed notices also have individual previews.
 - Each preview uses an asynchronous form submission, an immediate disabled Sending… button, and an inline acceptance/failure result; submitting an individual preview never requires a full-page navigation. Bulk sending lists any failed templates.
 - Every submission requires a valid CSRF token and Super Admin authorization; the preview page remains unavailable in Production. Sending previews never creates registrations, changes statuses, captures payments, or processes refunds.
+
+## Filters and view state never use URL parameters (sitewide)
+
+Search, facet filters, sort, page and page size are never written to or read from the URL. Administrator tables persist them per user in `administrator_table_preferences` (see `lib/admin/table-preferences.ts`); the member directory, which has no administrator-only database table, persists them in the validated `idoc-directory-view` cookie (`lib/directory/member-directory-view.ts`). Either way the client saves the state and calls `router.refresh()` on the same URL. Navigation state such as `?tab=` or a record id may remain in the URL.

@@ -122,6 +122,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/renewal-notice-scan/route.ts': 'shared-secret-header',
   'app/api/cron/seminar-cancellation-resolution/route.ts': 'shared-secret-header',
   'app/api/auth/session-expired/route.ts': 'public-redirect-sets-validated-return-cookie-no-data-access',
+  'app/api/directory/view/route.ts': 'authenticated-member-csrf-boundary',
   'app/api/health/route.ts': 'public-liveness-probe-no-data-access',
   'app/api/internal/postgres-metrics/route.ts': 'staging-branch-only-shared-secret-header',
   'app/api/qstash/jobs/route.ts': 'qstash-signed-jwt-body-and-destination',

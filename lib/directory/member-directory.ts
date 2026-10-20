@@ -67,7 +67,7 @@ function parseSort(value: RawFilterValue): DirectorySort[] {
     return [{ id: 'lastName', desc: false }];
   }
 }
-function normalized(input: MemberDirectoryFilters) {
+export function normalizeDirectoryFilters(input: MemberDirectoryFilters) {
   const pageSizeInput = pageNumber(input.pageSize, DIRECTORY_PAGE_SIZE);
   const pageSize = DIRECTORY_PAGE_SIZE_OPTIONS.includes(pageSizeInput as typeof DIRECTORY_PAGE_SIZE_OPTIONS[number])
     ? pageSizeInput : DIRECTORY_PAGE_SIZE;
@@ -86,7 +86,7 @@ function normalized(input: MemberDirectoryFilters) {
 }
 
 function queryParts(raw: MemberDirectoryFilters) {
-  const filters = normalized(raw);
+  const filters = normalizeDirectoryFilters(raw);
   const conditions = [
     sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
   ];

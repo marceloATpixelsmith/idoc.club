@@ -1,15 +1,13 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { ConcentrationMap } from '@/components/directory/concentration-map';
 import { MemberDirectoryTable } from '@/components/directory/member-directory-table';
 import { PageHeader } from '@/components/site/PageHeader';
 import { getPublicUser } from '@/lib/db/queries';
 import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
-import {
-  DirectoryRateLimitedError,
-  listMemberDirectory,
-  type MemberDirectoryFilters,
-} from '@/lib/directory/member-directory';
+import { DirectoryRateLimitedError, listMemberDirectory } from '@/lib/directory/member-directory';
+import { DIRECTORY_VIEW_COOKIE, parseDirectoryView } from '@/lib/directory/member-directory-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +20,9 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? undefined : value;
 }
 
-type PageParams = MemberDirectoryFilters & { tab?: string | string[] };
+// Only the tab lives in the URL. Search, filters, sort and page are saved in a cookie
+// (lib/directory/member-directory-view.ts), never read from query parameters.
+type PageParams = { tab?: string | string[] };
 
 export default async function MembersDirectoryPage({ searchParams }: { searchParams: Promise<PageParams> }) {
   const params = await searchParams;
@@ -34,7 +34,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
 
   if (activeTab === 'directory' && user) {
     try {
-      listing = await listMemberDirectory(params);
+      listing = await listMemberDirectory(parseDirectoryView((await cookies()).get(DIRECTORY_VIEW_COOKIE)?.value, user.id));
     } catch (error) {
       if (error instanceof DirectoryRateLimitedError || error instanceof Error) unavailable = true;
     }
