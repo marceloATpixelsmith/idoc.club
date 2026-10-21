@@ -334,8 +334,8 @@ test('every seminar row (homepage and seminars page) hovers like the homepage ne
   assert.match(globals, /@utility card-midnight \{[^}]*border-color 0\.3s ease,\s*transform 0\.3s ease;\s*&:hover \{\s*border-color: rgb\(211 175 55 \/ 45%\);\s*transform: translateY\(-2px\);/);
   assert.match(registrations, /SEMINAR_ROW_CLASS = 'outline outline-1 outline-transparent transition-\[outline-color,translate\] duration-300 ease-out has-\[article:hover\]:-translate-y-0\.5 has-\[article:hover\]:outline-gold\/45 has-\[a:focus-visible\]:outline-gold\/45'/);
   assert.doesNotMatch(registrations, /bg-surface-raised\/35/);
-  // The row's whole <li> (rule to rule) takes the effect, on the homepage and in all three seminars listings.
-  assert.equal((registrations.match(/<li className=\{SEMINAR_ROW_CLASS\} key=\{seminar\.id\}>/g) ?? []).length, 3);
+  // The row's whole <li> (rule to rule) takes the effect, on the homepage and in all four seminars listings.
+  assert.equal((registrations.match(/<li className=\{SEMINAR_ROW_CLASS\} key=\{seminar\.id\}>/g) ?? []).length, 4);
   assert.equal((home.match(/<li className=\{SEMINAR_ROW_CLASS\} key=\{seminar\.id\}>/g) ?? []).length, 2);
   // The card fills its row (so the clickable overlay covers the full width) and no list is stretched past the homepage's column.
   assert.match(registrations, /<article className="relative grid max-w-full gap-5 px-4 py-6/);
