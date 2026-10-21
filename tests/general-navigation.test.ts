@@ -91,7 +91,7 @@ test('Contact is a plain nav item, never swapped for Support', () => {
 
 test('Contact is present for signed-in and signed-out visitors', () => {
   assert.match(header, /<Link href=\{contactLink\.href\} className=\{navClassName/);
-  assert.match(header, /href=\{contactLink\.href\}[\s\S]{0,120}onClick=\{\(\) => setOpen\(false\)\}/);
+  assert.match(header, /href=\{contactLink\.href\} onClick=\{closeMenu\}/);
 });
 
 test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
@@ -99,7 +99,7 @@ test('Contact renders after My IDOC in both the desktop and mobile nav', () => {
   const desktopContactIndex = header.indexOf('href={contactLink.href}');
   assert.ok(myIdocIndex > -1 && desktopContactIndex > myIdocIndex);
 
-  const mobileMyIdocSection = header.indexOf("My IDOC\n                    </p>");
+  const mobileMyIdocSection = header.indexOf('label="My IDOC" onNavigate');
   const mobilePaymentFallback = header.indexOf('href="/dashboard/membership"');
   const mobileContactIndex = header.lastIndexOf('href={contactLink.href}');
   assert.ok(mobileContactIndex > mobileMyIdocSection && mobileContactIndex > mobilePaymentFallback);
@@ -173,4 +173,15 @@ test('sign out retains the CSRF-protected action and clears shared user state', 
   assert.match(menu, /pathname === '\/dashboard'.*pathname\.startsWith\('\/dashboard\/'\)/s);
   assert.match(menu, /router\.push\('\/sign-in'\)/);
   assert.match(menu, /router\.refresh\(\)/);
+});
+
+test('mobile nav submenus open only when their top-level item is tapped, with the gold triangle and an animated panel', () => {
+  assert.match(header, /function MobileNavSection/);
+  assert.match(header, /aria-expanded=\{expanded\}/);
+  assert.match(header, /<MobileNavSection[^>]*label="About IDOC"/);
+  assert.match(header, /<MobileNavSection[^>]*label="My IDOC"/);
+  assert.match(header, /className="idoc-mobile-nav lg:hidden" data-open=\{open\}/);
+  assert.match(header, /<AuthenticatedUserMenu\s+mobile/);
+  assert.match(menu, /if \(mobile\)/);
+  assert.match(menu, /aria-expanded=\{open\}/);
 });
