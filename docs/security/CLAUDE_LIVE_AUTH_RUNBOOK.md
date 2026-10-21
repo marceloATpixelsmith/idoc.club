@@ -86,8 +86,10 @@ ready-to-run SQL instead:
 2. Fill in `scripts/e2e-grant-privileged-role.sql`'s `{{TARGET_EMAIL}}`, `{{TARGET_ROLE}}`, and
    `{{GRANTED_BY_USER_ID}}` placeholders with real values (see "Known staging environment facts"
    above for the granter id) and hand the resulting SQL to the operator to run against staging with
-   an actual write-capable Postgres client (`psql "$STAGING_POSTGRES_URL" -f <file>`, or pasted into
-   Render's dashboard SQL console). Wait for confirmation it ran before continuing -- do not guess
+   a Postgres client authenticated with `idoc_staging_app` (`psql "$STAGING_POSTGRES_URL" -f <file>`).
+   Do not use Render's dashboard SQL console or a schema-owner/Production connection: the SQL script
+   verifies `current_user`, `current_database()`, and `current_schema()` before any write. Wait for
+   confirmation it ran before continuing -- do not guess
    that it succeeded. It records an `application_roles` row and a matching `audit_log` entry tagged
    as automated test-tooling provisioning, so LIVE-AUTH-026's audit-evidence check still sees a
    coherent, attributable trail, and increments `session_version` so the grant only takes effect
