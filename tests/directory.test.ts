@@ -71,6 +71,8 @@ test('the paid member directory re-authorizes as an entitled member or privilege
 test('the paid member directory rate-limits searches per account and per origin using the existing repository rate-limit facility', () => {
   assert.match(memberDirectorySource, /checkRateLimit\('member_directory_search', String\(actor\.id\), await requestOrigin\(\)\)/);
   assert.match(rateLimitSource, /member_directory_search: 60/);
+  assert.match(rateLimitSource, /const ORIGIN_MAX_REQUESTS[^{]*\{\s*member_directory_search: 180,/);
+  assert.match(rateLimitSource, /takeBucket\(purpose, allEmailsMarker, originHash, windowStartedAt, originMax\)/);
 });
 
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
