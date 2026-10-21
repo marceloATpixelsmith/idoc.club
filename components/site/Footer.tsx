@@ -8,7 +8,7 @@ export async function Footer({ signedIn }: { signedIn: boolean }) {
       <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 lg:grid-cols-4 lg:px-8">
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img src="/idoc-logo.svg" alt="IDOC" className="h-12 w-auto" loading="lazy" />
+          <img src="/idoc-logo.svg" alt="IDOC" className="h-12 w-auto" width={137} height={48} loading="lazy" />
           <p className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
             The International Dressage Officials Club unites judges, stewards and
             veterinarians in promoting the principles of horsemanship and furthering
