@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { COUNTRY_CENTROIDS } from '../lib/directory/country-centroids.ts';
 import { buildMemberMapDots, dotRadius, MAP_DOT_MAX_RADIUS, MAP_DOT_MIN_RADIUS } from '../lib/directory/map-dots.ts';
@@ -308,9 +308,12 @@ test('the map and the directory listing are cached for a day, but access control
 test('clicking a country on the map opens the directory filtered to that federation, for signed-in members only', () => {
   assert.match(publicPageSource, /<ConcentrationMap areas=\{concentration\.areas\} canOpenDirectory=\{Boolean\(user\)\} \/>/);
   assert.match(concentrationMapSource, /canOpenDirectory = false/);
-  // Keyboard route: a visible, labeled country picker under the map, signed-in members only.
-  assert.match(concentrationMapSource, /\{canOpenDirectory \? <CountryDirectoryPicker countries=\{countryOptions\} \/> : null\}/);
-  assert.match(readFileSync('components/directory/country-directory-picker.tsx', 'utf8'), /htmlFor="map-country-picker">View members in<\/label>/);
+  // The Map tab is only the map: no picker, dropdown or other control under or beside it.
+  assert.doesNotMatch(concentrationMapSource, /Picker|<select|<form|<button/);
+  assert.ok(!existsSync('components/directory/country-directory-picker.tsx'));
+  // The hover text is exactly the original, for every viewer: no added hint.
+  assert.match(mapCanvasSource, /text\.textContent = `\$\{properties\.countryName\}: \$\{properties\.memberCount\} members`;/);
+  assert.doesNotMatch(mapCanvasSource, /click to view/);
   // Click handler and pointer cursor exist only when the viewer is signed in.
   assert.match(mapCanvasSource, /if \(canOpenDirectory\) \{\s*map\.on\('click', 'member-dots'/);
   assert.match(mapCanvasSource, /if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer'/);
@@ -339,4 +342,15 @@ test('every seminar row (homepage and seminars page) hovers like the homepage ne
   assert.doesNotMatch(registrations, /w-fit max-w-full divide-y/);
   // The list overhangs 1rem, so the cancel control under a My Seminars row gets the same 1rem padding as the card.
   assert.match(registrations, /<div className="px-4 pb-6"><SeminarForm action=\{cancelSeminarRegistrationAction\}/);
+});
+
+test('every sort row keeps the column, direction, remove and drag controls on one line, down to phone width', () => {
+  const sortList = readFileSync('components/data-table/data-table-sort-list.tsx', 'utf8');
+  const row = sortList.slice(sortList.indexOf('role="listitem"'));
+  assert.match(row, /className="flex flex-nowrap items-center gap-2 rounded-md/);
+  assert.doesNotMatch(row, /flex-wrap/);
+  // The column picker takes the remaining width (and truncates) instead of a fixed 13rem that pushed the last icon down.
+  assert.match(row, /className="min-w-0 flex-1 justify-between rounded font-normal"/);
+  assert.doesNotMatch(row, /w-52/);
+  assert.match(row, /className="w-24 shrink-0 rounded"/);
 });
