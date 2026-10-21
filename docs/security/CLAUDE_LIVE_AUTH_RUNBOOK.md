@@ -32,16 +32,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 - The live-auth TypeScript and SQL provisioning/cleanup tools require the staging connection role `idoc_staging_app`, database `ayni_space`, and current schema `idoc_staging`; the tools fail closed if those checks do not match. Every table reference is explicitly qualified with `idoc_staging`. A test run changes rows only in the staging schema; it does not query or mutate production-schema member rows. Test identities and staging audit records still need the documented cleanup.
 - `tests/staging-database-url.test.ts` verifies the operator-tooling allow/deny boundary for the staging role, database, and disposable mailbox domain. These checks do not change any live-auth case's behavior or pass criteria.
 - Staging's Postgres is reachable read-only from Claude Code's sandboxed session via the Render MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`, `workspaceId` `tea-d3c3eq7diees7392talg`; query staging tables in `idoc_staging`). This read-only connector is for verification; it cannot run provisioning or cleanup writes.
-- **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
-  `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
-  blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
-  the human operator using this account, on request from Claude at the right point in the run; Claude
-  independently verifies the resulting database state (identity row, session, audit_log entry) via
-  the read-only connector above rather than trusting the operator's report alone. The
-  adversarial/tamper/replay/cancel-deny portions of the same case do not need this account and are
-  run by Claude directly. Do not ask the operator which account to use -- use this one unless they
-  say otherwise.
-- Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
+- Google OAuth real consent/account-linking is manual-only (`LIVE-AUTH-004`) and excluded from unattended GitHub runs. `LIVE-AUTH-022` remains automated using password/email authentication for safe return-path behavior. The GitHub result must identify the Google steps as `blocked` / manual-required, never pass.\n- Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
   -- query `idoc_staging.application_roles` via the read-only connector above.
 
