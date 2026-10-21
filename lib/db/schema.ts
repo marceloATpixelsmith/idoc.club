@@ -55,6 +55,8 @@ export const users = idocSchema.table('users', {
   check('users_legacy_password_format_check', sql`${table.legacyPasswordFormat} is null or ${table.legacyPasswordFormat} in ('phpass', 'wp_bcrypt')`),
   check('users_legacy_password_pair_check', sql`(${table.legacyPasswordHash} is null) = (${table.legacyPasswordFormat} is null)`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
+  // Trigram index for the member directory's opt-in email search (see the profiles indexes).
+  index('users_display_email_trgm_idx').using('gin', sql`coalesce(${table.emailDisplay}, ${table.email}) gin_trgm_ops`),
 ]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
@@ -240,7 +242,13 @@ export const profiles = idocSchema.table('profiles', {
   directoryEmailOptIn: boolean('directory_email_opt_in').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  // Trigram indexes for the member directory's free-text search (`ilike '%term%'`), which a btree
+  // cannot serve. Migration 0081 creates them only when the pg_trgm extension is available.
+  index('profiles_first_name_trgm_idx').using('gin', sql`${table.firstName} gin_trgm_ops`),
+  index('profiles_last_name_trgm_idx').using('gin', sql`${table.lastName} gin_trgm_ops`),
+  index('profiles_full_name_trgm_idx').using('gin', sql`(${table.firstName} || ' ' || ${table.lastName}) gin_trgm_ops`),
+]);
 
 /** Singleton, server-owned public organization identity. Private settings must use separate tables. */
 export const organizationSettings = idocSchema.table('organization_settings', {

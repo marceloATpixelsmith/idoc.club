@@ -568,6 +568,13 @@
       "when": 1792380000000,
       "tag": "0080_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792390000000,
+      "tag": "0081_member_directory_trigram_search",
+      "breakpoints": true
     }
   ]
 }

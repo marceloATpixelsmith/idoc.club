@@ -5,7 +5,10 @@ import { db } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
 import { dailyCache } from '@/lib/cache/daily-cache';
+import { directoryQueryGate } from '@/lib/directory/query-gate';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+
+export { DirectoryBusyError } from '@/lib/directory/query-gate';
 
 export class DirectoryRateLimitedError extends Error {
   constructor() {
@@ -101,7 +104,15 @@ function queryParts(raw: MemberDirectoryFilters) {
   const conditions = [eligibleCondition];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or (p.directory_email_opt_in and coalesce(u.email_display, u.email) ilike ${pattern} escape '\\'))`);
+    // One indexable arm per searched field (each matches a trigram index from migration 0081), combined
+    // with a union: an `or` across profiles and users could not use any index. The expressions must stay
+    // identical to the indexed ones. The email arm only matches members who opted in to showing it.
+    conditions.push(sql`p.id in (
+      select id from profiles where first_name ilike ${pattern} escape '\\'
+      union select id from profiles where last_name ilike ${pattern} escape '\\'
+      union select id from profiles where (first_name || ' ' || last_name) ilike ${pattern} escape '\\'
+      union select sp.id from profiles sp join users su on su.id = sp.user_id
+        where sp.directory_email_opt_in and coalesce(su.email_display, su.email) ilike ${pattern} escape '\\')`);
   }
   if (filters.federation.length) conditions.push(sql`${federationExpression} in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
@@ -161,12 +172,13 @@ async function runDirectoryQuery(input: DirectoryQueryInput) {
   const { filters, where } = queryParts(input);
   const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
-  const [rows, counts] = await Promise.all([
+  // Only a cache miss or an uncached search reaches here, so cache hits never wait for a slot.
+  const [rows, counts] = await directoryQueryGate.run(() => Promise.all([
     db.execute<RawDirectoryRow>(sql`select p.id "profileId", p.first_name "firstName", p.last_name "lastName", null::text email, ${federationExpression} federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
       roles.role_details "roles" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
-  ]);
+  ]));
   return {
     rows: rows.map((row): RawDirectoryRow => ({ ...row })),
     total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_RESULTS),

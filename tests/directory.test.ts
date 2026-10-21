@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { createQueryGate, DirectoryBusyError } from '../lib/directory/query-gate.ts';
 import { COUNTRY_CENTROIDS } from '../lib/directory/country-centroids.ts';
 import { buildMemberMapDots, dotRadius, MAP_DOT_MAX_RADIUS, MAP_DOT_MIN_RADIUS } from '../lib/directory/map-dots.ts';
 
@@ -82,7 +83,7 @@ test('the paid member directory returns email only for the re-authorized member 
   // per-page query; the cacheable select carries no email at all. Search and sort honor the same rule.
   assert.match(liveSelect, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
   assert.match(select, /null::text email/);
-  assert.match(memberDirectorySource, /\(p\.directory_email_opt_in and coalesce\(u\.email_display, u\.email\) ilike/);
+  assert.match(memberDirectorySource, /where sp\.directory_email_opt_in and coalesce\(su\.email_display, su\.email\) ilike/);
   assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state in \('active', 'migrated_pending'\)/);
   assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
   assert.doesNotMatch(select, /address|postal_code|userId/i);
@@ -353,6 +354,82 @@ test('every sort row keeps the column, direction, remove and drag controls on on
   assert.match(row, /className="min-w-0 flex-1 justify-between rounded font-normal"/);
   assert.doesNotMatch(row, /w-52/);
   assert.match(row, /className="w-24 shrink-0 rounded"/);
+});
+
+const migrationSource = readFileSync('lib/db/migrations/0081_member_directory_trigram_search.sql', 'utf8');
+const schemaSource = readFileSync('lib/db/schema.ts', 'utf8');
+
+test('directory text search is made of one indexable arm per field, and each arm has a matching trigram index', () => {
+  // An `or` across profiles and users cannot use any index, so every searched expression is its own union arm.
+  assert.match(memberDirectorySource, /select id from profiles where first_name ilike/);
+  assert.match(memberDirectorySource, /union select id from profiles where last_name ilike/);
+  assert.match(memberDirectorySource, /union select id from profiles where \(first_name \|\| ' ' \|\| last_name\) ilike/);
+  assert.doesNotMatch(memberDirectorySource, /concat_ws/);
+  for (const index of ['profiles_first_name_trgm_idx', 'profiles_last_name_trgm_idx', 'profiles_full_name_trgm_idx', 'users_display_email_trgm_idx']) {
+    assert.ok(schemaSource.includes(index), `${index} must be declared in the schema`);
+    assert.ok(migrationSource.includes(index), `${index} must be created by migration 0081`);
+  }
+  // The migration reuses the installed extension wherever it lives, and skips (not fails) when it is unavailable.
+  assert.match(migrationSource, /from pg_extension/i);
+  assert.match(migrationSource, /%I\.gin_trgm_ops/);
+  assert.match(migrationSource, /RAISE NOTICE 'pg_trgm is unavailable/);
+  assert.doesNotMatch(migrationSource, /\bDROP\b|\bALTER\b|\bDELETE\b/i);
+});
+
+test('only cache misses and uncached searches take a slot in the query gate; cache hits and authorization never wait', () => {
+  const listing = memberDirectorySource.slice(memberDirectorySource.indexOf('export async function listMemberDirectory'));
+  assert.ok(listing.indexOf('directoryQueryGate') === -1, 'listMemberDirectory must not hold a slot around cached reads');
+  const compute = memberDirectorySource.slice(memberDirectorySource.indexOf('async function runDirectoryQuery'), memberDirectorySource.indexOf('async function liveDirectoryDetails'));
+  assert.match(compute, /directoryQueryGate\.run\(/);
+  assert.match(publicPageSource, /else if \(error instanceof DirectoryBusyError\) busy = true;/);
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+test('the query gate runs at most N operations at once, queues the next in order, and frees the slot on failure', async () => {
+  const gate = createQueryGate(2, 5, 1_000);
+  const order: string[] = [];
+  const first = deferred();
+  const second = deferred();
+  const a = gate.run(async () => { order.push('a'); await first.promise; return 'a'; });
+  const b = gate.run(async () => { order.push('b'); await second.promise; return 'b'; });
+  const c = gate.run(async () => { order.push('c'); return 'c'; });
+  const d = gate.run(async () => { order.push('d'); throw new Error('boom'); });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ['a', 'b']);
+  assert.deepEqual(gate.snapshot(), { queued: 2, running: 2 });
+  first.resolve();
+  assert.equal(await a, 'a');
+  assert.equal(await c, 'c');
+  await assert.rejects(d, /boom/);
+  second.resolve();
+  assert.equal(await b, 'b');
+  assert.deepEqual(order, ['a', 'b', 'c', 'd']);
+  assert.deepEqual(gate.snapshot(), { queued: 0, running: 0 }, 'a failed operation must still release its slot');
+});
+
+test('the query gate sheds load with DirectoryBusyError when the queue is full or the wait runs out', async () => {
+  const full = createQueryGate(1, 1, 1_000);
+  const hold = deferred();
+  const running = full.run(() => hold.promise);
+  const queued = full.run(async () => 'queued');
+  await assert.rejects(full.run(async () => 'overflow'), DirectoryBusyError);
+  hold.resolve();
+  await running;
+  assert.equal(await queued, 'queued');
+
+  const slow = createQueryGate(1, 5, 20);
+  const stuck = deferred();
+  const occupying = slow.run(() => stuck.promise);
+  await assert.rejects(slow.run(async () => 'late'), DirectoryBusyError);
+  assert.deepEqual(slow.snapshot(), { queued: 0, running: 1 }, 'a timed-out waiter must leave the queue');
+  stuck.resolve();
+  await occupying;
+  assert.deepEqual(slow.snapshot(), { queued: 0, running: 0 });
 });
 
 test('the map shows a one-time, short-lived, animated click hint over the US bubble, for signed-in members only', () => {
