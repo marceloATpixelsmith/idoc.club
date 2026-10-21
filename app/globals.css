@@ -672,6 +672,53 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
   }
 }
 
+/* Mobile nav: the whole panel unfolds with the same 3D flip as the desktop dropdowns, and each
+ * accordion submenu animates its height via a 0fr -> 1fr grid row. */
+.idoc-mobile-nav {
+  perspective: 800px;
+  pointer-events: none;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s;
+}
+
+.idoc-mobile-nav[data-open='true'] {
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.idoc-mobile-nav__panel {
+  transform: rotateX(-90deg);
+  transform-origin: top center;
+  opacity: 0;
+  transition:
+    transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.22s ease;
+}
+
+.idoc-mobile-nav[data-open='true'] .idoc-mobile-nav__panel {
+  transform: rotateX(0deg);
+  opacity: 1;
+}
+
+.idoc-mobile-submenu {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.idoc-mobile-submenu[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-mobile-nav,
+  .idoc-mobile-nav__panel,
+  .idoc-mobile-submenu {
+    transition: none;
+  }
+}
+
 /* Avatar (initials) menu: the same 3D perspective flip as the header nav dropdowns. Radix keeps the
  * content mounted while the closing animation runs, so open and close are separate keyframes. The
  * perspective() transform function stands in for a perspective parent, which a portaled menu lacks.

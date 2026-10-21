@@ -24,12 +24,15 @@ const HOVER_CLOSE_DELAY_MS = 500;
 
 type AuthenticatedUserMenuProps = {
   loggedOut: ReactNode;
+  /** Inline, left-aligned accordion row for the mobile nav panel instead of the desktop dropdown. */
+  mobile?: boolean;
   onNavigate?: () => void;
   showAdminDashboard: boolean;
 };
 
 export function AuthenticatedUserMenu({
   loggedOut,
+  mobile = false,
   onNavigate,
   showAdminDashboard,
 }: AuthenticatedUserMenuProps) {
@@ -76,6 +79,64 @@ export function AuthenticatedUserMenu({
   if (!user?.email) return loggedOut;
 
   const accessibleName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+
+  const initials = userInitials(user.firstName, user.lastName, user.email);
+
+  if (mobile) {
+    return (
+      <div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`Open ${accessibleName} menu`}
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-2 bg-transparent px-1 py-2 text-gold"
+        >
+          <Avatar className="size-9 bg-gold shadow-gold">
+            <AvatarFallback className="bg-gold font-display text-sm font-bold tracking-wide text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 8 5"
+            className={`h-[5px] w-2 fill-current transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+          >
+            <path d="M0 0h8L4 5z" />
+          </svg>
+        </button>
+        <div className="idoc-mobile-submenu" data-open={open}>
+          <ul className="flex flex-col overflow-hidden">
+            {showAdminDashboard && (
+              <li>
+                <Link
+                  href="/admin"
+                  tabIndex={open ? 0 : -1}
+                  onClick={handleNavigate}
+                  className="flex items-center gap-2 py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  <LayoutDashboard className="size-4" />
+                  Admin Dashboard
+                </Link>
+              </li>
+            )}
+            <li>
+              <form action={handleSignOut}>
+                <button
+                  type="submit"
+                  tabIndex={open ? 0 : -1}
+                  className="flex w-full items-center gap-2 bg-transparent py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  <LogOut className="size-4" />
+                  Sign out
+                </button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   return (
     //modal=false: modal mode locks body scroll and shifts the sticky header by the
