@@ -430,6 +430,8 @@ test('the query gate sheds load with DirectoryBusyError when the queue is full o
   stuck.resolve();
   await occupying;
   assert.deepEqual(slow.snapshot(), { queued: 0, running: 0 });
+});
+
 test('the map shows a one-time, short-lived, animated click hint over the US bubble, for signed-in members only', () => {
   const hint = readFileSync('components/directory/map-first-visit-hint.tsx', 'utf8');
   const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
