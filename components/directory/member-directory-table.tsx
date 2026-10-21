@@ -59,6 +59,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState(false);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const lastRequestedView = useRef<string | null>(null);
 
   // Saves the view to a cookie and refetches via a same-URL router.refresh() -- deliberately never
   // writes search, filters, sort or page to the URL.
@@ -72,18 +73,25 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       region: filterToken(state.columnFilters, 'region'),
       sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
     };
+    // The table can report one user action more than once (e.g. React re-running a state updater).
+    // Every save ends in a directory search, which is rate-limited per account, so an identical
+    // repeat of the last requested view is dropped rather than saved and refetched again.
+    const body = JSON.stringify(view);
+    if (body === lastRequestedView.current) return;
+    lastRequestedView.current = body;
     // Saves are chained so an older request can never land after (and overwrite) a newer one. The
     // table refreshes only after a successful save; a failure keeps the member's current controls.
     saveQueue.current = saveQueue.current.then(async () => {
       try {
         const response = await fetch('/api/directory/view', {
-          body: JSON.stringify(view), credentials: 'same-origin', method: 'PUT',
+          body, credentials: 'same-origin', method: 'PUT',
           headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() },
         });
         if (!response.ok) throw new Error('save failed');
         setSaveError(false);
         startTransition(() => router.refresh());
       } catch {
+        lastRequestedView.current = null;
         setSaveError(true);
       }
     });

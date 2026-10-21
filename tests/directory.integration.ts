@@ -280,3 +280,38 @@ test('paid directory: an array-valued (repeated-key) query parameter is treated 
   assert.equal(listing.filters.q, undefined);
   assert.deepEqual(listing.rows.map((row) => row.lastName).sort(), ['One', 'Two']);
 });
+
+test('paid directory: every sortable column, ascending and descending, loads without error', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('NL', [stewardRole], { firstName: 'Bea', lastName: 'Jansen' });
+  for (const id of ['name', 'firstName', 'lastName', 'email', 'type', 'region', 'federation']) {
+    for (const desc of [false, true]) {
+      const listing = await asMember(user.id, () => listMemberDirectory({ sort: JSON.stringify([{ id, desc }]) }), `203.0.113.${desc ? 9 : 8}`);
+      assert.ok(listing.rows.length >= 2, `sort by ${id} ${desc ? 'desc' : 'asc'}`);
+    }
+  }
+});
+
+test('paid directory: a view saved by the table (cookie round trip) loads, including a region sort', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Cookie', lastName: 'Trip' });
+  const { parseDirectoryView, serializeDirectoryView } = await import('../lib/directory/member-directory-view.ts');
+  for (const id of ['region', 'type', 'federation', 'email', 'firstName', 'lastName']) {
+    const saved = serializeDirectoryView({ page: 1, pageSize: 25, sort: JSON.stringify([{ id, desc: false }]) }, user.id);
+    const listing = await asMember(user.id, () => listMemberDirectory(parseDirectoryView(saved, user.id)), `198.51.100.${id.length}`);
+    assert.ok(listing.rows.length >= 1, `cookie view sorted by ${id}`);
+  }
+});
+
+test('paid directory: multi-column sorts built by the Sort button load without error', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('NL', [stewardRole], { firstName: 'Bea', lastName: 'Jansen' });
+  const ids = ['lastName', 'firstName', 'type', 'region', 'federation', 'email'];
+  let origin = 0;
+  for (const first of ids) {
+    for (const second of ids.filter((id) => id !== first)) {
+      const sort = JSON.stringify([{ id: first, desc: false }, { id: second, desc: true }]);
+      const listing = await asMember(user.id, () => listMemberDirectory({ sort }), `192.0.2.${(origin += 1)}`);
+      assert.ok(listing.rows.length >= 2, `sort ${first} then ${second}`);
+    }
+  }
+});
