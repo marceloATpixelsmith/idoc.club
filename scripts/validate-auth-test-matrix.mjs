@@ -35,7 +35,7 @@ for (let index = 0; index < manifest.cases.length; index += 1) {
     throw new Error(c.id + ": CI coverage na requires not-applicable case");
   }
   if (c.applicability === "applicable" && !c.live.enabled) throw new Error(c.id + ": applicable case must remain live-enabled");
-  if (c.live.enabled) {
+  if (c.live.automation && (!["automated", "manual-only"].includes(c.live.automation.mode) || !c.live.automation.reason)) {\n    throw new Error(c.id + ": live.automation requires a supported mode and a specific reason");\n  }\n  if (c.live.enabled) {
     for (const key of ["preconditions", "steps", "pass", "fail", "cleanup", "evidence"]) {
       if (!Array.isArray(c.live[key])) throw new Error(c.id + ": live." + key + " must be an array");
     }
