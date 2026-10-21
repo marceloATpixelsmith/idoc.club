@@ -28,7 +28,7 @@ function makeCatalog() {
 }
 
 function makeCoverage() {
-  const rows = manifest.cases.map((c) => "| " + c.id + " | " + c.title.replaceAll("|", "/") + " | " + c.ci.coverage + " | " + (c.live.enabled ? "required" : "N/A") + " | " + c.canonicalControls.join(", ") + " |");
+  const rows = manifest.cases.map((c) => "| " + c.id + " | " + c.title.replaceAll("|", "/") + " | " + c.ci.coverage + " | " + (c.live.enabled ? (c.live.automation?.mode === "manual-only" ? "manual only" : "required") : "N/A") + " | " + c.canonicalControls.join(", ") + " |");
   const mapped = manifest.cases.filter((c) => c.ci.coverage === "mapped").length;
   const gaps = manifest.cases.filter((c) => c.ci.coverage === "gap").length;
   const na = manifest.cases.filter((c) => c.ci.coverage === "na").length;
