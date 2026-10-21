@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FormToggle } from '@/components/ui/form-toggle';
 import { saveMemberProfileByAdminForm } from './actions';
-import { IDOC_REGIONS, ISO_COUNTRY_CODES, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
+import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
+import { IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 
 type Role = { feiId: string | null; idocRegion: string | null; isTechnicalDelegate: boolean | null; nationalFederationCountryCode: string | null; officialStatuses: string[] | null; roleType: string };
 type Member = { marketing?: { optIn: boolean; pending: boolean } | null; profile: Record<string, unknown>; roles: Role[] };
@@ -47,7 +48,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           <Field label="City" maxLength={FIELD_MAX_LENGTH.city} name="city" required value={String(member.profile.city ?? '')} />
           <Field label="State/Province" maxLength={FIELD_MAX_LENGTH.stateProvince} name="stateProvince" required value={String(member.profile.stateProvince ?? '')} />
           <Field label="ZIP/postal code" maxLength={FIELD_MAX_LENGTH.postalCode} name="postalCode" required value={String(member.profile.postalCode ?? '')} />
-          <Select id="countryCode" initial={String(member.profile.countryCode)} label="Country" name="countryCode" required values={ISO_COUNTRY_CODES} />
+          <Select id="countryCode" initial={String(member.profile.countryCode)} label="Country" name="countryCode" options={COUNTRY_SELECT_OPTIONS} required />
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="classification">Professional classification</Label>
             <select className={SELECT_CLASSNAME} id="classification" name="classification" onChange={(event) => setClassification(event.target.value)} value={classification}>
@@ -65,7 +66,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Official information</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
-            <Select id="nationalFederationCountryCode" initial={official?.nationalFederationCountryCode ?? ''} label="National Federation" name="nationalFederationCountryCode" required values={ISO_COUNTRY_CODES} />
+            <Select id="nationalFederationCountryCode" initial={official?.nationalFederationCountryCode ?? ''} label="National Federation" name="nationalFederationCountryCode" options={COUNTRY_SELECT_OPTIONS} required />
             <Select id="idocRegion" initial={official?.idocRegion ?? ''} label="IDOC Region" name="idocRegion" required values={IDOC_REGIONS} />
             <Field className="col-span-2" label="FEI ID (optional)" name="feiId" value={official?.feiId ?? ''} />
             {(classification === 'judge' || classification === 'judge_steward') && (
@@ -159,12 +160,17 @@ function cnField(className?: string) {
   return className ? `space-y-1.5 ${className}` : 'space-y-1.5';
 }
 
-function Select({ id, initial, label, name, required, values }: { id: string; initial: string; label: string; name: string; required: boolean; values: readonly string[] }) {
+type SelectOption = { label: string; value: string };
+/** Countries are stored as ISO codes but always shown by name (never the two-letter code), sorted by name. */
+const COUNTRY_SELECT_OPTIONS: SelectOption[] = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
+
+function Select({ id, initial, label, name, options, required, values }: { id: string; initial: string; label: string; name: string; options?: readonly SelectOption[]; required: boolean; values?: readonly string[] }) {
+  const items = options ?? (values ?? []).map((value) => ({ label: value, value }));
   return <div className="space-y-1.5">
     <Label htmlFor={id}>{label}</Label>
     <select className={SELECT_CLASSNAME} defaultValue={initial} id={id} name={name} required={required}>
       <option value="">Select</option>
-      {values.map((value) => <option key={value} value={value}>{value}</option>)}
+      {items.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
     </select>
   </div>;
 }
