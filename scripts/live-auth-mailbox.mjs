@@ -20,11 +20,11 @@ async function call(path, payload) {
 }
 
 function findEmail(value, seen = new Set()) {
-  if (typeof value === "string") return /^[^@\\s]+@pixelsmith\\.space$/i.test(value) ? value : null;
+  if (typeof value === "string") return /^[^@\s]+@pixelsmith\.space$/i.test(value) ? value : null;
   if (!value || typeof value !== "object" || seen.has(value)) return null;
   seen.add(value);
   for (const [key, child] of Object.entries(value)) {
-    if (/^(email|address|mailbox)$/i.test(key) && typeof child === "string" && /^[^@\\s]+@pixelsmith\\.space$/i.test(child)) return child;
+    if (/^(email|address|mailbox)$/i.test(key) && typeof child === "string" && /^[^@\s]+@pixelsmith\.space$/i.test(child)) return child;
   }
   for (const child of Object.values(value)) {
     const email = findEmail(child, seen);
@@ -41,12 +41,12 @@ export async function createMailbox() {
 }
 
 export async function deleteMailbox(email) {
-  if (!/^[^@\\s]+@pixelsmith\\.space$/i.test(email)) throw new Error("Refusing to delete a non-disposable mailbox.");
+  if (!/^[^@\s]+@pixelsmith\.space$/i.test(email)) throw new Error("Refusing to delete a non-disposable mailbox.");
   await call("/api/e2e/delete", { email });
 }
 
 export async function messages(email, limit = 20) {
-  if (!/^[^@\\s]+@pixelsmith\\.space$/i.test(email)) throw new Error("Refusing to read a non-disposable mailbox.");
+  if (!/^[^@\s]+@pixelsmith\.space$/i.test(email)) throw new Error("Refusing to read a non-disposable mailbox.");
   return call("/api/e2e/messages", { email, limit });
 }
 
@@ -69,9 +69,9 @@ export async function waitForOtp(email, kind, previousMessageCount = 0, timeoutM
     const found = collectMessages(data);
     for (const message of found.slice(previousMessageCount).reverse()) {
       const subject = String(message.subject || "");
-      const content = [message.html, message.text, message.body].filter((item) => typeof item === "string").join("\\n").replace(/<[^>]*>/g, " ");
+      const content = [message.html, message.text, message.body].filter((item) => typeof item === "string").join("\n").replace(/<[^>]*>/g, " ");
       if (kind && !new RegExp(kind, "i").test(subject + " " + content)) continue;
-      const match = />\\s*(\\d{6})\\s*</.exec(String(message.html || "")) || /\\b(\\d{6})\\b/.exec(content);
+      const match = />\s*(\d{6})\s*</.exec(String(message.html || "")) || /\b(\d{6})\b/.exec(content);
       if (match) return match[1];
     }
     await new Promise((resolve) => setTimeout(resolve, 3000));
