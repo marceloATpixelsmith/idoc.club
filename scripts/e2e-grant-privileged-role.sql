@@ -33,6 +33,12 @@ declare
   v_existing int;
   v_new_role_id int;
 begin
+  if current_user <> 'idoc_staging_app' then
+    raise exception 'refusing: current_user % is not idoc_staging_app', current_user;
+  end if;
+  if current_database() <> 'ayni_space' then
+    raise exception 'refusing: current_database % is not ayni_space', current_database();
+  end if;
   if v_email !~* '^[^@[:space:]]+@pixelsmith\.space$' then
     raise exception 'refusing: % is not a disposable @pixelsmith.space test address', v_email;
   end if;
