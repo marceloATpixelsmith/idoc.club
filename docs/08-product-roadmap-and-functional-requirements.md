@@ -10,6 +10,11 @@ After the admin layout authorizes access, its error boundaries present the page 
 
 Organization Settings remains a Super-Admin-only function. It is the single owner of the structured public organization address used by the footer and Contact page and of the existing canonical seminar-payment configuration. Online via Stripe is permanently present, enabled, and protected. Bank Transfer and Cash may be enabled or disabled; enabling Bank Transfer requires server-sanitized visible instructions. This slice does not add or redesign the Memberships table, Revenue dashboard, Support Inbox, News/Blog, or Seminar administration.
 
+
+### Manual GitHub Operations
+
+The Super Admin navigation includes **Manual GitHub Operations** immediately below **Backups & restore**. The page dispatches two fixed workflows against the `staging` branch: apply pending migrations to `idoc_staging`, and run the live authentication browser suite against the deployed staging site. It requires a current Super Admin grant, a CSRF token, and fresh authenticator verification for each request; every request is audited, duplicate runs are refused while one is active, and recent GitHub Actions runs link directly to their logs. The migration workflow retains its protected GitHub environment and database safeguards. The live-auth run creates one disposable mailbox/account, performs the sequential auth journey, cleans them up, and publishes the result matrix plus browser evidence as a GitHub Actions artifact. Google OAuth provider sign-in remains excluded from the live run. The page reuses the existing server-only `GITHUB_BACKUP_TOOL_TOKEN`; no GitHub credential is sent to the browser.
+
 > **Authentication release gate:** Authentication/account-security changes must pass the isolated integration and Chromium adversarial acceptance command documented in [Authentication security test acceptance](20-authentication-security-test-acceptance.md). This gate excludes the planned payment/subscription security suite and does not replace independent penetration testing. The control-by-control implementation/documentation/test traceability behind this gate is [Authentication & account-security control inventory](21-authentication-security-control-inventory.md).
 
 ### Current seminar registration contract — 3 October 2026
