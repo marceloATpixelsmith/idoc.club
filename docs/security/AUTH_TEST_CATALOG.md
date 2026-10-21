@@ -21,7 +21,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Create a fresh Pixelsmith E2E mailbox.
+1. Reuse the run's disposable mailbox/account when it is in a clean state; create a mailbox and account only if the run does not already have one suitable for this signup journey.
 2. Complete signup with valid required fields and a valid password.
 3. Complete any real email verification/OTP step delivered to the mailbox.
 4. Observe the post-signup destination and persisted account state.
@@ -444,7 +444,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Request a reset for a disposable account and for an unknown address.
+1. Use the run's existing disposable account and mailbox; create them only if no suitable account exists.
 2. Use the real email reset link once.
 3. Attempt reuse and a modified token.
 4. Request a second reset and check supersession behavior.
@@ -475,7 +475,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Change a disposable account to a new E2E mailbox.
+1. Use the run's existing disposable account and create a second mailbox only when a distinct new email address is required for the change.
 2. Attempt a duplicate existing address and case/whitespace equivalent.
 3. Complete any real verification step.
 4. Test login/identity behavior at old and new addresses.
@@ -643,11 +643,11 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
 
-## LIVE-AUTH-022 — Redirect and callback parameters cannot escape approved application destinations
+## LIVE-AUTH-022 — Sign-in return paths cannot escape approved application destinations
 
 - **Risk:** high
 - **Applicability:** applicable
-- **Canonical controls:** AUTH-TRANSACTION-010, AUTH-OAUTH-002
+- **Canonical controls:** AUTH-TRANSACTION-010
 - **CI coverage:** mapped — `tests/return-to-path.test.ts`, `tests/general-navigation.test.ts` — Safe return-path behavior is tested with the application's password/email sign-in flow; Google consent and provider callback replay remain in LIVE-AUTH-004 and are manual-only.
 - **Live:** required; email=no; admin=no; destructive=no
 - **Automation:** automated — These return-path checks do not require Google consent and run through password/email authentication.
@@ -855,7 +855,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 
 ### Steps
-1. Use the Pixelsmith E2E Email connector to create a mailbox.
+1. Reuse the run's existing disposable mailbox; create one only if none exists.
 2. Exercise signup/reset/email-change flows that cause the staged app itself to send mail.
 3. Poll the mailbox, verify the intended message/link/code, and continue the real browser flow.
 
@@ -991,7 +991,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use the designated test password `Password#1` (10 characters; meets the composition rules) for the live HIBP check. Confirm the range response reports a match before submitting it in signup or password reset; use only the disposable test identity.
 
 ### Steps
-1. For signup, start signup with a fresh disposable mailbox and complete its email verification step.
+1. Use the run's existing disposable mailbox/account if it has not completed signup; otherwise create a clean identity only for this signup rejection case.
 2. Enter the composition-compliant breached password at password creation and submit.
 3. Verify the password is rejected with the breached-password message and no account is created.
 4. For reset, use an existing disposable account, request password reset, and complete the required email OTP or privileged TOTP verification.
@@ -1061,7 +1061,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - The staged deployment must be using Stripe test-mode credentials and have a published, fee-bearing test seminar; never use live-mode keys. Staging shares the production database, so cleanup is required.
 
 ### Steps
-1. Sign up a fresh member, complete onboarding, and confirm seminar registration is unavailable while unpaid.
+1. Reuse the run's ordinary-member account if it is still in a clean unpaid state; otherwise create one fresh member and reuse it for the paid membership and seminar steps.
 2. Start membership checkout and return from Stripe without paying; confirm entitlement is not granted by the return redirect alone.
 3. Pay with a Stripe test card and wait for the verified webhook; confirm entitlement becomes active exactly once.
 4. Register for a seminar by each enabled payment method; for online payment complete Stripe test checkout and confirm the registration becomes paid once.
@@ -1101,12 +1101,12 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 1. Sign in as the paid-up disposable member and cancel the membership from My Membership, confirming the dialog.
 2. Confirm the member stays signed in with full access and My Membership shows when access ends.
 3. Have an administrator move the paid-through date to yesterday (entitlement correction, with a reason).
-4. Reload any page in the member's session and confirm it is signed out, then attempt password sign-in and, if linked, Google sign-in.
+4. Reload any page in the member's session and confirm it is signed out, then attempt password sign-in.
 5. Have an administrator reverse the cancellation and confirm sign-in works again.
 
 ### PASS
 - Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.
-- After the paid-through date the existing session ends and both sign-in methods are refused, with the canceled-membership message shown only after a correct password.
+- After the paid-through date the existing session ends and password sign-in is refused, with the canceled-membership message shown only after a correct password.
 - An administrator's reversal restores sign-in.
 
 ### FAIL
