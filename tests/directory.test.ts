@@ -260,6 +260,7 @@ test('the signed-in members directory map tab is labelled just "Map"', () => {
 
 test('a failed directory load is logged with its cause, and rate limiting gets its own message instead of the generic failure', () => {
   assert.match(memberRouteSource, /if \(error instanceof DirectoryRateLimitedError\) rateLimited = true;/);
+  assert.match(memberRouteSource, /Sentry\.captureException\(error, \{ tags: \{ area: 'members-directory', operation: 'list' \} \}\)/);
   assert.match(memberRouteSource, /console\.error\('\[members-directory\] listing failed'/);
   assert.match(memberRouteSource, /rateLimited \? <p/);
   assert.match(memberRouteSource, /Please wait a few minutes and try again\./);

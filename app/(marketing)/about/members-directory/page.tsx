@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import * as Sentry from '@sentry/nextjs';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { ConcentrationMap } from '@/components/directory/concentration-map';
@@ -40,8 +41,9 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
       if (error instanceof DirectoryRateLimitedError) rateLimited = true;
       else {
         unavailable = true;
-        // Never swallow the cause: this message is all a member sees, so the server log is the only
-        // place the real failure (access denied, database error, ...) can be diagnosed.
+        // Never swallow the cause: this message is all a member sees, so Sentry (full exception and
+        // stack) and the server log are the only places the real failure can be diagnosed.
+        Sentry.captureException(error, { tags: { area: 'members-directory', operation: 'list' } });
         console.error('[members-directory] listing failed', error instanceof Error
           ? { name: error.name, message: error.message, code: (error as { code?: unknown }).code }
           : { name: typeof error });
