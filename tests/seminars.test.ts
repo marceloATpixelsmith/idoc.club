@@ -244,13 +244,16 @@ test('past seminars and courses have their own top-level tab between available a
   const pastTab = seminarsRoute.indexOf('Past Seminars/Courses');
   const myTab = seminarsRoute.indexOf('My Seminars/Courses');
   assert.ok(availableTab > -1 && availableTab < pastTab && pastTab < myTab, 'tabs should be ordered Available, Past, My');
-  assert.match(seminarsRoute, /href="\\/seminars\\?view=past"/);
-  assert.match(seminarsRoute, /<MemberRegistrations view="past" \/>/);
+  assert.ok(seminarsRoute.includes('href="/seminars?view=past"'));
+  assert.ok(seminarsRoute.includes('<MemberRegistrations view="past" />'));
   assert.match(memberPage, /async function PastSeminars/);
   assert.match(memberPage, /listPastPublishedSeminars/);
-  assert.doesNotMatch(memberPage.match(/async function AvailableSeminars[\\s\\S]*?\\n\\}/)?.[0] ?? '', /listPastPublishedSeminars/);
+  const availableStart = memberPage.indexOf('async function AvailableSeminars');
+  const pastStart = memberPage.indexOf('async function PastSeminars');
+  assert.ok(availableStart > -1 && pastStart > availableStart);
+  assert.doesNotMatch(memberPage.slice(availableStart, pastStart), /listPastPublishedSeminars/);
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
-  assert.match(registrationsSource, /s\\.status='published' and s\\.end_date < current_date/);
+  assert.ok(registrationsSource.includes("s.status='published' and s.end_date < current_date"));
 });
 
 test('all seminar listing surfaces reuse a compact, uniformly constrained card with independent navigation and FEI links', () => {
