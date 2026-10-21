@@ -48,6 +48,20 @@ function identifierMaxRequestsFor(purpose: string): number {
   return IDENTIFIER_MAX_REQUESTS[purpose] ?? DEFAULT_EMAIL_MAX_REQUESTS;
 }
 
+/** Per-purpose overrides to the origin/IP bucket's allowance (default IP_MAX_REQUESTS, sized for
+ * login/OTP abuse). The origin bucket must never be tighter than the per-account bucket it sits
+ * beside: with the default of 10, a signed-in member browsing the directory was blocked after ten
+ * filter/sort/page changes from one IP, well under their own 60-search account allowance. Three
+ * accounts' worth keeps a shared household/office IP working while still bounding enumeration
+ * from one origin. */
+const ORIGIN_MAX_REQUESTS: Readonly<Record<string, number>> = {
+  member_directory_search: 180,
+};
+
+function originMaxRequestsFor(purpose: string): number {
+  return ORIGIN_MAX_REQUESTS[purpose] ?? IP_MAX_REQUESTS;
+}
+
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 async function takeBucket(purpose: string, identifierHash: string, originHash: string, windowStartedAt: Date, max: number) {
@@ -78,9 +92,10 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
   const allOriginsMarker = digest(`${secret}:all-origins`);
   const allEmailsMarker = digest(`${secret}:all-emails`);
   const emailMax = identifierMaxRequestsFor(purpose);
+  const originMax = originMaxRequestsFor(purpose);
   const [emailAllowed, ipAllowed] = await Promise.all([
     takeBucket(purpose, emailHash, allOriginsMarker, windowStartedAt, emailMax),
-    takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, IP_MAX_REQUESTS),
+    takeBucket(purpose, allEmailsMarker, originHash, windowStartedAt, originMax),
   ]);
   // AUTH-OPERATIONS-006: a single blocked request is routine and already fully handled by the
   // rejection above; only sustained blocking across multiple windows for the *same* bucket is
@@ -90,7 +105,7 @@ export async function checkRateLimit(purpose: string, email: string, origin: str
     await correlateRepeatedRateLimitExceedance({ identifierHash: emailHash, max: emailMax, now, originHash: allOriginsMarker, purpose });
   }
   if (!ipAllowed) {
-    await correlateRepeatedRateLimitExceedance({ identifierHash: allEmailsMarker, max: IP_MAX_REQUESTS, now, originHash, purpose });
+    await correlateRepeatedRateLimitExceedance({ identifierHash: allEmailsMarker, max: originMax, now, originHash, purpose });
   }
   return emailAllowed && ipAllowed;
 }
