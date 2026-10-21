@@ -19,7 +19,7 @@ async function submitPassword(page, value) {
 }
 
 test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, login, and logout", async ({ page, context }) => {
-  test.info().annotations.push({ type: "live-auth-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
+  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
   const evidence = [];
   const beforeSignup = (await messages(email)).length;
   await page.goto("/sign-up");
