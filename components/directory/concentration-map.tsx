@@ -1,6 +1,7 @@
 import { countryNameForCode } from '@/lib/membership/countries';
 import type { ConcentrationArea } from '@/lib/directory/aggregate';
 import { buildMemberMapDots } from '@/lib/directory/map-dots';
+import { CountryDirectoryButton } from './country-directory-button';
 import { MemberMapCanvas } from './member-map-canvas';
 
 /**
@@ -10,14 +11,16 @@ import { MemberMapCanvas } from './member-map-canvas';
  * coordinates, and never derives or exposes exact coordinates per docs/05. A real HTML table with the
  * same rows is always in the DOM but visually hidden (sr-only) -- not a decorative aria-only
  * duplicate -- so the same information stays available to screen readers and assistive technology.
+ * Signed-in members can click a dot (or its country button in that table) to open the directory
+ * filtered to that National Federation; signed-out visitors get no click behavior at all.
  */
-export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
+export function ConcentrationMap({ areas, canOpenDirectory = false }: { areas: ConcentrationArea[]; canOpenDirectory?: boolean }) {
   const dots = buildMemberMapDots(areas, countryNameForCode);
   const summary = areas.slice(0, 5).map((area) => `${countryNameForCode(area.countryCode)} (${area.memberCount})`).join(', ');
 
   return (
     <figure>
-      <MemberMapCanvas dots={dots} summary={summary} />
+      <MemberMapCanvas canOpenDirectory={canOpenDirectory} dots={dots} summary={summary} />
       <div className="sr-only">
         <table>
           <caption>Member count by country</caption>
@@ -30,7 +33,9 @@ export function ConcentrationMap({ areas }: { areas: ConcentrationArea[] }) {
           <tbody>
             {areas.map((area) => (
               <tr key={area.countryCode}>
-                <td>{countryNameForCode(area.countryCode)}</td>
+                <td>{canOpenDirectory
+                  ? <CountryDirectoryButton countryCode={area.countryCode} countryName={countryNameForCode(area.countryCode)} />
+                  : countryNameForCode(area.countryCode)}</td>
                 <td>{area.memberCount}</td>
               </tr>
             ))}

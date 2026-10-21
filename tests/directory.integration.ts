@@ -315,3 +315,14 @@ test('paid directory: multi-column sorts built by the Sort button load without e
     }
   }
 });
+
+test('paid directory: a member with no recorded federation is listed under their address country, matching the map', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Fallback', lastName: 'Federation' });
+  const noFederation = await sql<{ id: number }[]>`select p.id from idoc.profiles p where p.user_id = ${user.id}`;
+  await sql`update idoc.professional_roles set national_federation_country_code = null where profile_id = ${noFederation[0].id}`;
+  const listing = await asMember(user.id, () => listMemberDirectory({ federation: 'DE', q: 'Fallback' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].federation, 'DE');
+  const none = await asMember(user.id, () => listMemberDirectory({ federation: 'FR', q: 'Fallback' }), '203.0.113.77');
+  assert.equal(none.total, 0);
+});

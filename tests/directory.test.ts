@@ -265,3 +265,36 @@ test('a failed directory load is logged with its cause, and rate limiting gets i
   assert.match(memberRouteSource, /rateLimited \? <p/);
   assert.match(memberRouteSource, /Please wait a few minutes and try again\./);
 });
+
+const mapCanvasSource = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+const openDirectorySource = readFileSync('components/directory/open-directory-for-country.ts', 'utf8');
+const dailyCacheSource = readFileSync('lib/cache/daily-cache.ts', 'utf8');
+
+test('the map and the directory listing are cached for a day, but access control and rate limiting still run on every request', () => {
+  assert.match(dailyCacheSource, /DAILY_REVALIDATE_SECONDS = 24 \* 60 \* 60/);
+  assert.match(dailyCacheSource, /unstable_cache\(compute, keyParts, \{ revalidate: DAILY_REVALIDATE_SECONDS/);
+  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration'\]\)/);
+  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query'\]\)/);
+  // The authorization and rate-limit checks sit before the cached call, never inside it.
+  const listing = memberDirectorySource.slice(memberDirectorySource.indexOf('export async function listMemberDirectory'));
+  assert.ok(listing.indexOf("requireAccountAccess('member')") < listing.indexOf('cachedDirectoryQuery('));
+  assert.ok(listing.indexOf("checkRateLimit('member_directory_search'") < listing.indexOf('cachedDirectoryQuery('));
+  // A failed map query must not be cached for a day: the cached function throws, the wrapper catches.
+  const cachedMap = aggregateSource.slice(aggregateSource.indexOf('async function queryMemberConcentration'), aggregateSource.indexOf('const cachedMemberConcentration'));
+  assert.doesNotMatch(cachedMap, /catch/);
+  assert.match(aggregateSource, /try \{\s*return \{ areas: await cachedMemberConcentration\(\)/);
+});
+
+test('clicking a country on the map opens the directory filtered to that federation, for signed-in members only', () => {
+  assert.match(publicPageSource, /<ConcentrationMap areas=\{concentration\.areas\} canOpenDirectory=\{Boolean\(user\)\} \/>/);
+  assert.match(concentrationMapSource, /canOpenDirectory = false/);
+  // Click handler and pointer cursor exist only when the viewer is signed in.
+  assert.match(mapCanvasSource, /if \(canOpenDirectory\) \{\s*map\.on\('click', 'member-dots'/);
+  assert.match(mapCanvasSource, /if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer'/);
+  assert.doesNotMatch(mapCanvasSource.replace(/if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer';/, ''), /style\.cursor = 'pointer'/);
+  // The filter is saved as the member's view (never put in the URL), then the tab opens.
+  assert.match(openDirectorySource, /\/api\/directory\/view/);
+  assert.match(openDirectorySource, /federation: countryCode/);
+  assert.match(openDirectorySource, /navigate\('\/about\/members-directory\?tab=directory'\)/);
+  assert.doesNotMatch(openDirectorySource, /federation=/);
+});

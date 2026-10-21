@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
+import { dailyCache } from '@/lib/cache/daily-cache';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 export class DirectoryRateLimitedError extends Error {
@@ -85,6 +86,12 @@ export function normalizeDirectoryFilters(input: MemberDirectoryFilters) {
   };
 }
 
+/** A member's National Federation as the public map counts it (docs/05): their recorded federation,
+ * falling back to their address country only when none is recorded. The directory's federation
+ * column, filter and sort use the same rule, so clicking a country on the map lists exactly the
+ * members that country's dot counts. */
+const federationExpression = sql`coalesce(roles.federation, nullif(p.country_code, ''))`;
+
 function queryParts(raw: MemberDirectoryFilters) {
   const filters = normalizeDirectoryFilters(raw);
   const conditions = [
@@ -94,7 +101,7 @@ function queryParts(raw: MemberDirectoryFilters) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or (p.directory_email_opt_in and coalesce(u.email_display, u.email) ilike ${pattern} escape '\\'))`);
   }
-  if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
+  if (filters.federation.length) conditions.push(sql`${federationExpression} in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
   if (filters.membershipType.length) {
     conditions.push(sql`(${sql.join(filters.membershipType.map((type) => type === 'combo'
@@ -126,7 +133,7 @@ function directoryOrder(sorting: DirectorySort[]) {
       : id === 'firstName' ? sql`p.first_name`
       : id === 'email' ? sql`case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end`
       : id === 'type' ? sql`roles.membership_type`
-      : id === 'federation' ? sql`roles.federation`
+      : id === 'federation' ? federationExpression
       : sql`roles.region`;
     return [
       sql`${column} ${direction} nulls last`,
@@ -137,25 +144,46 @@ function directoryOrder(sorting: DirectorySort[]) {
   return sql.join(expressions, sql`, `);
 }
 
-/** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
- * non-archived, non-administrator member records. */
-export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
-  const actor = await requireAccountAccess('member');
-  const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
-  if (!allowed) throw new DirectoryRateLimitedError();
+type DirectoryQueryInput = {
+  federation: string[]; membershipType: string[]; page: number; pageSize: number;
+  q?: string; region: string[]; sort: string;
+};
+
+/** The heavy part of a listing: the page of rows and the total. Everything it needs is in its
+ * (JSON-serializable) input, so the result is the same for every entitled viewer and can be cached
+ * per distinct set of filters. It throws on failure, so a failure is never cached. */
+async function runDirectoryQuery(input: DirectoryQueryInput) {
   const { filters, where } = queryParts(input);
   const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end email, roles.federation, roles.region,
+    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end email, ${federationExpression} federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
       roles.role_details "roles" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return {
-    filters, maxPage: Math.max(1, Math.ceil(DIRECTORY_MAX_RESULTS / filters.pageSize)),
-    pageSize: filters.pageSize,
     rows: rows.map((row): DirectoryMemberRow => ({ ...row })),
     total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_RESULTS),
+  };
+}
+
+// Renewed at most once a day per distinct set of filters. Access control and rate limiting stay
+// outside the cache and run on every request, so a cache hit is only ever served to an entitled member.
+const cachedDirectoryQuery = dailyCache(runDirectoryQuery, ['member-directory-query']);
+
+/** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
+ * non-archived, non-administrator member records. Results are cached for a day per set of filters. */
+export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
+  const actor = await requireAccountAccess('member');
+  const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
+  if (!allowed) throw new DirectoryRateLimitedError();
+  const filters = normalizeDirectoryFilters(input);
+  const { rows, total } = await cachedDirectoryQuery({ ...filters, sort: JSON.stringify(filters.sort) });
+  return {
+    filters, maxPage: Math.max(1, Math.ceil(DIRECTORY_MAX_RESULTS / filters.pageSize)),
+    pageSize: filters.pageSize,
+    rows,
+    total,
   };
 }

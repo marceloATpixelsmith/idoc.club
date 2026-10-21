@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { sql } from 'drizzle-orm';
+import { dailyCache } from '@/lib/cache/daily-cache';
 import { db } from '@/lib/db/drizzle';
 import { logError } from '@/lib/observability/logger';
 import { ISO_COUNTRY_CODES } from '@/lib/membership/validation';
@@ -35,32 +36,36 @@ type ConcentrationRow = { country_code: string; member_count: number };
  * or not a canonical ISO 3166-1 code (legacy imports can leave it empty or malformed) are excluded, since they cannot be named
  * or placed on the map and would otherwise form their own group.
  */
+async function queryMemberConcentration(): Promise<ConcentrationArea[]> {
+  const rows = await db.execute<ConcentrationRow>(sql`
+    select c.country_code as country_code, count(*)::int as member_count
+    from profiles p
+    join lateral (
+      select status, valid_until, grace_ends_on from memberships
+      where profile_id = p.id order by valid_until desc, id desc limit 1
+    ) m on true
+    cross join lateral (
+      select coalesce(
+        (select min(r.national_federation_country_code) from professional_roles r where r.profile_id = p.id and r.national_federation_country_code is not null),
+        nullif(p.country_code, '')
+      ) as country_code
+    ) c
+    where c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
+      and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
+    group by c.country_code
+    having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
+    order by count(*) desc, c.country_code asc
+  `);
+  return rows.map((row) => ({ countryCode: row.country_code, memberCount: row.member_count }));
+}
+
+// The map is identical for every visitor and only needs to be current to the day. The query throws on
+// failure, so an outage is never cached: the next request retries instead of showing "unavailable" for a day.
+const cachedMemberConcentration = dailyCache(queryMemberConcentration, ['public-member-concentration']);
+
 export async function getPublicMemberConcentration(): Promise<ConcentrationResult> {
   try {
-    const rows = await db.execute<ConcentrationRow>(sql`
-      select c.country_code as country_code, count(*)::int as member_count
-      from profiles p
-      join lateral (
-        select status, valid_until, grace_ends_on from memberships
-        where profile_id = p.id order by valid_until desc, id desc limit 1
-      ) m on true
-      cross join lateral (
-        select coalesce(
-          (select min(r.national_federation_country_code) from professional_roles r where r.profile_id = p.id and r.national_federation_country_code is not null),
-          nullif(p.country_code, '')
-        ) as country_code
-      ) c
-      where c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
-        and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
-      group by c.country_code
-      having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
-      order by count(*) desc, c.country_code asc
-    `);
-    return {
-      areas: rows.map((row) => ({ countryCode: row.country_code, memberCount: row.member_count })),
-      ok: true,
-      threshold: DIRECTORY_MIN_AGGREGATION_THRESHOLD,
-    };
+    return { areas: await cachedMemberConcentration(), ok: true, threshold: DIRECTORY_MIN_AGGREGATION_THRESHOLD };
   } catch {
     logError('directory_map_query_failed');
     return { ok: false };
