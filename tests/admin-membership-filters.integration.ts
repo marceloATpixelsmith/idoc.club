@@ -12,14 +12,12 @@ test('admin member search: a repeated-key query parameter is treated as a real m
   const profile = await createProfile(user.id);
   await createMembership(profile.id);
 
-  // Simulates a real ?country=DE&country=FR request: Next.js hands this to the page as an array.
-  // Scalar filters (page, sort, q) still resolve to their first value; multi-select filters
-  // (country, federation, status) now match ANY of the repeated values.
+  // Next.js passes repeated query keys as arrays; federation and status filters match any selected value.
   const listing = await asAdmin(admin.id, () => listAdminMembers({
-    country: ['DE', 'FR'], federation: ['DE', 'PL'], page: ['1', '2'], q: [''], sort: ['name_asc', 'name_desc'], status: ['active', 'expired'],
+    federation: ['DE', 'PL'], page: ['1', '2'], q: [''], sort: ['name_asc', 'name_desc'], status: ['active', 'expired'],
   }));
   assert.equal(listing.filters.page, 1);
-  assert.deepEqual(listing.filters.countries, ['DE', 'FR']);
+  assert.deepEqual(listing.filters.federations, ['DE', 'PL']);
   assert.deepEqual(listing.filters.statuses, ['active', 'expired']);
   assert.ok(listing.rows.some((row) => row.profileId === profile.id));
 });
@@ -61,12 +59,12 @@ test('an absent status filter shows every status -- listAdminMembers itself no l
   assert.ok(profileIds.includes(expiredProfile.id));
 });
 
-test('membership filters apply selectable country, federation, region, status exclusions and multiple sort priorities to real rows', async () => {
+test('membership filters apply federation, region, status exclusions and multiple sort priorities to real rows', async () => {
   const admin = await adminUser();
   const first = await createUser();
   const firstProfile = await createProfile(first.id, [judgeRole]);
   await createMembership(firstProfile.id);
-  await sql`update idoc.profiles set last_name='Zulu' where id=${firstProfile.id}`;
+  await sql`update idoc.profiles set last_name='Zulu',country_code='PL' where id=${firstProfile.id}`;
   const second = await createUser();
   const secondProfile = await createProfile(second.id, [judgeRole]);
   await createMembership(secondProfile.id);
@@ -79,9 +77,9 @@ test('membership filters apply selectable country, federation, region, status ex
 
   const listed = await asAdmin(admin.id, () => listAdminMembers({
     filters: JSON.stringify([
-      { id: 'country', operator: 'eq', value: 'DE' },
       { id: 'federation', operator: 'eq', value: 'DE' },
       { id: 'region', operator: 'eq', value: 'Western Europe & Africa' },
+      { id: 'country', operator: 'eq', value: 'DE' }, // Legacy saved Address Country clauses are ignored.
     ]),
     sort: JSON.stringify([{ id: 'federation', desc: false }, { id: 'name', desc: true }]),
   }));
@@ -89,13 +87,11 @@ test('membership filters apply selectable country, federation, region, status ex
 
   const excluded = await asAdmin(admin.id, () => listAdminMembers({ filters: JSON.stringify([
     { id: 'status', operator: 'ne', value: 'active' },
-    { id: 'country', operator: 'eq', value: 'PL' },
   ]) }));
   assert.deepEqual(excluded.rows.map((row) => row.profileId), [expiredProfile.id]);
 
   const combined = await asAdmin(admin.id, () => listAdminMembers({
     filters: JSON.stringify([
-      { id: 'country', operator: 'eq', value: 'PL' },
       { id: 'federation', operator: 'eq', value: 'DE' },
     ]), joinOperator: 'or', status: 'active',
   }));

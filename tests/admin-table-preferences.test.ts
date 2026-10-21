@@ -40,6 +40,9 @@ test('a multi-select facet filter\'s selected values are read from react-table\'
     assert.match(table, /const value = columnFilters\.find\(\(filter\) => filter\.id === id\)\?\.value;/);
   }
   for (const field of ['federation', 'region', 'status', 'type']) assert.match(memberTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));
+  assert.doesNotMatch(memberTable, /filterToken\(state\.columnFilters, 'country'\)/);
+  assert.doesNotMatch(membershipPage, /savedPreferences\?\.country/);
+  assert.doesNotMatch(preferences, /country: multiToken\(ISO_COUNTRY_CODES/);
   assert.match(resourceTable, /status: filterToken\(state\.columnFilters, 'status'\)/);
   assert.match(resourceTable, /type: tableType === 'news' \? filterToken\(state\.columnFilters, 'type'\) : undefined/);
   for (const field of ['assigned', 'category', 'status']) assert.match(supportTable, new RegExp(`${field}: filterToken\\(state\\.columnFilters, '${field}'\\)`));

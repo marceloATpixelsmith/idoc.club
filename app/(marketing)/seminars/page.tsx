@@ -43,8 +43,8 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
-          <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-[repeat(3,max-content)] sm:gap-x-9">
+          <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-3 sm:grid-cols-subgrid">
             <Link
               aria-current={!showMySeminars && !showPastSeminars ? 'page' : undefined}
               href="/seminars"
@@ -71,7 +71,7 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
           </nav>
         </div>
         {showMySeminars ? (
-              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
+              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-3">
                 <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
                   <Link
                     aria-current={tab !== 'past' ? 'page' : undefined}
@@ -86,6 +86,8 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
                 </div>
               </nav>
             ) : null}
+          </div>
+        ) : null}
         {showMySeminars ? (
           <MemberRegistrations tab={tab} view="my" />
         ) : showPastSeminars ? (
