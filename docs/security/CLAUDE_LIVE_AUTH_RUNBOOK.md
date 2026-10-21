@@ -100,7 +100,7 @@ ready-to-run SQL instead:
    batch: if one account is ever referenced on a row it does not own (verified someone else's
    professional role, authored real content, recorded a real member's payment), that account alone
    is skipped with a warning and every other account in the list is still cleaned up. The account row
-   itself and its profile are **not** physically deleted -- `idoc.audit_log`/`idoc.profile_change_history`
+   itself and its profile are **not** physically deleted -- `idoc_staging.audit_log`/`idoc_staging.profile_change_history`
    are immutable by design (a database trigger unconditionally rejects updating or deleting them),
    and the foreign keys referencing them block deleting their parent rows too, once any audited
    action was ever recorded for the account. Instead the account is neutralized exactly like the
