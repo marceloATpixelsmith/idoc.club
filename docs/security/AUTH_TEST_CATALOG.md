@@ -866,7 +866,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - App reports success but no email arrives, wrong recipient/content is sent, or link/code fails/binds to the wrong purpose.
 
 ### Cleanup
-- Delete the E2E mailbox only after the corresponding flow passes; preserve failed-flow mailboxes temporarily for debugging.
+- Delete each mailbox once after all dependent flows that use it have passed; preserve it temporarily when failure evidence depends on it.
 
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
