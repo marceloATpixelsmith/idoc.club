@@ -28,36 +28,12 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   exception (or revert staging to a real Turnstile widget) without re-checking this file: a prior
   version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
   needed a human to solve it manually, one flow at a time.
-- **The staging and production deployments deliberately share the same Postgres database** (one
-  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) -- staging
-  is deliberately near-identical to production under `docs/07` §15's policy, not isolated from
-  it; the database is one of the values staging shares verbatim (Stripe and Brevo credentials
-  and the URL-family values are the named exceptions that differ instead). Sharing the database
-  specifically also avoids paying for a second Render Postgres instance. See `docs/07` "Branch,
-  environment, and deployment workflow" for the full policy. This is a permanent,
-  operator-confirmed decision, not a temporary gap or an oversight of this runbook. Practical
-  consequences for this audit:
-  - Every disposable test account, adversarial request, and piece of test data created during a
-    live-auth run lands in the real production database alongside genuine member data.
-  - The read-only `query_render_postgres` connector below is querying the **same** database
-    production reads/writes -- a query result may include real member rows, not just test rows.
-  - End-of-run cleanup (`scripts/e2e-delete-test-account.sql`) is not optional cosmetic tidying
-    here -- it is removing real rows from the production database. Treat every disposable
-    `@pixelsmith.space` account created during a run as required cleanup, not best-effort.
-  - Prefer the least invasive adversarial techniques that still validate the control (e.g. avoid
-    bulk/high-count operations even where the case would otherwise tolerate them), since there is
-    no environment isolation backstopping a mistake.
-- Staging's Postgres is reachable **read-only** from Claude Code's sandboxed session via the Render
-  MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`,
-  `workspaceId` `tea-d3c3eq7diees7392talg`; the app schema inside it is `idoc`). Useful for
-  verification queries (confirming target/revision, checking a grant landed, session-policy
-  inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
-  (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
-  actually performed.
+- **Staging and production share one Render PostgreSQL database instance but use separate schemas and application roles.** Staging writes belong only in schema `idoc_staging` through role `idoc_staging_app`; production uses schema `idoc_production` through role `idoc_production_app`. The live-auth provisioning and cleanup scripts must qualify every table as `idoc_staging.*`, verify the active role/database/schema before writes, and reject production credentials. Keep `STAGING_POSTGRES_URL` scoped to the staging application role. Never connect with a schema-owner or production role. The shared database instance does not mean the schemas are shared: test rows and cleanup must remain inside `idoc_staging`.
+- The read-only `query_render_postgres` connector can verify staging data in `idoc_staging`; it cannot run provisioning or cleanup writes.
 - Google OAuth real consent/account-linking is manual-only (`LIVE-AUTH-004`) and excluded from unattended GitHub runs. `LIVE-AUTH-022` remains automated using password/email authentication for safe return-path behavior. The GitHub result must identify the Google steps as `blocked` / manual-required, never pass.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
-  -- query `idoc.application_roles` via the read-only connector above.
+  -- query `idoc_staging.application_roles` via the read-only connector above.
 
 ## Execution order
 
@@ -115,7 +91,7 @@ ready-to-run SQL instead:
    batch: if one account is ever referenced on a row it does not own (verified someone else's
    professional role, authored real content, recorded a real member's payment), that account alone
    is skipped with a warning and every other account in the list is still cleaned up. The account row
-   itself and its profile are **not** physically deleted -- `idoc.audit_log`/`idoc.profile_change_history`
+   itself and its profile are **not** physically deleted -- `idoc_staging.audit_log`/`idoc_staging.profile_change_history`
    are immutable by design (a database trigger unconditionally rejects updating or deleting them),
    and the foreign keys referencing them block deleting their parent rows too, once any audited
    action was ever recorded for the account. Instead the account is neutralized exactly like the

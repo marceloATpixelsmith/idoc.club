@@ -40,7 +40,7 @@ begin
     raise exception 'target role must be administrator or super_admin, got %', v_role;
   end if;
 
-  select id, account_state into v_uid, v_account_state from idoc.users where lower(email) = lower(v_email);
+  select id, account_state into v_uid, v_account_state from idoc_staging.users where lower(email) = lower(v_email);
   if v_uid is null then
     raise exception 'no account found for %; complete a real signup through the live app first (LIVE-AUTH-001)', v_email;
   end if;
@@ -49,29 +49,29 @@ begin
   end if;
 
   select exists(
-    select 1 from idoc.application_roles
+    select 1 from idoc_staging.application_roles
     where user_id = v_granted_by and role = 'super_admin' and revoked_at is null
   ) into v_granter_ok;
   if not v_granter_ok then
     raise exception 'granted_by user id % does not hold an active super_admin grant; role grants are super-admin-only', v_granted_by;
   end if;
 
-  select id into v_existing from idoc.application_roles where user_id = v_uid and role = v_role and revoked_at is null;
+  select id into v_existing from idoc_staging.application_roles where user_id = v_uid and role = v_role and revoked_at is null;
   if v_existing is not null then
     raise notice '% already holds an active "%" grant (application_roles.id=%); nothing to do', v_email, v_role, v_existing;
     return;
   end if;
 
-  insert into idoc.application_roles (user_id, role, granted_by)
+  insert into idoc_staging.application_roles (user_id, role, granted_by)
   values (v_uid, v_role, v_granted_by)
   returning id into v_new_role_id;
 
   -- mirrors lib/membership/role-grants.ts's grantApplicationRole: a privilege grant must not take
   -- effect inside an already-issued lower-assurance session (the one from the real signup login in
   -- LIVE-AUTH-001). Incrementing session_version invalidates every existing session for this user.
-  update idoc.users set session_version = session_version + 1, updated_at = now() where id = v_uid;
+  update idoc_staging.users set session_version = session_version + 1, updated_at = now() where id = v_uid;
 
-  insert into idoc.audit_log (actor_id, action, entity_type, entity_id, after_json, reason)
+  insert into idoc_staging.audit_log (actor_id, action, entity_type, entity_id, after_json, reason)
   values (
     v_granted_by,
     'e2e_test_role_grant',
