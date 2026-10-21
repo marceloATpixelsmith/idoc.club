@@ -337,4 +337,6 @@ test('every seminar row (homepage and seminars page) hovers like the homepage ne
   assert.match(registrations, /<article className="relative grid max-w-full gap-5 px-4 py-6/);
   assert.match(registrations, /SEMINAR_LIST_CLASS = '-mx-4 w-\[calc\(100%\+2rem\)\] max-w-\[37rem\] divide-y/);
   assert.doesNotMatch(registrations, /w-fit max-w-full divide-y/);
+  // The list overhangs 1rem, so the cancel control under a My Seminars row gets the same 1rem padding as the card.
+  assert.match(registrations, /<div className="px-4 pb-6"><SeminarForm action=\{cancelSeminarRegistrationAction\}/);
 });

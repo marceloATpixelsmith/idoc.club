@@ -101,7 +101,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
         <p className="font-medium">{money(seminar.expected_amount_cents ?? seminar.member_price_cents)}</p>
         <p>Status: <strong>{registrationStatus === 'canceled' ? 'Canceled' : `${APPROVAL_STATUS_LABELS[approvalStatus]} / ${PAYMENT_STATUS_LABELS[paymentStatus]}`}</strong></p>
       </SeminarListingCard>
-      {!past && seminar.registration_status === 'registered' ? <div className="pb-6"><SeminarForm action={cancelSeminarRegistrationAction} buttonClassName="h-8 rounded-md border-dashed px-3 font-normal" buttonTableControl pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
+      {!past && seminar.registration_status === 'registered' ? <div className="px-4 pb-6"><SeminarForm action={cancelSeminarRegistrationAction} buttonClassName="h-8 rounded-md border-dashed px-3 font-normal" buttonTableControl pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
     </li>
     );
   };
