@@ -9,7 +9,7 @@ Summary: **38 cases** — CI mapped 35, CI gaps 2, not applicable 1.
 | LIVE-AUTH-001 | Email/password signup succeeds and establishes the correct initial account state | mapped | required | AUTH-IDENTITY-003, AUTH-EMAIL-001 |
 | LIVE-AUTH-002 | Signup rejects duplicate/invalid identities without account enumeration | mapped | required | AUTH-IDENTITY-003, AUTH-ERROR-001 |
 | LIVE-AUTH-003 | Password login accepts valid credentials and rejects invalid/unknown credentials safely | mapped | required | AUTH-STORAGE-004, AUTH-ERROR-001, AUTH-RATE-001 |
-| LIVE-AUTH-004 | Google OAuth live flow preserves transaction binding and account-linking rules | mapped | required | AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005 |
+| LIVE-AUTH-004 | Google OAuth live flow preserves transaction binding and account-linking rules | mapped | manual only | AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005 |
 | LIVE-AUTH-005 | Logout and session invalidation prevent post-logout reuse | mapped | required | AUTH-SESSION-002, AUTH-SESSION-009, AUTH-SESSION-010 |
 | LIVE-AUTH-006 | Anonymous and incomplete-auth sessions cannot access protected pages or APIs | mapped | required | AUTH-AUTHZ-001, AUTH-FRAMEWORK-001, AUTH-API-004 |
 | LIVE-AUTH-007 | Unpaid/expired member sees only the payment page while signed in | mapped | required | AUTH-AUTHZ-001 |
@@ -27,7 +27,7 @@ Summary: **38 cases** — CI mapped 35, CI gaps 2, not applicable 1.
 | LIVE-AUTH-019 | Session fixation, token tampering, stale-session replay, and revoked-session reuse fail closed | mapped | required | AUTH-SESSION-002, AUTH-SESSION-009, AUTH-SESSION-010 |
 | LIVE-AUTH-020 | Rate limits resist trivial identity/origin normalization bypass and recover according to policy | mapped | required | AUTH-RATE-001, AUTH-RATE-004 |
 | LIVE-AUTH-021 | Turnstile/bot controls fail closed when required and cannot be bypassed by direct API calls | mapped | required | AUTH-BOT-001, AUTH-BOT-002 |
-| LIVE-AUTH-022 | Redirect and callback parameters cannot escape approved application destinations | mapped | required | AUTH-TRANSACTION-010, AUTH-OAUTH-002 |
+| LIVE-AUTH-022 | Sign-in return paths cannot escape approved application destinations | mapped | required | AUTH-TRANSACTION-010 |
 | LIVE-AUTH-023 | Server-side validation rejects request/input tampering independent of the UI | mapped | required | AUTH-API-004, AUTH-AUTHZ-005 |
 | LIVE-AUTH-024 | One-time auth operations resist replay and bounded concurrency races | mapped | required | AUTH-TRANSACTION-003, AUTH-TRANSACTION-004, AUTH-MFA-006 |
 | LIVE-AUTH-025 | Cookies, HTTPS, caching, CSP/frame protections, and security headers match production expectations | mapped | required | AUTH-SESSION-001, AUTH-TRANSPORT-001, AUTH-FRAMEWORK-001 |
