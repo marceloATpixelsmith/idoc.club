@@ -68,8 +68,6 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
   await page.locator('input[name="code"]').fill(secondLoginCode);
-  if (await page.getByLabel(/Remember me/).count()) await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page).toHaveURL(/\/dashboard\/security/);
-  evidence.push("LIVE-AUTH-022", "LIVE-AUTH-038");
-  if (evidence.length === 0) throw new Error("No live auth evidence was recorded.");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/membership(?:\?|$)/);
 });
