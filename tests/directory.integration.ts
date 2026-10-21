@@ -153,6 +153,22 @@ test('paid directory: returns member email for contact while excluding addresses
   assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
+test('paid directory: text search matches first name, last name, the full name, is case-insensitive, and treats % and _ literally', async () => {
+  await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('DE', [judgeRole], { firstName: 'Grace', lastName: 'Hopper' });
+  await entitledMemberIn('DE', [judgeRole], { firstName: '100%', lastName: 'Under_score' });
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Zed', lastName: 'Searcher' });
+  const names = async (q: string) => (await asMember(searcher.id, () => listMemberDirectory({ q }))).rows.map((row) => `${row.firstName} ${row.lastName}`);
+  assert.deepEqual(await names('ada'), ['Ada Lovelace']);
+  assert.deepEqual(await names('LOVELACE'), ['Ada Lovelace']);
+  assert.deepEqual(await names('Ada Lovelace'), ['Ada Lovelace'], 'a search spanning first and last name must match the full name');
+  assert.deepEqual(await names('a l'), ['Ada Lovelace']);
+  assert.deepEqual(await names('Grace'), ['Grace Hopper']);
+  assert.deepEqual(await names('%'), ['100% Under_score'], 'a percent sign is a literal, not a wildcard');
+  assert.deepEqual(await names('r_s'), ['100% Under_score'], 'an underscore is a literal, not a single-character wildcard');
+  assert.deepEqual(await names('nobody-by-this-name'), []);
+});
+
 test('paid directory: only active, non-admin member accounts appear in directory results', async () => {
   const archived = await entitledMemberIn('DE', [judgeRole], { firstName: 'Archived', lastName: 'Member' });
   const suspended = await entitledMemberIn('ES', [veterinarianRole], { firstName: 'Suspended', lastName: 'Member' });

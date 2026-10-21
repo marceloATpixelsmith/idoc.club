@@ -7,7 +7,7 @@ import { MemberDirectoryTable } from '@/components/directory/member-directory-ta
 import { PageHeader } from '@/components/site/PageHeader';
 import { getPublicUser } from '@/lib/db/queries';
 import { getPublicMemberConcentration } from '@/lib/directory/aggregate';
-import { DirectoryRateLimitedError, listMemberDirectory } from '@/lib/directory/member-directory';
+import { DirectoryBusyError, DirectoryRateLimitedError, listMemberDirectory } from '@/lib/directory/member-directory';
 import { DIRECTORY_VIEW_COOKIE, parseDirectoryView } from '@/lib/directory/member-directory-view';
 
 export const dynamic = 'force-dynamic';
@@ -33,12 +33,14 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
   let listing: Awaited<ReturnType<typeof listMemberDirectory>> | null = null;
   let unavailable = false;
   let rateLimited = false;
+  let busy = false;
 
   if (activeTab === 'directory' && user) {
     try {
       listing = await listMemberDirectory(parseDirectoryView((await cookies()).get(DIRECTORY_VIEW_COOKIE)?.value, user.id));
     } catch (error) {
       if (error instanceof DirectoryRateLimitedError) rateLimited = true;
+      else if (error instanceof DirectoryBusyError) busy = true; // expected load shedding, not an error to report
       else {
         unavailable = true;
         // Never swallow the cause: this message is all a member sees, so Sentry (full exception and
@@ -66,7 +68,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
         <h2 className="font-semibold">Active membership required</h2>
         <p className="mt-2 text-sm text-muted-foreground">Directory results are available only to signed-in active members.</p>
         <Link className="mt-4 inline-block text-sm text-gold underline underline-offset-4" href="/sign-in">Member sign in</Link>
-      </div> : rateLimited ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">You have searched the directory a lot in a short time. Please wait a few minutes and try again.</p> : unavailable || !listing ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The directory could not be loaded. Please try again later.</p> : <MemberDirectoryTable filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />}
+      </div> : rateLimited ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">You have searched the directory a lot in a short time. Please wait a few minutes and try again.</p> : busy ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The directory is busy right now. Please try again in a moment.</p> : unavailable || !listing ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The directory could not be loaded. Please try again later.</p> : <MemberDirectoryTable filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />}
     </section>
   </>;
 }
