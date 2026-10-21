@@ -22,13 +22,16 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
   if (candidate.username !== 'idoc_staging_app' || candidate.pathname !== '/ayni_space') {
     throw new Error('STAGING_POSTGRES_URL must use the idoc_staging_app role and ayni_space database.');
   }
-  const options = candidate.searchParams.get('options') ?? '';
-  if (options && !/(?:^|\s)-c\s*search_path=idoc_staging(?:\s|$)/.test(options)) {
+  const optionValues = candidate.searchParams.getAll('options');
+  const options = optionValues.join(' ');
+  const searchPath = /(?:^|\\s)-c\\s*search_path=([^\\s]+)/.exec(options)?.[1];
+  if (searchPath && searchPath !== 'idoc_staging') {
     throw new Error('STAGING_POSTGRES_URL must not override the idoc_staging search path.');
   }
-  if (!options) {
+  if (!searchPath) {
     // Vercel's staging URL is scoped to idoc_staging_app; add the schema path explicitly for CI.
-    candidate.searchParams.set('options', '-c search_path=idoc_staging');
+    candidate.searchParams.delete('options');
+    candidate.searchParams.set('options', [options, '-c search_path=idoc_staging'].filter(Boolean).join(' '));
   }
 
   return candidate;
