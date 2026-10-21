@@ -151,6 +151,7 @@ export async function PublicSeminarsCatalog() {
 }
 
 export async function MemberRegistrations({ tab, view }: { tab?: string; view?: string }) {
+  if (view === 'past') return <PastSeminars />;
   const user = await getUser();
   if (!user) return null;
 
@@ -164,7 +165,6 @@ export async function MemberRegistrations({ tab, view }: { tab?: string; view?: 
   // (docs/08). A signed-in user with no member profile at all (an administrator, most commonly) sees
   // the same public catalog a signed-out visitor does rather than being blocked entirely. A profile
   // gets its own profile-scoped catalog for registration-aware detail navigation without hiding rows.
-  if (view === 'past') return <PastSeminars />;
   if (view !== 'my') {
     if (!member) return <PublicSeminarsCatalog />;
     return <AvailableSeminars profileId={member.profile.id} />;
