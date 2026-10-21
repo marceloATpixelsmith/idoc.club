@@ -63,14 +63,14 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
     throw new ManualGithubOperationsError('GitHub could not be reached. Try again shortly.');
   }
   if (response.status === 401 || response.status === 403) {
-    throw new ManualGithubOperationsError('GitHub rejected the existing Actions token. Check its repository scope, Actions read/write permission and expiry.', response.status);
+    throw new ManualGithubOperationsError('GitHub rejected the existing Actions token. Check its repository scope, Actions read/write and Pull requests read/write permissions, and expiry.', response.status);
   }
   if (response.status === 404) {
     throw new ManualGithubOperationsError('GitHub cannot find this workflow on the default branch yet. Promote the workflow file to main, then try again.', response.status);
   }
   if (!response.ok && response.status !== 204) {
     if (response.status === 422) {
-      throw new ManualGithubOperationsError('GitHub could not dispatch this workflow. Confirm workflow_dispatch is enabled and the workflow exists on main.', response.status);
+      throw new ManualGithubOperationsError('GitHub could not perform this operation. For live-auth confirm workflow_dispatch exists on main; for promotion confirm staging differs from main and no conflicting pull request exists.', response.status);
     }
     throw new ManualGithubOperationsError(`GitHub returned an unexpected status (${response.status}).`, response.status);
   }
