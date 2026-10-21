@@ -1,4 +1,4 @@
-# Claude Code Cloud — Live Authentication & Security Runbook
+# GitHub Actions — Live Authentication & Security Runbook
 
 ## Authority
 
@@ -10,7 +10,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Test only the explicitly provided staged/live hostname.
 - Never substitute localhost or a Vercel preview.
-- Use disposable accounts and the Pixelsmith E2E Email connector for flows requiring real mail.
+- Use disposable accounts and the GitHub Actions MXroute mailbox integration for flows requiring real mail.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
@@ -58,11 +58,11 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 ## Real email
 
 For every case with `requiresEmail=true`:
-- create a mailbox with the connected Pixelsmith E2E Email tools;
+- reuse the run's existing disposable mailbox when it can safely support the next step; otherwise create one through the GitHub Actions MXroute integration;
 - make the staged application itself send the transactional email;
 - poll/read the mailbox and use the real link/code in the browser flow;
 - never use `send_e2e_test_message` as a substitute for the application's own outbound email;
-- delete the mailbox only after the flow passes; preserve it temporarily when failure evidence depends on it.
+- delete each mailbox once, during end-of-run cleanup after all dependent flows pass; preserve it temporarily when failure evidence depends on it.
 
 ## Privileged (administrator/super_admin) test identities
 
