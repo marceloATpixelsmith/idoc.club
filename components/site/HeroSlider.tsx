@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -82,12 +83,15 @@ export function HeroSlider() {
               i === index ? 'opacity-100' : 'opacity-0'
             }`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- full-bleed hero background, not a content image */}
-            <img
+            <Image
               src={slide.image}
               alt={slide.alt}
-              {...(i === 0 ? {} : { loading: 'lazy' as const })}
-              className="h-full w-full object-cover"
+              fill
+              sizes="100vw"
+              priority={i === 0}
+              fetchPriority={i === 0 ? 'high' : 'auto'}
+              loading={i === 0 ? 'eager' : 'lazy'}
+              className="object-cover"
               style={{
                 objectPosition: slide.focal,
                 animation: i === index ? 'hero-zoom 16s ease-out forwards' : undefined,
