@@ -3,7 +3,7 @@ import { messages, waitForOtp } from "../../scripts/live-auth-mailbox.mjs";
 
 const email = process.env.LIVE_AUTH_EMAIL;
 const password = process.env.LIVE_AUTH_TEST_PASSWORD;
-if (!email || !/^[^@\\s]+@pixelsmith\\.space$/i.test(email)) throw new Error("LIVE_AUTH_EMAIL must be a disposable @pixelsmith.space address.");
+if (!email || !/^[^@\s]+@pixelsmith\.space$/i.test(email)) throw new Error("LIVE_AUTH_EMAIL must be a disposable @pixelsmith.space address.");
 if (!password || password.length < 10) throw new Error("LIVE_AUTH_TEST_PASSWORD must be configured and meet the live password policy.");
 
 async function startSignIn(page, returnTo) {
@@ -36,14 +36,14 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
 
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\\/dashboard(?:\\?|$)/);
+  await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
   evidence.push("LIVE-AUTH-001");
 
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\\/sign-in/);
+  await expect(page).toHaveURL(/\/sign-in/);
   await page.goto("/dashboard/security");
-  await expect(page).toHaveURL(/\\/sign-in/);
+  await expect(page).toHaveURL(/\/sign-in/);
   evidence.push("LIVE-AUTH-005", "LIVE-AUTH-006");
 
   await startSignIn(page);
@@ -55,7 +55,7 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
   const loginCode = await waitForOtp(email, "sign-in code", beforeLogin);
   await page.locator('input[name="code"]').fill(loginCode);
   if (await page.getByLabel(/Remember me/).count()) await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page).toHaveURL(/\\/dashboard(?:\\?|$)/);
+  await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
   evidence.push("LIVE-AUTH-003");
 
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
@@ -67,7 +67,7 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
   await page.locator('input[name="code"]').fill(secondLoginCode);
   if (await page.getByLabel(/Remember me/).count()) await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page).toHaveURL(/\\/dashboard\\/security/);
+  await expect(page).toHaveURL(/\/dashboard\/security/);
   evidence.push("LIVE-AUTH-022", "LIVE-AUTH-038");
   if (evidence.length === 0) throw new Error("No live auth evidence was recorded.");
 });
