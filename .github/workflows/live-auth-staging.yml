@@ -19,12 +19,13 @@ permissions:
 
 jobs:
   live-auth:
+    environment: staging-live-e2e
     if: github.event_name == 'schedule' || inputs.confirm_target == 'staging.idoc.club'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       LIVE_AUTH_BASE_URL: https://staging.idoc.club
-      STAGING_POSTGRES_URL: ${{ secrets.STAGING_POSTGRES_URL }}
+      STAGING_POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
       E2E_SERVICE_TOKEN: ${{ secrets.E2E_SERVICE_TOKEN }}
       E2E_SERVICE_URL: ${{ vars.E2E_SERVICE_URL }}
       LIVE_AUTH_TEST_PASSWORD: ${{ secrets.LIVE_AUTH_TEST_PASSWORD }}
@@ -50,7 +51,7 @@ jobs:
       - name: Create one disposable mailbox for the sequential auth journey
         id: mailbox
         run: |
-          node --input-type=module -e "import { appendFileSync } from 'node:fs'; import { createMailbox } from './scripts/live-auth-mailbox.mjs'; const email = await createMailbox(); appendFileSync(process.env.GITHUB_OUTPUT, 'email=' + email + '\\n'); console.log('Created one disposable mailbox for this run.');"
+          node --input-type=module -e "import { appendFileSync } from 'node:fs'; import { createMailbox } from './scripts/live-auth-mailbox.mjs'; const email = await createMailbox(); appendFileSync(process.env.GITHUB_OUTPUT, 'email=' + email + '\n'); console.log('Created one disposable mailbox for this run.');"
       - name: Run live auth journey against staging
         id: live_tests
         env:

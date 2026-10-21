@@ -26,4 +26,4 @@ writeFileSync("test-results/auth/auth-live-results.json", JSON.stringify({
   completedAt: automated.completedAt,
   tester: "GitHub Actions",
   results,
-}, null, 2) + "\\n");
+}, null, 2) + "\n");

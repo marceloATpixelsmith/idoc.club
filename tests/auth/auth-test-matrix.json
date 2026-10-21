@@ -210,20 +210,16 @@
         "requiresEmail": false,
         "requiresAdmin": false,
         "preconditions": [
-          "Use the designated staged/live hostname, never a Vercel preview or localhost.",
-          "Use only disposable test identities and test data."
+          "Manual verification only. Do not run Google OAuth consent/account-selection as an automated GitHub live test."
         ],
         "steps": [
-          "Complete a real Google sign-in against staging.",
-          "Cancel/deny consent and verify return behavior.",
-          "Replay or alter callback/state parameters only within the disposable test flow.",
-          "Verify an existing password account is not silently linked to the wrong Google identity."
+          "Excluded from the GitHub automated live suite by agreement; use the existing CI integration/security coverage for provider callback and transaction-binding behavior."
         ],
         "pass": [
-          "Successful OAuth creates/reuses only the intended identity; cancelled flow returns safely; tampered/replayed callbacks fail; no unintended account linking occurs."
+          "The automated live workflow reports this case as manual-only and does not imply that real Google consent was tested."
         ],
         "fail": [
-          "State/callback replay succeeds, cancellation lands incorrectly, or Google identity becomes attached to the wrong account."
+          "The automated workflow attempts real Google consent or reports this case as an automated pass."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
@@ -233,7 +229,7 @@
         ],
         "automation": {
           "mode": "manual-only",
-          "reason": "Real Google consent and account-linking require a human-operated browser identity; exclude these provider steps from unattended GitHub Actions and report them as blocked/manual-required, never passed."
+          "reason": "Real Google OAuth consent and account selection are excluded from automated GitHub live tests by the agreed test scope; provider configuration and callback security remain covered by CI tests."
         }
       }
     },
