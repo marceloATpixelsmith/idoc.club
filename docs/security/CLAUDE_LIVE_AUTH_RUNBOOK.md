@@ -10,7 +10,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Test only the explicitly provided staged/live hostname.
 - Never substitute localhost or a Vercel preview.
-- Use disposable accounts and the GitHub Actions MXroute mailbox integration for flows requiring real mail.
+- Use disposable accounts and the existing Pixelsmith E2E Email connector for flows requiring real mail. Do not claim GitHub Actions can create/read mailboxes until its MXroute integration is implemented.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
@@ -49,69 +49,19 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 ## Real email
 
 For every case with `requiresEmail=true`:
-- reuse the run's existing disposable mailbox when it can safely support the next step; otherwise create one through the GitHub Actions MXroute integration;
-- make the staged application itself send the transactional email;
-- poll/read the mailbox and use the real link/code in the browser flow;
-- never use `send_e2e_test_message` as a substitute for the application's own outbound email;
-- delete each mailbox once, during end-of-run cleanup after all dependent flows pass; preserve it temporarily when failure evidence depends on it.
+- Reuse the run's existing disposable mailbox/account when it can safely support the next step; create another mailbox or account only when a clean identity or distinct email address is required.
+- Until the GitHub Actions MXroute integration is implemented, use the existing Pixelsmith E2E Email connector for manual live runs.
+- Make the staged application itself send the transactional email; poll/read the mailbox and use the real link/code in the browser flow.
+- Never use `send_e2e_test_message` as a substitute for the application's own outbound email.
+- Delete each mailbox once after all dependent flows that use it have passed; preserve it temporarily when failure evidence depends on it.
 
 ## Privileged (administrator/super_admin) test identities
 
-IDOC has no self-service role elevation (docs/07-administrator-and-operations-runbook.md:
-Organization Settings and role grants are Super-Admin-only, provisioned directly, not through an
-invitation flow). Cases with `live.requiresAdmin=true` (009-013, 017, 026, 033) therefore need a
-disposable privileged identity provisioned out of band before they can run live.
+Cases with `live.requiresAdmin=true` need a disposable privileged identity because IDOC has no self-service role elevation. The canonical TypeScript/SQL scripts remain available for provisioning and cleanup, and enforce the staging-only connection boundary.
 
-**Claude Code's sandboxed session cannot write to the staging database itself.** Raw Postgres TCP
-egress is blocked at the network level, and the one read path that does work (Render's own
-`query_render_postgres` MCP tool) is explicitly read-only by design -- confirmed by testing both
-directly. There is no plugin, connector, or workaround that grants write access from inside the
-sandbox; do not keep re-attempting one. Both `scripts/e2e-grant-privileged-role.ts` and
-`scripts/e2e-delete-test-account.ts` remain the canonical, tested implementations of this logic (run
-them yourself from an environment with real Postgres write access, e.g. locally or from CI, if you
-have one) -- but when Claude itself runs the audit, role provisioning and cleanup are handed off as
-ready-to-run SQL instead:
+Until the GitHub Actions database provisioning and cleanup steps are implemented and verified, continue using the documented operator procedure for role grants and cleanup. Do not represent any privileged case as fully automated before the workflow provisions its identity through `STAGING_POSTGRES_URL` and confirms cleanup. For a manual run, follow the current staging-only instructions and preserve the generated cleanup SQL handoff.
 
-1. Complete a real signup through the live app for a disposable `@pixelsmith.space` test address
-   (LIVE-AUTH-001), so account state, verification, and TOTP enrollment stay genuinely live-tested.
-2. Fill in `scripts/e2e-grant-privileged-role.sql`'s `{{TARGET_EMAIL}}`, `{{TARGET_ROLE}}`, and
-   `{{GRANTED_BY_USER_ID}}` placeholders with real values (see "Known staging environment facts"
-   above for the granter id) and hand the resulting SQL to the operator to run against staging with
-   a Postgres client authenticated with `idoc_staging_app` (`psql "$STAGING_POSTGRES_URL" -f <file>`).
-   Do not use Render's dashboard SQL console or a schema-owner/Production connection: the SQL script
-   verifies `current_user`, `current_database()`, and `current_schema()` before any write. Wait for
-   confirmation it ran before continuing -- do not guess
-   that it succeeded. It records an `application_roles` row and a matching `audit_log` entry tagged
-   as automated test-tooling provisioning, so LIVE-AUTH-026's audit-evidence check still sees a
-   coherent, attributable trail, and increments `session_version` so the grant only takes effect
-   through a genuine fresh login (mirrors `lib/membership/role-grants.ts` exactly).
-3. Run the applicable LIVE-AUTH cases.
-4. At the end of the run (whether it passed or not), fill in `scripts/e2e-delete-test-account.sql`'s
-   `{{TARGET_EMAILS}}` placeholder with every disposable `@pixelsmith.space` email created during
-   this run (not just the privileged one) and deliver the resulting file to the operator alongside
-   the results JSON. It deletes every genuinely deletable row each account owns -- its own sessions,
-   MFA factors/codes, role grants, and membership rows -- and per account, not as one all-or-nothing
-   batch: if one account is ever referenced on a row it does not own (verified someone else's
-   professional role, authored real content, recorded a real member's payment), that account alone
-   is skipped with a warning and every other account in the list is still cleaned up. The account row
-   itself and its profile are **not** physically deleted -- `idoc_staging.audit_log`/`idoc_staging.profile_change_history`
-   are immutable by design (a database trigger unconditionally rejects updating or deleting them),
-   and the foreign keys referencing them block deleting their parent rows too, once any audited
-   action was ever recorded for the account. Instead the account is neutralized exactly like the
-   app's own self-service `deleteOwnAccount()` (`lib/membership/data-access.ts`): `account_state`
-   set to `deleted` and the login email permanently mangled, so it can never authenticate again and
-   the address becomes reusable. The immutable rows this leaves behind never contain secrets by
-   design (see Evidence rules below), so this is not a leak -- it is the same tradeoff every real
-   account deletion in this app already makes.
-
-Both the `.ts` and `.sql` forms refuse any email outside `@pixelsmith.space` and are otherwise kept
-in exact lockstep -- change one, change the other. Never point either at a real member's database or
-run either against a non-disposable account.
-
-This tooling is operator-only test infrastructure: it changes no product-facing auth behavior, adds
-no endpoint or user-reachable flow, and alters no LIVE-AUTH case's pass/fail criteria -- it only
-provisions and tears down the disposable privileged identity the already-canonical `requiresAdmin`
-cases above call for. No new canonical test case is warranted for it.
+The intended GitHub workflow must reuse one privileged identity across all cases that its granted role authorizes, and must attempt cleanup once for every unique test identity. It must never use a production URL or schema-owner credentials.
 
 ## Evidence rules
 
