@@ -7,14 +7,14 @@ export default class LiveAuthReporter {
   }
 
   onTestEnd(test, result) {
-    const annotation = test.annotations.find((item) => item.type === "live-auth-cases");
+    const annotation = test.annotations.find((item) => item.type === "live-auth-cases" || item.type === "live-auth-partial-cases");
     if (!annotation) return;
     const ids = String(annotation.description || "").split(",").filter((id) => /^LIVE-AUTH-\d{3}$/.test(id));
     for (const id of ids) {
       this.results.push({
         id,
-        status: result.status === "passed" ? "pass" : "fail",
-        summary: result.status === "passed" ? "Live browser journey passed." : "Live browser journey failed.",
+        status: result.status === "passed" && annotation.type === "live-auth-cases" ? "pass" : result.status === "passed" ? "partial" : "fail",
+        summary: result.status === "passed" && annotation.type === "live-auth-cases" ? "Live browser journey passed." : result.status === "passed" ? "Partial live evidence only; full matrix criteria were not exercised." : "Live browser journey failed.",
         evidence: [test.title],
       });
     }
