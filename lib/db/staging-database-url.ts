@@ -24,7 +24,7 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
   }
   const optionValues = candidate.searchParams.getAll('options');
   const options = optionValues.join(' ');
-  const searchPath = /(?:^|\\s)-c\\s*search_path=([^\\s]+)/.exec(options)?.[1];
+  const searchPath = /(?:^|\s)-c\s*search_path=([^\s]+)/.exec(options)?.[1];
   if (searchPath && searchPath !== 'idoc_staging') {
     throw new Error('STAGING_POSTGRES_URL must not override the idoc_staging search path.');
   }
