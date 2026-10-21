@@ -34,6 +34,16 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
     candidate.searchParams.set('options', [options, '-c search_path=idoc_staging'].filter(Boolean).join(' '));
   }
 
+  const sslModes = candidate.searchParams.getAll('sslmode').map((mode) => mode.toLowerCase());
+  const secureSslModes = new Set(['require', 'verify-ca', 'verify-full']);
+  if (sslModes.some((mode) => !secureSslModes.has(mode)) || new Set(sslModes).size > 1) {
+    throw new Error('STAGING_POSTGRES_URL must use a secure and unambiguous sslmode.');
+  }
+  if (sslModes.length === 0) {
+    // Render requires TLS; postgres.js does not inherit the application's separate connection helper.
+    candidate.searchParams.set('sslmode', 'require');
+  }
+
   return candidate;
 }
 

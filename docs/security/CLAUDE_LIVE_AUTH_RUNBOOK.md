@@ -18,6 +18,9 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Staging hostname: `staging.idoc.club` (a dedicated Vercel Preview deployment on the `staging`
   branch, built specifically for this audit -- `redesign.idoc.club` is production; never target it).
+  In Vercel project `idoc.club`, set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
+  only for Preview deployments on git branch `staging`, using Cloudflare's official always-pass
+  testing pair. Never expose the testing secret to production or other preview branches.
   `staging.idoc.club` uses Cloudflare Turnstile always-pass testing keys scoped to the `staging`
   branch, so automated signup/reset flows can complete Turnstile without weakening real bot
   protection on production. This requires `lib/auth/turnstile.ts`'s narrow, explicit exception

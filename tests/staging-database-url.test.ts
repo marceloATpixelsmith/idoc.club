@@ -9,10 +9,11 @@ test('requires explicit staging confirmation before touching anything', () => {
   const url = validateStagingDatabaseUrl(STAGING, true);
   assert.equal(url.username, 'idoc_staging_app');
   assert.equal(url.pathname, '/ayni_space');
+  assert.equal(url.searchParams.get('sslmode'), 'require');
 });
 
 test('rejects missing or malformed URLs and production schema credentials', () => {
-  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/ayni_space', 'postgres://localhost/ayni_space', 'postgres://idoc_production_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/other?options=-c%20search_path%3Didoc_staging']) {
+  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/ayni_space', 'postgres://localhost/ayni_space', 'postgres://idoc_production_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/other?options=-c%20search_path%3Didoc_staging', 'postgres://idoc_staging_app:secret@db.render.com/ayni_space?sslmode=disable']) {
     assert.throws(() => validateStagingDatabaseUrl(value, true));
   }
 });

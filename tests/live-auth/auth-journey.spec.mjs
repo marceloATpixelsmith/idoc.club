@@ -9,7 +9,9 @@ if (!password || password.length < 10) throw new Error("LIVE_AUTH_TEST_PASSWORD 
 async function startSignIn(page, returnTo) {
   await page.goto(returnTo ? `/api/auth/session-expired?returnTo=${encodeURIComponent(returnTo)}` : "/sign-in");
   await page.getByLabel("Email Address").fill(email);
-  await page.getByRole("button", { name: "Sign In" }).click();
+  const emailSubmitButton = page.getByRole("button", { name: "Sign In" });
+  await expect(emailSubmitButton).toBeEnabled({ timeout: 45_000 });
+  await emailSubmitButton.click();
   await expect(page.locator('input[name="password"]')).toBeVisible();
 }
 
@@ -24,7 +26,9 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   const beforeSignup = (await messages(email)).length;
   await page.goto("/sign-up");
   await page.getByLabel("Email Address").fill(email);
-  await page.getByRole("button", { name: "Sign up" }).click();
+  const signupButton = page.getByRole("button", { name: "Sign up" });
+  await expect(signupButton).toBeEnabled({ timeout: 45_000 });
+  await signupButton.click();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const signupCode = await waitForOtp(email, "verification code", beforeSignup);
   await page.locator('input[name="code"]').fill(signupCode === "000000" ? "111111" : "000000");
