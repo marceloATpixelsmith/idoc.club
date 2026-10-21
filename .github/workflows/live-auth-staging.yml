@@ -4,14 +4,6 @@ on:
   push:
     branches:
       - staging
-  workflow_dispatch:
-    inputs:
-      confirm_target:
-        description: Type staging.idoc.club to confirm the authorized target
-        required: true
-        type: string
-  schedule:
-    - cron: '0 9 * * 1'
 
 concurrency:
   group: live-auth-staging
@@ -19,13 +11,74 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: read
 
 jobs:
+  wait-for-staging-deployment:
+    name: Wait for matching staging deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      statuses: read
+    steps:
+      - name: Wait for Vercel to deploy the current staging commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const repository = process.env.GITHUB_REPOSITORY;
+          const commitSha = process.env.GITHUB_SHA;
+          const token = process.env.GH_TOKEN;
+          const apiHeaders = {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          };
+          const deadline = Date.now() + 20 * 60 * 1000;
+
+          async function getJson(path) {
+            const response = await fetch(`https://api.github.com/repos/${repository}/${path}`, { headers: apiHeaders });
+            if (!response.ok) {
+              throw new Error(`GitHub API request failed (${response.status}) for ${path}.`);
+            }
+            return response.json();
+          }
+
+          while (Date.now() < deadline) {
+            const branch = await getJson("branches/staging");
+            if (branch.commit.sha !== commitSha) {
+              throw new Error("Staging advanced to a different commit; refusing to test a stale deployment.");
+            }
+
+            const statuses = await getJson(`commits/${commitSha}/statuses?per_page=100`);
+            const vercelStatus = statuses.find((status) => status.context === "Vercel");
+            if (vercelStatus?.state === "success") {
+              if (!vercelStatus.target_url?.startsWith("https://vercel.com/ayni-team/idoc.club/")) {
+                throw new Error("The successful Vercel status does not point to the IDOC Vercel project.");
+              }
+              console.log(`Vercel reports commit ${commitSha} deployed successfully to the IDOC project.`);
+              process.exit(0);
+            }
+            if (vercelStatus && ["failure", "error"].includes(vercelStatus.state)) {
+              throw new Error(`Vercel deployment failed for ${commitSha} (${vercelStatus.state}).`);
+            }
+
+            console.log(`Waiting for Vercel deployment status for ${commitSha}.`);
+            await new Promise((resolve) => setTimeout(resolve, 15000));
+          }
+
+          throw new Error(`Timed out waiting for Vercel deployment of ${commitSha}.`);
+          NODE
+
   live-auth:
+    name: Run live authentication suite
+    needs: wait-for-staging-deployment
     environment: staging-live-e2e
-    if: github.event_name == 'schedule' || github.event_name == 'push' || inputs.confirm_target == 'staging.idoc.club'
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: read
     env:
       LIVE_AUTH_BASE_URL: https://staging.idoc.club
       STAGING_POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
@@ -84,3 +137,4 @@ jobs:
             playwright-report/
           if-no-files-found: warn
           retention-days: 30
+\n
