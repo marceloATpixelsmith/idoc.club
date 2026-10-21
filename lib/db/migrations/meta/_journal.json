@@ -575,6 +575,13 @@
       "when": 1792390000000,
       "tag": "0081_member_directory_trigram_search",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0082_member_list_name_sort_index",
+      "breakpoints": true
     }
   ]
 }

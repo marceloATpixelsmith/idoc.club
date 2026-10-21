@@ -248,6 +248,9 @@ export const profiles = idocSchema.table('profiles', {
   index('profiles_first_name_trgm_idx').using('gin', sql`${table.firstName} gin_trgm_ops`),
   index('profiles_last_name_trgm_idx').using('gin', sql`${table.lastName} gin_trgm_ops`),
   index('profiles_full_name_trgm_idx').using('gin', sql`(${table.firstName} || ' ' || ${table.lastName}) gin_trgm_ops`),
+  // Serves the administrator Members roster's default Name sort (last name, first name, then id), so the
+  // first page is read straight off the index instead of sorting every matching member. Migration 0082.
+  index('profiles_name_sort_idx').on(table.lastName, table.firstName, table.id),
 ]);
 
 /** Singleton, server-owned public organization identity. Private settings must use separate tables. */
