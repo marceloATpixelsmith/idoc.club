@@ -42,7 +42,7 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in/);
-  await page.goto("/dashboard/security");
+  await page.goto("/dashboard/membership");
   await expect(page).toHaveURL(/\/sign-in/);
   evidence.push("LIVE-AUTH-005", "LIVE-AUTH-006");
 
@@ -60,10 +60,10 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
 
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await startSignIn(page, "/dashboard/security");
+  await startSignIn(page, "/dashboard/membership");
+  const beforeSecondLogin = (await messages(email)).length;
   await submitPassword(page, password);
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
-  const beforeSecondLogin = (await messages(email)).length;
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
   await page.locator('input[name="code"]').fill(secondLoginCode);
   if (await page.getByLabel(/Remember me/).count()) await page.getByRole("button", { name: "Verify" }).click();
