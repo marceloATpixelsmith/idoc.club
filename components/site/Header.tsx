@@ -151,13 +151,12 @@ function MobileNavSection({
           <path d="M0 0h8L4 5z" />
         </svg>
       </button>
-      <div className="idoc-mobile-submenu" data-open={expanded}>
+      <div className="idoc-mobile-submenu" data-open={expanded} inert={!expanded}>
         <ul className="flex flex-col overflow-hidden">
           {items.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
-                tabIndex={expanded ? 0 : -1}
                 onClick={onNavigate}
                 className={`${mobileLinkClassName} pl-3 ${isItemActive(pathname, item.href) ? 'text-gold' : ''}`}
               >
@@ -294,6 +293,7 @@ export function Header({
           // Always mounted so the flip animation can run both ways; inert keeps the closed panel
           // out of the tab order and away from assistive technology.
           <div className="idoc-mobile-nav lg:hidden" data-open={open} inert={!open}>
+            <div className="idoc-mobile-nav__clip">
             <nav className="idoc-mobile-nav__panel border-t border-border bg-background px-5 py-4">
               <ul className="flex flex-col gap-1">
                 <li>
@@ -348,6 +348,7 @@ export function Header({
                 </li>
               </ul>
             </nav>
+            </div>
           </div>
         )
       }

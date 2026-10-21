@@ -105,13 +105,12 @@ export function AuthenticatedUserMenu({
             <path d="M0 0h8L4 5z" />
           </svg>
         </button>
-        <div className="idoc-mobile-submenu" data-open={open}>
+        <div className="idoc-mobile-submenu" data-open={open} inert={!open}>
           <ul className="flex flex-col overflow-hidden">
             {showAdminDashboard && (
               <li>
                 <Link
                   href="/admin"
-                  tabIndex={open ? 0 : -1}
                   onClick={handleNavigate}
                   className="flex items-center gap-2 py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                 >
@@ -124,7 +123,6 @@ export function AuthenticatedUserMenu({
               <form action={handleSignOut}>
                 <button
                   type="submit"
-                  tabIndex={open ? 0 : -1}
                   className="flex w-full items-center gap-2 bg-transparent py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
                 >
                   <LogOut className="size-4" />
