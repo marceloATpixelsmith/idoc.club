@@ -673,6 +673,8 @@ test('member seminar navigation uses a clear unboxed parent and contextual secon
   assert.match(catalog, /border-b-\[3px\]/);
   assert.match(catalog, /aria-current=\{showMySeminars \? 'page' : undefined\}/);
   assert.match(catalog, /href="\/seminars\?view=past"/);
+  assert.ok(catalog.indexOf('Available Seminars/Courses') < catalog.indexOf('Past Seminars/Courses'));
+  assert.ok(catalog.indexOf('Past Seminars/Courses') < catalog.indexOf('My Seminars/Courses'));
   assert.match(catalog, /aria-current=\{showPastSeminars \? 'page' : undefined\}/);
   assert.match(member, /if \(view === 'past'\) return <PastSeminars \/>/);
   assert.match(member, /async function PastSeminars\(\)/);
