@@ -28,32 +28,9 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   exception (or revert staging to a real Turnstile widget) without re-checking this file: a prior
   version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
   needed a human to solve it manually, one flow at a time.
-- **The staging and production deployments deliberately share the same Postgres database** (one
-  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) -- staging
-  is deliberately near-identical to production under `docs/07` §15's policy, not isolated from
-  it; the database is one of the values staging shares verbatim (Stripe and Brevo credentials
-  and the URL-family values are the named exceptions that differ instead). Sharing the database
-  specifically also avoids paying for a second Render Postgres instance. See `docs/07` "Branch,
-  environment, and deployment workflow" for the full policy. This is a permanent,
-  operator-confirmed decision, not a temporary gap or an oversight of this runbook. Practical
-  consequences for this audit:
-  - Every disposable test account, adversarial request, and piece of test data created during a
-    live-auth run lands in the real production database alongside genuine member data.
-  - The read-only `query_render_postgres` connector below is querying the **same** database
-    production reads/writes -- a query result may include real member rows, not just test rows.
-  - End-of-run cleanup (`scripts/e2e-delete-test-account.sql`) is not optional cosmetic tidying
-    here -- it is removing real rows from the production database. Treat every disposable
-    `@pixelsmith.space` account created during a run as required cleanup, not best-effort.
-  - Prefer the least invasive adversarial techniques that still validate the control (e.g. avoid
-    bulk/high-count operations even where the case would otherwise tolerate them), since there is
-    no environment isolation backstopping a mistake.
-- Staging's Postgres is reachable **read-only** from Claude Code's sandboxed session via the Render
-  MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`,
-  `workspaceId` `tea-d3c3eq7diees7392talg`; the app schema inside it is `idoc`). Useful for
-  verification queries (confirming target/revision, checking a grant landed, session-policy
-  inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
-  (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
-  actually performed.
+- Staging and production use the same Render PostgreSQL database instance but have separate schemas: `idoc_staging` and `idoc_production`. Their application roles are isolated: `idoc_staging_app` can access the staging schema, and `idoc_production_app` can access the production schema. Staging uses `DB_SCHEMA=idoc_staging`; never point live-auth provisioning or cleanup at a production connection.
+- The live-auth TypeScript and SQL provisioning/cleanup tools require the staging connection role `idoc_staging_app`, database `ayni_space`, and current schema `idoc_staging`; the tools fail closed if those checks do not match. Every table reference is explicitly qualified with `idoc_staging`. A test run changes rows only in the staging schema; it does not query or mutate production-schema member rows. Test identities and staging audit records still need the documented cleanup.
+- Staging's Postgres is reachable read-only from Claude Code's sandboxed session via the Render MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`, `workspaceId` `tea-d3c3eq7diees7392talg`; query staging tables in `idoc_staging`). This read-only connector is for verification; it cannot run provisioning or cleanup writes.
 - **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
   `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
   blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
@@ -65,7 +42,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   say otherwise.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
-  -- query `idoc.application_roles` via the read-only connector above.
+  -- query `idoc_staging.application_roles` via the read-only connector above.
 
 ## Execution order
 
