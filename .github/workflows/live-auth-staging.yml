@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   live-auth:
+    environment: staging-live-e2e
     if: github.event_name == 'schedule' || inputs.confirm_target == 'staging.idoc.club'
     runs-on: ubuntu-latest
     timeout-minutes: 35
