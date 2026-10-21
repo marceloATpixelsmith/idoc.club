@@ -22,7 +22,7 @@ test('logout revokes the registry session so a copied cookie cannot be replayed'
   const [oldCookie] = await context.cookies('http://127.0.0.1:3100');
 
   await page.getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).click();
-  await page.getByText('Sign out').click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('http://127.0.0.1:3100/sign-in');
 
   const replay = await browser.newContext();
@@ -153,7 +153,7 @@ test('sign out from a public page keeps the member on that page', async ({ brows
   await page.goto('/');
 
   await page.getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).click();
-  await page.getByText('Sign out').click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('http://127.0.0.1:3100/');
   await expect.poll(async () => (await page.request.get('/api/user')).json()).toBeNull();
 
