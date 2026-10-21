@@ -45,6 +45,12 @@ declare
   v_foreign_count int;
   v_account_state text;
 begin
+  if current_user <> 'idoc_staging_app' then
+    raise exception 'refusing: current_user % is not idoc_staging_app', current_user;
+  end if;
+  if current_database() <> 'ayni_space' then
+    raise exception 'refusing: current_database % is not ayni_space', current_database();
+  end if;
   for v_email in select unnest(array[{{TARGET_EMAILS}}]) loop
     begin
       if v_email !~* '^[^@[:space:]]+@pixelsmith\.space$' then
