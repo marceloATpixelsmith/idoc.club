@@ -104,23 +104,19 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Canonical controls:** AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005
 - **CI coverage:** mapped — `tests/security-e2e/google-oauth.spec.ts`, `tests/identity-ownership.integration.ts`, `tests/google-oauth-secret-rotation.test.ts`, `tests/google-oauth-secret-audit.integration.ts`
 - **Live:** required; email=no; admin=no; destructive=no
-- **Automation:** manual-only — Real Google consent and account-linking require a human-operated browser identity; exclude these provider steps from unattended GitHub Actions and report them as blocked/manual-required, never passed.
+- **Automation:** manual-only — Real Google OAuth consent and account selection are excluded from automated GitHub live tests by the agreed test scope; provider configuration and callback security remain covered by CI tests.
 
 ### Preconditions
-- Use the designated staged/live hostname, never a Vercel preview or localhost.
-- Use only disposable test identities and test data.
+- Manual verification only. Do not run Google OAuth consent/account-selection as an automated GitHub live test.
 
 ### Steps
-1. Complete a real Google sign-in against staging.
-2. Cancel/deny consent and verify return behavior.
-3. Replay or alter callback/state parameters only within the disposable test flow.
-4. Verify an existing password account is not silently linked to the wrong Google identity.
+1. Excluded from the GitHub automated live suite by agreement; use the existing CI integration/security coverage for provider callback and transaction-binding behavior.
 
 ### PASS
-- Successful OAuth creates/reuses only the intended identity; cancelled flow returns safely; tampered/replayed callbacks fail; no unintended account linking occurs.
+- The automated live workflow reports this case as manual-only and does not imply that real Google consent was tested.
 
 ### FAIL
-- State/callback replay succeeds, cancellation lands incorrectly, or Google identity becomes attached to the wrong account.
+- The automated workflow attempts real Google consent or reports this case as an automated pass.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
