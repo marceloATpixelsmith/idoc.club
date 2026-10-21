@@ -137,4 +137,3 @@ jobs:
             playwright-report/
           if-no-files-found: warn
           retention-days: 30
-
