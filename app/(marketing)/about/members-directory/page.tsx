@@ -61,7 +61,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
       {activeTab === 'map' ? <div className="mt-6">
         {!concentration?.ok ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The members map is temporarily unavailable. Please try again shortly.</p>
           : concentration.areas.length === 0 ? <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">Not enough member data is available yet to show the map. Check back soon.</p>
-          : <ConcentrationMap areas={concentration.areas} />}
+          : <ConcentrationMap areas={concentration.areas} canOpenDirectory={Boolean(user)} />}
       </div> : !user ? <div className="mt-8 border border-gold/40 bg-surface/50 p-6">
         <h2 className="font-semibold">Active membership required</h2>
         <p className="mt-2 text-sm text-muted-foreground">Directory results are available only to signed-in active members.</p>

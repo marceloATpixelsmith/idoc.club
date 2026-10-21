@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { COUNTRY_OPTIONS } from '@/lib/membership/countries';
+import { dailyCache } from '@/lib/cache/daily-cache';
 import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 export class DirectoryRateLimitedError extends Error {
@@ -38,7 +39,7 @@ export type DirectoryMemberRow = {
   email: string | null; federation: string | null; firstName: string;
   lastName: string; membershipType: MembershipTypeFilter | null; region: string | null; roles: DirectoryRoleDetail[] | null;
 };
-type RawDirectoryRow = DirectoryMemberRow;
+type RawDirectoryRow = DirectoryMemberRow & { profileId: number };
 
 function values(value: RawFilterValue, limit: number): string[] {
   const raw = Array.isArray(value) ? value : value?.split(',') ?? [];
@@ -85,16 +86,24 @@ export function normalizeDirectoryFilters(input: MemberDirectoryFilters) {
   };
 }
 
+/** A member's National Federation as the public map counts it (docs/05): their recorded federation,
+ * falling back to their address country only when none is recorded. The directory's federation
+ * column, filter and sort use the same rule, so clicking a country on the map lists exactly the
+ * members that country's dot counts. */
+const federationExpression = sql`coalesce(roles.federation, nullif(p.country_code, ''))`;
+
+/** Whether a member's current membership lists them in the directory at all. Shared by the
+ * (cacheable) listing query and the live per-page check, so both always apply the same rule. */
+const eligibleCondition = sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`;
+
 function queryParts(raw: MemberDirectoryFilters) {
   const filters = normalizeDirectoryFilters(raw);
-  const conditions = [
-    sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`,
-  ];
+  const conditions = [eligibleCondition];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     conditions.push(sql`(p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\' or (p.directory_email_opt_in and coalesce(u.email_display, u.email) ilike ${pattern} escape '\\'))`);
   }
-  if (filters.federation.length) conditions.push(sql`roles.federation in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
+  if (filters.federation.length) conditions.push(sql`${federationExpression} in (${sql.join(filters.federation.map((code) => sql`${code}`), sql`, `)})`);
   if (filters.region.length) conditions.push(sql`roles.region in (${sql.join(filters.region.map((region) => sql`${region}`), sql`, `)})`);
   if (filters.membershipType.length) {
     conditions.push(sql`(${sql.join(filters.membershipType.map((type) => type === 'combo'
@@ -126,7 +135,7 @@ function directoryOrder(sorting: DirectorySort[]) {
       : id === 'firstName' ? sql`p.first_name`
       : id === 'email' ? sql`case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end`
       : id === 'type' ? sql`roles.membership_type`
-      : id === 'federation' ? sql`roles.federation`
+      : id === 'federation' ? federationExpression
       : sql`roles.region`;
     return [
       sql`${column} ${direction} nulls last`,
@@ -137,25 +146,65 @@ function directoryOrder(sorting: DirectorySort[]) {
   return sql.join(expressions, sql`, `);
 }
 
-/** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
- * non-archived, non-administrator member records. */
-export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
-  const actor = await requireAccountAccess('member');
-  const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
-  if (!allowed) throw new DirectoryRateLimitedError();
+type DirectoryQueryInput = {
+  federation: string[]; membershipType: string[]; page: number; pageSize: number;
+  q?: string; region: string[]; sort: string;
+};
+
+/** The cacheable part of a listing: one page of rows (ordering, names, federation, region, role
+ * details) and the total, for a set of filters. It deliberately carries NO email and no live
+ * eligibility: those are privacy-sensitive and are always read live in `liveDirectoryDetails`, so a
+ * member withdrawing their email opt-in, being deleted, suspended or made an administrator takes
+ * effect immediately even when this result is up to a day old. It throws on failure, so a failure
+ * is never cached. */
+async function runDirectoryQuery(input: DirectoryQueryInput) {
   const { filters, where } = queryParts(input);
   const order = directoryOrder(filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
   const [rows, counts] = await Promise.all([
-    db.execute<RawDirectoryRow>(sql`select p.first_name "firstName", p.last_name "lastName", case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end email, roles.federation, roles.region,
+    db.execute<RawDirectoryRow>(sql`select p.id "profileId", p.first_name "firstName", p.last_name "lastName", null::text email, ${federationExpression} federation, roles.region,
       case when roles.has_judge and roles.has_steward then 'combo' when cardinality(roles.role_types) = 1 then roles.role_types[1] else null end "membershipType",
       roles.role_details "roles" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
     db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
   ]);
   return {
+    rows: rows.map((row): RawDirectoryRow => ({ ...row })),
+    total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_RESULTS),
+  };
+}
+
+/** Always-live, per-request check of the members on one page: are they still listed (membership,
+ * account state, not an administrator) and, only if they opted in, what is their email. */
+async function liveDirectoryDetails(profileIds: number[]): Promise<Map<number, string | null>> {
+  if (profileIds.length === 0) return new Map();
+  const rows = await db.execute<{ profileId: number; email: string | null }>(sql`
+    select p.id "profileId", case when p.directory_email_opt_in then coalesce(u.email_display, u.email) end email
+    ${from} where ${eligibleCondition} and p.id in (${sql.join(profileIds.map((id) => sql`${id}`), sql`, `)})`);
+  return new Map(rows.map((row) => [row.profileId, row.email]));
+}
+
+// The page structure is renewed at most once a day per distinct set of filters. Access control, rate
+// limiting and the live per-page check stay outside the cache and run on every request.
+const cachedDirectoryQuery = dailyCache(runDirectoryQuery, ['member-directory-query']);
+
+/** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
+ * non-archived, non-administrator member records. The page structure is cached for a day per set of
+ * filters; email and eligibility are always live. A text search or an email sort is never cached,
+ * because it can match or order by an email address whose owner has since withdrawn their opt-in. */
+export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
+  const actor = await requireAccountAccess('member');
+  const allowed = await checkRateLimit('member_directory_search', String(actor.id), await requestOrigin());
+  if (!allowed) throw new DirectoryRateLimitedError();
+  const filters = normalizeDirectoryFilters(input);
+  const query = { ...filters, sort: JSON.stringify(filters.sort) };
+  const cacheable = !filters.q && !filters.sort.some(({ id }) => id === 'email');
+  const { rows, total } = await (cacheable ? cachedDirectoryQuery : runDirectoryQuery)(query);
+  const live = await liveDirectoryDetails(rows.map((row) => row.profileId));
+  return {
     filters, maxPage: Math.max(1, Math.ceil(DIRECTORY_MAX_RESULTS / filters.pageSize)),
     pageSize: filters.pageSize,
-    rows: rows.map((row): DirectoryMemberRow => ({ ...row })),
-    total: Math.min(counts[0]?.count ?? 0, DIRECTORY_MAX_RESULTS),
+    // Drop anyone no longer listed; never expose the internal profile id.
+    rows: rows.flatMap(({ profileId, ...row }): DirectoryMemberRow[] => live.has(profileId) ? [{ ...row, email: live.get(profileId) ?? null }] : []),
+    total,
   };
 }

@@ -4,6 +4,7 @@ import { AuthorizationError } from '../lib/membership/authorization.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { DIRECTORY_MAX_PAGE, DIRECTORY_PAGE_SIZE, DirectoryRateLimitedError, listMemberDirectory } from '../lib/directory/member-directory.ts';
+import { useTestDailyCache } from '../lib/cache/daily-cache.ts';
 import { DIRECTORY_MIN_AGGREGATION_THRESHOLD, getPublicMemberConcentration } from '../lib/directory/aggregate.ts';
 import {
   adminUser, closeHarness, createMembership, createUser, judgeRole, resetIdoc, sql, stewardRole, veterinarianRole,
@@ -324,5 +325,57 @@ test('paid directory: multi-column sorts built by the Sort button load without e
       const listing = await asMember(user.id, () => listMemberDirectory({ sort }), `192.0.2.${(origin += 1)}`);
       assert.ok(listing.rows.length >= 2, `sort ${first} then ${second}`);
     }
+  }
+});
+
+test('paid directory: a member with no recorded federation is listed under their address country, matching the map', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Fallback', lastName: 'Federation' });
+  const noFederation = await sql<{ id: number }[]>`select p.id from idoc.profiles p where p.user_id = ${user.id}`;
+  await sql`update idoc.professional_roles set national_federation_country_code = null where profile_id = ${noFederation[0].id}`;
+  const listing = await asMember(user.id, () => listMemberDirectory({ federation: 'DE', q: 'Fallback' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].federation, 'DE');
+  const none = await asMember(user.id, () => listMemberDirectory({ federation: 'FR', q: 'Fallback' }), '203.0.113.77');
+  assert.equal(none.total, 0);
+});
+
+
+test('paid directory: a cached page never serves a withdrawn email opt-in, and drops members who stop being listed', async () => {
+  useTestDailyCache(true);
+  try {
+    const searcher = (await entitledMemberIn('DE', [stewardRole], { firstName: 'Cache', lastName: 'Searcher' })).user;
+    const shared = await entitledMemberIn('DE', [judgeRole], { firstName: 'Opted', lastName: 'Inner' }, { directoryEmailOptIn: true });
+    const suspended = await entitledMemberIn('DE', [judgeRole], { firstName: 'Soon', lastName: 'Gone' });
+    const filters = { federation: 'DE', pageSize: 50 };
+    const before = await asMember(searcher.id, () => listMemberDirectory(filters), '192.0.2.201');
+    assert.equal(before.rows.find((row) => row.lastName === 'Inner')?.email, shared.user.email);
+    assert.ok(before.rows.some((row) => row.lastName === 'Gone'));
+
+    // Withdraw the email opt-in, soft-delete one member and make another an administrator: the cached
+    // page structure is still valid for the same filters, but none of this may be served stale.
+    await sql`update idoc.profiles set directory_email_opt_in = false where user_id = ${shared.user.id}`;
+    await sql`update idoc.users set deleted_at = now() where id = ${suspended.user.id}`;
+    const after = await asMember(searcher.id, () => listMemberDirectory(filters), '192.0.2.202');
+    assert.equal(after.rows.find((row) => row.lastName === 'Inner')?.email, null);
+    assert.ok(!after.rows.some((row) => row.lastName === 'Gone'));
+    assert.ok(!JSON.stringify(after.rows).includes(shared.user.email));
+    assert.ok(after.rows.every((row) => !('profileId' in row)));
+  } finally {
+    useTestDailyCache(false);
+  }
+});
+
+test('paid directory: a text search for an email is never answered from the cache after the owner opts out', async () => {
+  useTestDailyCache(true);
+  try {
+    const searcher = (await entitledMemberIn('FR', [stewardRole], { firstName: 'Mail', lastName: 'Searcher' })).user;
+    const owner = await entitledMemberIn('FR', [judgeRole], { firstName: 'Mail', lastName: 'Owner' }, { directoryEmailOptIn: true });
+    const found = await asMember(searcher.id, () => listMemberDirectory({ q: owner.user.email }), '192.0.2.203');
+    assert.equal(found.rows.length, 1);
+    await sql`update idoc.profiles set directory_email_opt_in = false where user_id = ${owner.user.id}`;
+    const gone = await asMember(searcher.id, () => listMemberDirectory({ q: owner.user.email }), '192.0.2.204');
+    assert.equal(gone.rows.length, 0);
+  } finally {
+    useTestDailyCache(false);
   }
 });

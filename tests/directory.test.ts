@@ -76,13 +76,18 @@ test('the paid member directory rate-limits searches per account and per origin 
 });
 
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
-  const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.first_name'), memberDirectorySource.indexOf('${from} where ${where} order'));
-  // The email is returned only for members who opted in (default: not shown); search and sort honor the same rule.
-  assert.match(select, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
+  const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.id "profileId"'), memberDirectorySource.indexOf('${from} where ${where} order'));
+  const liveSelect = memberDirectorySource.slice(memberDirectorySource.indexOf('async function liveDirectoryDetails'), memberDirectorySource.indexOf('const cachedDirectoryQuery'));
+  // The email is returned only for members who opted in (default: not shown), and only from the live
+  // per-page query; the cacheable select carries no email at all. Search and sort honor the same rule.
+  assert.match(liveSelect, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
+  assert.match(select, /null::text email/);
   assert.match(memberDirectorySource, /\(p\.directory_email_opt_in and coalesce\(u\.email_display, u\.email\) ilike/);
   assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state in \('active', 'migrated_pending'\)/);
   assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
-  assert.doesNotMatch(select, /address|postal_code|"id"|profileId|userId/i);
+  assert.doesNotMatch(select, /address|postal_code|userId/i);
+  // The internal profile id exists only to join the live check and is stripped from every returned row.
+  assert.match(memberDirectorySource, /rows\.flatMap\(\(\{ profileId, \.\.\.row \}\)/);
 });
 
 test('directory page size matches the admin options and caps accessible results at 5,000 records', () => {
@@ -266,4 +271,53 @@ test('a failed directory load is logged with its cause, and rate limiting gets i
   assert.match(memberRouteSource, /console\.error\('\[members-directory\] listing failed'/);
   assert.match(memberRouteSource, /rateLimited \? <p/);
   assert.match(memberRouteSource, /Please wait a few minutes and try again\./);
+});
+
+const mapCanvasSource = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+const openDirectorySource = readFileSync('components/directory/open-directory-for-country.ts', 'utf8');
+const dailyCacheSource = readFileSync('lib/cache/daily-cache.ts', 'utf8');
+
+test('the map and the directory listing are cached for a day, but access control and rate limiting still run on every request', () => {
+  assert.match(dailyCacheSource, /DAILY_REVALIDATE_SECONDS = 24 \* 60 \* 60/);
+  assert.match(dailyCacheSource, /unstable_cache\(compute, keyParts, \{ revalidate: DAILY_REVALIDATE_SECONDS/);
+  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration'\]\)/);
+  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query'\]\)/);
+  // The authorization and rate-limit checks sit before the cached call, never inside it.
+  const listing = memberDirectorySource.slice(memberDirectorySource.indexOf('export async function listMemberDirectory'));
+  const cachedCall = listing.indexOf('(cacheable ? cachedDirectoryQuery : runDirectoryQuery)(query)');
+  assert.ok(cachedCall > 0);
+  assert.ok(listing.indexOf("requireAccountAccess('member')") < cachedCall);
+  assert.ok(listing.indexOf("checkRateLimit('member_directory_search'") < cachedCall);
+  // Privacy-sensitive data is never in the cached result: the email is read live per page, with the
+  // same eligibility rule, and members no longer eligible are dropped from a cached page.
+  const cachedQuery = memberDirectorySource.slice(memberDirectorySource.indexOf('async function runDirectoryQuery'), memberDirectorySource.indexOf('async function liveDirectoryDetails'));
+  assert.match(cachedQuery, /null::text email/);
+  assert.doesNotMatch(cachedQuery, /directory_email_opt_in/);
+  const liveQuery = memberDirectorySource.slice(memberDirectorySource.indexOf('async function liveDirectoryDetails'), memberDirectorySource.indexOf('const cachedDirectoryQuery'));
+  assert.match(liveQuery, /case when p\.directory_email_opt_in then coalesce\(u\.email_display, u\.email\) end email/);
+  assert.match(liveQuery, /where \$\{eligibleCondition\} and p\.id in/);
+  assert.match(listing, /live\.has\(profileId\) \?/);
+  // A text search or email sort can match/order by an opted-out email, so it is never cached.
+  assert.match(listing, /const cacheable = !filters\.q && !filters\.sort\.some\(\(\{ id \}\) => id === 'email'\);/);
+  // A failed map query must not be cached for a day: the cached function throws, the wrapper catches.
+  const cachedMap = aggregateSource.slice(aggregateSource.indexOf('async function queryMemberConcentration'), aggregateSource.indexOf('const cachedMemberConcentration'));
+  assert.doesNotMatch(cachedMap, /catch/);
+  assert.match(aggregateSource, /try \{\s*return \{ areas: await cachedMemberConcentration\(\)/);
+});
+
+test('clicking a country on the map opens the directory filtered to that federation, for signed-in members only', () => {
+  assert.match(publicPageSource, /<ConcentrationMap areas=\{concentration\.areas\} canOpenDirectory=\{Boolean\(user\)\} \/>/);
+  assert.match(concentrationMapSource, /canOpenDirectory = false/);
+  // Keyboard route: a visible, labeled country picker under the map, signed-in members only.
+  assert.match(concentrationMapSource, /\{canOpenDirectory \? <CountryDirectoryPicker countries=\{countryOptions\} \/> : null\}/);
+  assert.match(readFileSync('components/directory/country-directory-picker.tsx', 'utf8'), /htmlFor="map-country-picker">View members in<\/label>/);
+  // Click handler and pointer cursor exist only when the viewer is signed in.
+  assert.match(mapCanvasSource, /if \(canOpenDirectory\) \{\s*map\.on\('click', 'member-dots'/);
+  assert.match(mapCanvasSource, /if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer'/);
+  assert.doesNotMatch(mapCanvasSource.replace(/if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer';/, ''), /style\.cursor = 'pointer'/);
+  // The filter is saved as the member's view (never put in the URL), then the tab opens.
+  assert.match(openDirectorySource, /\/api\/directory\/view/);
+  assert.match(openDirectorySource, /federation: countryCode/);
+  assert.match(openDirectorySource, /navigate\('\/about\/members-directory\?tab=directory'\)/);
+  assert.doesNotMatch(openDirectorySource, /federation=/);
 });

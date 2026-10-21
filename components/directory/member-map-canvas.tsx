@@ -1,7 +1,9 @@
 'use client';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { openDirectoryForCountry } from './open-directory-for-country';
 import type { MemberMapDot } from '@/lib/directory/map-dots';
 
 // MapLibre cannot parse the oklch() tokens in app/globals.css, so the same brand colors are fixed
@@ -10,9 +12,13 @@ const OCEAN = '#050c20';
 const LAND = '#14203c';
 const GOLD = '#d3af37';
 
-export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summary: string }) {
+export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { canOpenDirectory?: boolean; dots: MemberMapDot[]; summary: string }) {
   const container = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const [failed, setFailed] = useState(false);
+  const [openFailed, setOpenFailed] = useState(false);
 
   useEffect(() => {
     const element = container.current;
@@ -49,7 +55,7 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
                   features: dots.map((dot) => ({
                     type: 'Feature',
                     geometry: { type: 'Point', coordinates: [dot.lng, dot.lat] },
-                    properties: { countryName: dot.countryName, memberCount: dot.memberCount, radius: dot.radius },
+                    properties: { countryCode: dot.countryCode, countryName: dot.countryName, memberCount: dot.memberCount, radius: dot.radius },
                   })),
                 },
               },
@@ -81,12 +87,20 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
         map.on('mousemove', 'member-dots', (event) => {
           const properties = event.features?.[0]?.properties;
           if (!properties) return;
-          map.getCanvas().style.cursor = 'pointer';
+          // Only signed-in members can open the directory, so only they get a clickable affordance.
+          if (canOpenDirectory) map.getCanvas().style.cursor = 'pointer';
           const text = document.createElement('div');
           text.className = 'text-xs font-medium text-neutral-900';
-          text.textContent = `${properties.countryName}: ${properties.memberCount} members`;
+          text.textContent = `${properties.countryName}: ${properties.memberCount} members${canOpenDirectory ? ' \u2014 click to view them' : ''}`;
           popup.setLngLat(event.lngLat).setDOMContent(text).addTo(map);
         });
+        if (canOpenDirectory) {
+          map.on('click', 'member-dots', async (event) => {
+            const countryCode = event.features?.[0]?.properties?.countryCode;
+            if (typeof countryCode !== 'string') return;
+            setOpenFailed(!(await openDirectoryForCountry(countryCode, (href) => routerRef.current.push(href))));
+          });
+        }
         map.on('mouseleave', 'member-dots', () => {
           map.getCanvas().style.cursor = '';
           popup.remove();
@@ -107,10 +121,13 @@ export function MemberMapCanvas({ dots, summary }: { dots: MemberMapDot[]; summa
       cancelled = true;
       teardown?.();
     };
-  }, [dots]);
+  }, [canOpenDirectory, dots]);
 
   if (failed) {
     return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser.</p>;
   }
-  return <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />;
+  return <>
+    <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />
+    {openFailed ? <p className="mt-3 text-sm text-muted-foreground" role="alert">Could not open the directory. Please try again.</p> : null}
+  </>;
 }
