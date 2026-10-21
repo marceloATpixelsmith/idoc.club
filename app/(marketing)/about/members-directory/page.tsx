@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import * as Sentry from '@sentry/nextjs';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { ConcentrationMap } from '@/components/directory/concentration-map';
@@ -31,12 +32,22 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
   const concentration = activeTab === 'map' ? await getPublicMemberConcentration() : null;
   let listing: Awaited<ReturnType<typeof listMemberDirectory>> | null = null;
   let unavailable = false;
+  let rateLimited = false;
 
   if (activeTab === 'directory' && user) {
     try {
       listing = await listMemberDirectory(parseDirectoryView((await cookies()).get(DIRECTORY_VIEW_COOKIE)?.value, user.id));
     } catch (error) {
-      if (error instanceof DirectoryRateLimitedError || error instanceof Error) unavailable = true;
+      if (error instanceof DirectoryRateLimitedError) rateLimited = true;
+      else {
+        unavailable = true;
+        // Never swallow the cause: this message is all a member sees, so Sentry (full exception and
+        // stack) and the server log are the only places the real failure can be diagnosed.
+        Sentry.captureException(error, { tags: { area: 'members-directory', operation: 'list' } });
+        console.error('[members-directory] listing failed', error instanceof Error
+          ? { name: error.name, message: error.message, code: (error as { code?: unknown }).code }
+          : { name: typeof error });
+      }
     }
   }
 
@@ -55,7 +66,7 @@ export default async function MembersDirectoryPage({ searchParams }: { searchPar
         <h2 className="font-semibold">Active membership required</h2>
         <p className="mt-2 text-sm text-muted-foreground">Directory results are available only to signed-in active members.</p>
         <Link className="mt-4 inline-block text-sm text-gold underline underline-offset-4" href="/sign-in">Member sign in</Link>
-      </div> : unavailable || !listing ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The directory could not be loaded. Please try again later.</p> : <MemberDirectoryTable filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />}
+      </div> : rateLimited ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">You have searched the directory a lot in a short time. Please wait a few minutes and try again.</p> : unavailable || !listing ? <p className="mt-8 border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The directory could not be loaded. Please try again later.</p> : <MemberDirectoryTable filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />}
     </section>
   </>;
 }

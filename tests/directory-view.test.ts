@@ -23,5 +23,6 @@ test('the directory never reads or writes search, filters, sort or page through 
   assert.match(table, /\/api\/directory\/view/);
   assert.match(table, /saveQueue\.current = saveQueue\.current\.then/);
   assert.match(table, /if \(!response\.ok\) throw/);
+  assert.match(table, /if \(body === lastRequestedView\.current\) return;/);
   assert.doesNotMatch(table, /URLSearchParams|router\.replace|usePathname/);
 });
