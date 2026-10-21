@@ -55,7 +55,7 @@ For every automated case with `requiresEmail=true`:
 
 ## GitHub Actions live staging configuration
 
-The workflow is `.github/workflows/live-auth-staging.yml`. It runs weekly and supports a manual dispatch that requires typing `staging.idoc.club`. It never runs on pull requests.
+The workflow is `.github/workflows/live-auth-staging.yml`. A push to the `staging` branch (normally a merged PR) starts the run; it never runs on pull requests. Before entering the `staging-live-e2e` environment or using its secrets, a separate job waits for a successful Vercel status on that exact commit, verifies the status points to the IDOC Vercel project, and confirms `staging` has not advanced. A failed deployment, stale commit, or missing deployment status stops the run before mailbox or account creation. The workflow is currently defined on `staging`, not the default `main` branch, so it does not appear in the Actions list when viewing `main`.
 
 Configure these GitHub Actions secrets:
 - `STAGING_POSTGRES_URL`: Render URL for database `ayni_space`, role `idoc_staging_app`, with `options=-c search_path=idoc_staging`.
