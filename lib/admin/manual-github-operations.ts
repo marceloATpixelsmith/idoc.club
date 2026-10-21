@@ -1,10 +1,10 @@
 import 'server-only';
 
 export const MANUAL_GITHUB_WORKFLOWS = {
-  'staging-migrations': {
-    file: 'auto-migrate-staging.yml',
-    label: 'Auto-migrate Staging Schema',
-    url: 'https://github.com/marceloATpixelsmith/idoc.club/actions/workflows/auto-migrate-staging.yml',
+  'production-promotion': {
+    file: null,
+    label: 'Promote Staging to Production',
+    url: 'https://github.com/marceloATpixelsmith/idoc.club/pulls?q=is%3Apr+base%3Amain',
   },
   'live-auth': {
     file: 'live-auth-staging.yml',
@@ -87,7 +87,7 @@ function runStatus(status: string, conclusion: string | null): ManualGithubRun['
 }
 
 export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]> {
-  const entries = await Promise.all(Object.entries(MANUAL_GITHUB_WORKFLOWS).map(async ([workflow, config]) => {
+  const entries = await Promise.all(Object.entries(MANUAL_GITHUB_WORKFLOWS).filter(([, config]) => config.file !== null).map(async ([workflow, config]) => {
     try {
       const response = await github(`/actions/workflows/${config.file}/runs?branch=staging&per_page=5`);
       const body = await response.json() as { workflow_runs?: Array<{ id: number; run_number: number; status: string; conclusion: string | null; event: string; created_at: string; html_url: string }> };
@@ -101,8 +101,7 @@ export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]
         runUrl: run.html_url,
       }));
     } catch (error) {
-      // The live-auth workflow is not dispatchable through GitHub until its file reaches the default branch.
-      // Keep the page usable for the staging-migration action during that promotion window.
+      // A workflow is not dispatchable until its definition reaches the default branch.
       if (error instanceof ManualGithubOperationsError && error.status === 404) return [];
       throw error;
     }
@@ -110,8 +109,33 @@ export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]
   return entries.flat().sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 
-export async function dispatchManualGithubOperation(workflow: ManualGithubWorkflow): Promise<void> {
+export async function dispatchManualGithubOperation(workflow: ManualGithubWorkflow): Promise<string | undefined> {
   if (!isManualGithubWorkflow(workflow)) throw new ManualGithubOperationsError('Choose one of the available GitHub operations.');
+  if (workflow === 'production-promotion') {
+    // OPEN THE EXISTING PROTECTED STAGING-TO-MAIN PR PATH, NEVER PUSH DIRECTLY TO MAIN.
+    const existing = await github('/pulls?state=open&base=main&per_page=100');
+    const payload = await existing.json() as Array<{ head?: { ref?: string; repo?: { full_name?: string } }; html_url?: string }>;
+    const pending = payload.find((pr) => pr.head?.ref === 'staging' && pr.head.repo?.full_name === 'marceloATpixelsmith/idoc.club');
+    if (pending?.html_url) return pending.html_url;
+
+    const response = await github('/pulls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Promote staging to production (main)',
+        head: 'staging',
+        base: 'main',
+        body: 'Manual promotion initiated by a verified IDOC Super Admin. Review staging verification, required checks and rollout gates in docs/07 before merging. Do not bypass branch protection. Merge commit required; no squash.',
+        draft: false,
+        maintainer_can_modify: true,
+      }),
+    });
+    const created = await response.json() as { html_url?: string };
+    if (!created.html_url?.startsWith('https://github.com/marceloATpixelsmith/idoc.club/pull/')) {
+      throw new ManualGithubOperationsError('GitHub did not return a valid promotion pull request URL.');
+    }
+    return created.html_url;
+  }
   const config = MANUAL_GITHUB_WORKFLOWS[workflow];
   await github(`/actions/workflows/${config.file}/dispatches`, {
     method: 'POST',
