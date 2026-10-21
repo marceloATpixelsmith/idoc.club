@@ -5,7 +5,10 @@
     "Change a requirement here first; CI mappings and live pass/fail criteria must not be edited independently.",
     "Any auth/security defect must map to an existing case or add a new LIVE-AUTH case, with CI regression coverage where technically possible and live coverage where deployment/provider behavior matters.",
     "A live case with CI coverage=gap must state why repository CI cannot or does not yet cover it.",
-    "Invitation controls remain explicitly not-applicable until a real invitation feature is introduced."
+    "Invitation controls remain explicitly not-applicable until a real invitation feature is introduced.",
+    "Live automation must explicitly mark provider steps that require a human-operated consent flow; those steps are never reported as automated passes.",
+    "A live run reuses a disposable account/mailbox across compatible sequential cases and provisions another only when the next case requires a fresh identity or different role/state.",
+    "Staging Turnstile automation uses Cloudflare's official always-pass testing keys and still exercises server-side token verification; test keys must never be used in production."
   ],
   "cases": [
     {
@@ -226,7 +229,11 @@
         ],
         "evidence": [
           "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
-        ]
+        ],
+        "automation": {
+          "mode": "manual-only",
+          "reason": "Real Google consent and account-linking require a human-operated browser identity; exclude these provider steps from unattended GitHub Actions and report them as blocked/manual-required, never passed."
+        }
       }
     },
     {
@@ -1179,9 +1186,10 @@
       "ci": {
         "coverage": "mapped",
         "tests": [
-          "tests/security-e2e/google-oauth.spec.ts"
+          "tests/return-to-path.test.ts",
+          "tests/general-navigation.test.ts"
         ],
-        "rationale": ""
+        "rationale": "Safe return-path behavior is tested with the application's password/email sign-in flow; Google consent and provider callback replay remain in LIVE-AUTH-004 and are manual-only."
       },
       "live": {
         "enabled": true,
@@ -1193,21 +1201,27 @@
           "Use only disposable test identities and test data."
         ],
         "steps": [
-          "Manipulate safe return/callback parameters with external, protocol-relative, encoded, and malformed destinations.",
-          "Complete/cancel auth flows using those values."
+          "Request sign-in using safe return-path values that are external, protocol-relative, encoded, malformed, or outside the approved protected route set.",
+          "Complete the normal password/email authentication flow with those values and inspect the final destination.",
+          "After a successful return, start a separate sign-in without a return path and verify no stale destination is reused."
         ],
         "pass": [
-          "External/unapproved destinations are rejected or normalized to safe internal locations; auth transaction binding remains intact."
+          "External/unapproved destinations are rejected or normalized to safe internal locations; password/email authentication returns only to an approved same-origin route.",
+          "The remembered destination is cleared after use and cannot be reused by a later authentication."
         ],
         "fail": [
-          "Authentication can redirect to an attacker-controlled external destination or callback manipulation changes account binding."
+          "Authentication redirects to an attacker-controlled external destination, an unapproved path, or reuses a stale destination."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
         ],
         "evidence": [
           "Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets."
-        ]
+        ],
+        "automation": {
+          "mode": "automated",
+          "reason": "These return-path checks do not require Google consent and run through password/email authentication."
+        }
       }
     },
     {
@@ -2076,4 +2090,4 @@
       }
     }
   ]
-}
+}\n
