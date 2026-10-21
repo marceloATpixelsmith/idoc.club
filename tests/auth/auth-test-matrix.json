@@ -205,7 +205,7 @@
         "rationale": ""
       },
       "live": {
-        "enabled": false,
+        "enabled": true,
         "destructive": false,
         "requiresEmail": false,
         "requiresAdmin": false,
