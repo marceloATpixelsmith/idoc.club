@@ -430,4 +430,26 @@ test('the query gate sheds load with DirectoryBusyError when the queue is full o
   stuck.resolve();
   await occupying;
   assert.deepEqual(slow.snapshot(), { queued: 0, running: 0 });
+test('the map shows a one-time, short-lived, animated click hint over the US bubble, for signed-in members only', () => {
+  const hint = readFileSync('components/directory/map-first-visit-hint.tsx', 'utf8');
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  // Approved copy, with icons rather than a wall of text, in the menu dropdown's bubble style.
+  assert.match(hint, /<span>Click a bubble to see its members<\/span>/);
+  assert.match(hint, /MousePointerClick/);
+  assert.match(hint, /Users/);
+  assert.match(hint, /rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md/);
+  // It never blocks the map underneath.
+  assert.match(hint, /pointer-events-none/);
+  // First time only (remembered per browser), and short-lived.
+  assert.match(hint, /MAP_HINT_STORAGE_KEY = 'idoc-map-click-hint-v1'/);
+  assert.match(hint, /MAP_HINT_VISIBLE_MS = 7000/);
+  assert.match(canvas, /if \(us && !mapHintAlreadySeen\(\)\)/);
+  assert.match(canvas, /markMapHintSeen\(\);/);
+  // Only signed-in members (the only ones a click works for) and only when there is a US bubble to point at.
+  assert.match(canvas, /const us = canOpenDirectory \? dots\.find\(\(dot\) => dot\.countryCode === 'US'\) : undefined;/);
+  // Touching the map dismisses it at once.
+  assert.match(canvas, /map\.on\('mousedown', dismiss\)/);
+  // It animates to grab attention (flash + bounce + tap + ring), only for visitors who allow motion.
+  assert.match(globals, /@media \(prefers-reduced-motion: no-preference\) \{[^@]*idoc-map-hint-flash[^@]*idoc-map-hint-bob[^@]*idoc-map-hint-tap[^@]*idoc-map-hint-ring/);
 });
