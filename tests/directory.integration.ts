@@ -267,7 +267,7 @@ test('paid directory: ordinary browsing is not blocked, and one account is limit
 
 test('paid directory: sustained searching from one origin across several accounts is rate-limited at 180', async () => {
   const origin = '198.51.100.10';
-  const members = [];
+  const members: { id: number }[] = [];
   for (let index = 0; index < 4; index += 1) members.push((await entitledMemberIn('DE')).user);
   for (const member of members) {
     for (let index = 0; index < 45; index += 1) await asMember(member.id, () => listMemberDirectory(), origin);
