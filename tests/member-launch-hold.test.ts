@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
-import { guardStripeMutations, liveBillingDisabled, memberCommunicationsDisabled, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
+import { guardStripeMutations, liveAuthE2eOtpMayBypassCommunicationsHold, liveBillingDisabled, memberCommunicationsDisabled, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
 
 const original = { hold: process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING, key: process.env.STRIPE_SECRET_KEY, node: process.env.NODE_ENV, vercel: process.env.VERCEL_ENV, base: process.env.BASE_URL };
 afterEach(() => {
@@ -17,6 +17,21 @@ for (const value of [undefined, '', 'true', 'invalid', 'FALSE', ' false ', '0'])
 test('only exact false releases communications', () => {
   assert.equal(memberCommunicationsDisabled({ DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false' }), false);
 });
+test('the live auth OTP hold exception is limited to staging and the disposable mailbox domain', () => {
+  const staging = {
+    DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'true',
+    VERCEL_ENV: 'preview',
+    VERCEL_GIT_COMMIT_REF: 'staging',
+    BASE_URL: 'https://staging.idoc.club',
+  };
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', staging), true);
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('member@example.com', staging), false);
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_ENV: 'production' }), false);
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_GIT_COMMIT_REF: 'feature' }), false);
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, BASE_URL: 'https://redesign.idoc.club' }), false);
+  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false' }), false);
+});
+
 test('live billing fails closed, but a validated sandbox key remains usable', () => {
   const environment = { NODE_ENV: 'test', STRIPE_SECRET_KEY: `sk_test_${'a'.repeat(24)}`, DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'true' };
   assert.equal(liveBillingDisabled(environment), false);

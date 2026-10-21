@@ -53,6 +53,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 For every automated case with `requiresEmail=true`:
 - The `Live authentication staging suite` creates one disposable mailbox through `scripts/live-auth-mailbox.mjs`, reads only the OTP needed by the browser test, and reuses that mailbox for all sequential steps.
 - The staged application itself sends the transactional message. The runner never uses the service's `send` endpoint as a substitute.
+- Keep `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true`. The application permits only the explicitly opted-in authentication OTP to the run's `@pixelsmith.space` mailbox when `VERCEL_ENV=preview`, `VERCEL_GIT_COMMIT_REF=staging`, and `BASE_URL=https://staging.idoc.club`. All other member and operational email remains held; billing remains held.
 - Mailbox cleanup runs once after account cleanup, including when the browser test fails.
 - The first automated journey covers LIVE-AUTH-001, 002, 003, 005, 006, 022, and 038 using one account and one mailbox. Every other live case is reported as blocked until its own safe browser journey is implemented. LIVE-AUTH-004 remains manual-only and is always reported as blocked/manual-required.
 
