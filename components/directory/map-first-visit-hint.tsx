@@ -10,7 +10,7 @@ export const MAP_HINT_VISIBLE_MS = 7000;
 export const MAP_HINT_FADE_MS = 600;
 
 export function mapHintAlreadySeen(): boolean {
-  try { return window.localStorage.getItem(MAP_HINT_STORAGE_KEY) === '1'; } catch { return true; }
+  try { return window.localStorage.getItem(MAP_HINT_STORAGE_KEY) === '1'; } catch { return false; }
 }
 export function markMapHintSeen() {
   try { window.localStorage.setItem(MAP_HINT_STORAGE_KEY, '1'); } catch { /* private mode: it simply may show again */ }

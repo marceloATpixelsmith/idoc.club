@@ -121,12 +121,18 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
         // first time this browser sees the map, pointing at the US bubble, then never again.
         const us = canOpenDirectory ? dots.find((dot) => dot.countryCode === 'US') : undefined;
         if (us && !mapHintAlreadySeen()) {
+          let dismissed = false;
           const place = () => {
+            if (dismissed) return;
             const point = map.project([us.lng, us.lat]);
             setHint({ radius: us.radius, width: element.clientWidth, x: point.x, y: point.y });
           };
           // Fade out, then remove it once the fade has finished.
           const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
+            map.off('move', place);
+            map.off('resize', place);
             setHintLeaving(true);
             hintTimers.push(setTimeout(() => setHint(null), MAP_HINT_FADE_MS));
           };
