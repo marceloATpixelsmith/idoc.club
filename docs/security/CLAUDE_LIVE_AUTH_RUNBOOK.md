@@ -10,7 +10,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Test only the explicitly provided staged/live hostname.
 - Never substitute localhost or a Vercel preview.
-- Use disposable accounts and the existing Pixelsmith E2E Email connector for flows requiring real mail. Do not claim GitHub Actions can create/read mailboxes until its MXroute integration is implemented.
+- Use the Pixelsmith E2E Email service for staging runs. GitHub Actions creates one disposable mailbox per run, reuses it through the sequential auth journey, and deletes it once during cleanup. Do not print mailbox credentials or message contents in logs.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
@@ -47,12 +47,26 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 ## Real email
 
-For every case with `requiresEmail=true`:
-- Reuse the run's existing disposable mailbox/account when it can safely support the next step; create another mailbox or account only when a clean identity or distinct email address is required.
-- Until the GitHub Actions MXroute integration is implemented, use the existing Pixelsmith E2E Email connector for manual live runs.
-- Make the staged application itself send the transactional email; poll/read the mailbox and use the real link/code in the browser flow.
-- Never use `send_e2e_test_message` as a substitute for the application's own outbound email.
-- Delete each mailbox once after all dependent flows that use it have passed; preserve it temporarily when failure evidence depends on it.
+For every automated case with `requiresEmail=true`:
+- The `Live authentication staging suite` creates one disposable mailbox through `scripts/live-auth-mailbox.mjs`, reads only the OTP needed by the browser test, and reuses that mailbox for all sequential steps.
+- The staged application itself sends the transactional message. The runner never uses the service's `send` endpoint as a substitute.
+- Mailbox cleanup runs once after account cleanup, including when the browser test fails.
+- The first automated journey covers LIVE-AUTH-001, 002, 003, 005, 006, 022, and 038 using one account and one mailbox. Every other live case is reported as blocked until its own safe browser journey is implemented. LIVE-AUTH-004 remains manual-only and is always reported as blocked/manual-required.
+
+## GitHub Actions live staging configuration
+
+The workflow is `.github/workflows/live-auth-staging.yml`. It runs weekly and supports a manual dispatch that requires typing `staging.idoc.club`. It never runs on pull requests.
+
+Configure these GitHub Actions secrets:
+- `STAGING_POSTGRES_URL`: Render URL for database `ayni_space`, role `idoc_staging_app`, with `options=-c search_path=idoc_staging`.
+- `E2E_SERVICE_TOKEN`: bearer token for the Pixelsmith E2E Email service.
+- `LIVE_AUTH_TEST_PASSWORD`: disposable account password used only for the live signup/login journey.
+
+Optional repository variable:
+- `E2E_SERVICE_URL`: service base URL; defaults to the existing Pixelsmith E2E service URL.
+
+The workflow hard-fails before browser activity unless the database URL is restricted to the staging role/database/schema. All database provisioning and cleanup SQL is explicitly qualified with `idoc_staging`. Never configure the production role, schema, or URL in these secrets.
+
 
 ## Privileged (administrator/super_admin) test identities
 
