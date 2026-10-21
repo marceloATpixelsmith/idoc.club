@@ -65,7 +65,7 @@ test('the roster count query joins only what its filters read and still agrees w
   }
   const filtersToTry: MemberFilters[] = [
     {}, { status: 'active' }, { status: 'expired' }, { status: 'without_active' }, { status: 'administrator' }, { status: 'board_member' }, { status: 'onboarding' },
-    { type: 'judge' }, { type: 'combo' }, { type: 'veterinarian' }, { federation: 'DE' }, { region: 'Western Europe & Africa' }, { country: 'DE' },
+    { type: 'judge' }, { type: 'combo' }, { type: 'veterinarian' }, { federation: 'DE' }, { region: 'Western Europe & Africa' }, { filters: JSON.stringify([{ id: 'country', operator: 'eq', value: 'DE' }]) },
     { officialStatus: 'steward:FEI Dressage Steward Level 1' }, { expiresFrom: '2099-01-01', expiresTo: '2099-12-31' }, { q: 'Test' }, { q: 'no-such-person' },
     { status: 'active', type: 'judge', federation: 'DE', q: 'Member' }, { sort: 'lastPayment' }, { sort: 'updated', direction: 'desc' }, { sort: 'expires' },
     { filters: JSON.stringify([{ id: 'status', operator: 'eq', value: 'active' }, { id: 'type', operator: 'eq', value: 'judge' }]) },

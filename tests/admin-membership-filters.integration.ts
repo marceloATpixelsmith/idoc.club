@@ -14,7 +14,7 @@ test('admin member search: a repeated-key query parameter is treated as a real m
 
   // Legacy address-country input is ignored; federation remains a supported multi-select.
   const listing = await asAdmin(admin.id, () => listAdminMembers({
-    country: ['DE', 'FR'], federation: ['DE', 'PL'], page: ['1', '2'], q: [''], sort: ['name_asc', 'name_desc'], status: ['active', 'expired'],
+    filters: JSON.stringify([{ id: 'country', operator: 'eq', value: 'DE' }]), federation: ['DE', 'PL'], page: ['1', '2'], q: [''], sort: ['name_asc', 'name_desc'], status: ['active', 'expired'],
   }));
   assert.equal(listing.filters.page, 1);
   assert.deepEqual(listing.filters.federations, ['DE', 'PL']);

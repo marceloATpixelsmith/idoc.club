@@ -55,6 +55,7 @@ const OFFICIAL_STATUS_FILTER_OPTIONS = [
   ...JUDGE_STATUSES.map((status) => ({ label: `Judge: ${status}`, value: `judge:${status}` })),
   ...STEWARD_STATUSES.map((status) => ({ label: `Steward: ${status}`, value: `steward:${status}` })),
 ];
+const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
 const TYPE_DISPLAY = {
   judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: HorseshoeIcon, label: 'STEWARD' },
