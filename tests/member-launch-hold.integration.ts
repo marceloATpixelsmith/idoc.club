@@ -18,14 +18,12 @@ import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } fr
 
 const originalFetch = globalThis.fetch;
 const originalHold = process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING;
-const originalBaseUrl = process.env.BASE_URL;
 const originalGitRef = process.env.VERCEL_GIT_COMMIT_REF;
 let providerCalls = 0;
 beforeEach(async () => {
   process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
   (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
   process.env.VERCEL_ENV = 'development';
-  delete process.env.BASE_URL;
   delete process.env.VERCEL_GIT_COMMIT_REF;
   process.env.STRIPE_SECRET_KEY = `sk_test_${'a'.repeat(24)}`;
   process.env.BREVO_API_KEY = 'test-only-provider-key';
@@ -38,7 +36,6 @@ after(async () => {
   globalThis.fetch = originalFetch;
   if (originalHold === undefined) delete process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING;
   else process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = originalHold;
-  if (originalBaseUrl === undefined) delete process.env.BASE_URL; else process.env.BASE_URL = originalBaseUrl;
   if (originalGitRef === undefined) delete process.env.VERCEL_GIT_COMMIT_REF; else process.env.VERCEL_GIT_COMMIT_REF = originalGitRef;
   await closeHarness();
 });
@@ -56,7 +53,6 @@ for (const value of ['true', undefined, '', 'invalid', 'false']) {
 test('only explicit live-auth OTP sends to the disposable staging mailbox bypass the hold', async () => {
   process.env.VERCEL_ENV = 'preview';
   process.env.VERCEL_GIT_COMMIT_REF = 'staging';
-  process.env.BASE_URL = 'https://staging.idoc.club';
   await sendTransactionalEmail(
     { html: '<p>synthetic OTP</p>', subject: 'Synthetic OTP', to: 'runner@pixelsmith.space' },
     { allowLiveAuthE2eOtp: true },
