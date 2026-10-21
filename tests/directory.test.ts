@@ -311,6 +311,9 @@ test('clicking a country on the map opens the directory filtered to that federat
   // The Map tab is only the map: no picker, dropdown or other control under or beside it.
   assert.doesNotMatch(concentrationMapSource, /Picker|<select|<form|<button/);
   assert.ok(!existsSync('components/directory/country-directory-picker.tsx'));
+  // The hover text is exactly the original, for every viewer: no added hint.
+  assert.match(mapCanvasSource, /text\.textContent = `\$\{properties\.countryName\}: \$\{properties\.memberCount\} members`;/);
+  assert.doesNotMatch(mapCanvasSource, /click to view/);
   // Click handler and pointer cursor exist only when the viewer is signed in.
   assert.match(mapCanvasSource, /if \(canOpenDirectory\) \{\s*map\.on\('click', 'member-dots'/);
   assert.match(mapCanvasSource, /if \(canOpenDirectory\) map\.getCanvas\(\)\.style\.cursor = 'pointer'/);

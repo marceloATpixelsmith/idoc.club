@@ -87,11 +87,12 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
         map.on('mousemove', 'member-dots', (event) => {
           const properties = event.features?.[0]?.properties;
           if (!properties) return;
-          // Only signed-in members can open the directory, so only they get a clickable affordance.
+          // Only signed-in members can open the directory, so only they get the pointer cursor. The hover
+          // text is the same for everyone: no extra wording.
           if (canOpenDirectory) map.getCanvas().style.cursor = 'pointer';
           const text = document.createElement('div');
           text.className = 'text-xs font-medium text-neutral-900';
-          text.textContent = `${properties.countryName}: ${properties.memberCount} members${canOpenDirectory ? ' \u2014 click to view them' : ''}`;
+          text.textContent = `${properties.countryName}: ${properties.memberCount} members`;
           popup.setLngLat(event.lngLat).setDOMContent(text).addTo(map);
         });
         if (canOpenDirectory) {
