@@ -138,3 +138,19 @@ test('an administrator-created Paid registration also queues the payment-confirm
   const source = read('lib/seminars/registrations.ts');
   assert.match(source, /if \(markPaid\) \{[\s\S]*seminar\.staging_payment_confirmed[\s\S]*seminar\.payment_confirmed:admin:/);
 });
+
+test('countries are shown by name, never by their two-letter code, in the admin member form and everywhere else', async () => {
+  const form = read('app/(dashboard)/admin/members/admin-profile-form.tsx');
+  assert.match(form, /COUNTRY_SELECT_OPTIONS: SelectOption\[\] = COUNTRY_OPTIONS\.map\(\(\{ code, name \}\) => \(\{ label: name, value: code \}\)\)/);
+  for (const field of ['countryCode', 'nationalFederationCountryCode']) {
+    assert.match(form, new RegExp(`name="${field}" options=\\{COUNTRY_SELECT_OPTIONS\\}`), `${field} must list countries by name`);
+  }
+  // The option text is the label, the submitted value stays the ISO code.
+  assert.match(form, /<option key=\{item\.value\} value=\{item\.value\}>\{item\.label\}<\/option>/);
+  // No screen may render the raw code list (api routes may validate against it).
+  const { readdirSync, statSync } = await import('node:fs');
+  const files: string[] = [];
+  const walk = (dir: string) => { for (const name of readdirSync(dir)) { const path = `${dir}/${name}`; if (statSync(path).isDirectory()) walk(path); else if (path.endsWith('.tsx')) files.push(path); } };
+  walk('app'); walk('components');
+  for (const file of files) assert.doesNotMatch(read(file), /ISO_COUNTRY_CODES/, `${file} must not list raw country codes`);
+});

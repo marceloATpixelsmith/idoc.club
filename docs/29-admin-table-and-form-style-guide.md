@@ -39,6 +39,7 @@ This guide records how administrator tables, drawers and forms look and behave a
 - Seminar Start / End dates use one shared `DateRangePicker` (`components/forms/date-range-picker.tsx`) that selects both dates with one calendar and still submits `startDate` and `endDate` separately. Date range filters keep their own existing behavior and show `dd/mm/yyyy` endpoints. Neither form picker should use a locale-dependent native date input.
 - The member drawer's **Email preferences** card shows the member's "Keep me updated by email" toggle (docs/19). An administrator can only switch it off; when the member is not subscribed the card shows text instead of a toggle, because opting in is the member's own consent.
 - Required fields are marked required in the control and enforced again on the server.
+- **Countries are always shown by name, never by their two-letter ISO code**, in administrator and member-facing screens alike (selects, table cells, filters, labels). The stored value stays the ISO code, but the option text, cell and filter label come from `COUNTRY_OPTIONS` / `countryNameForCode` (`lib/membership/countries.ts`, sorted by name). The member form's Country and National Federation selects use `COUNTRY_OPTIONS`; `tests/admin-member-experience.test.ts` fails if a screen lists `ISO_COUNTRY_CODES` directly.
 
 ## 5. Payment evidence
 
