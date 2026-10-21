@@ -778,3 +778,72 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
     animation: none;
   }
 }
+
+/* First-visit map hint: the bubble's border and the ring around the US dot pulse gold so the eye is drawn
+ * to it, and the bubble bounces toward the dot while the pointer icon taps, only for visitors who have not asked
+ * for reduced motion (they get the same hint, static). */
+@media (prefers-reduced-motion: no-preference) {
+  .idoc-map-hint-bubble {
+    animation:
+      idoc-map-hint-flash 1.1s ease-in-out infinite,
+      idoc-map-hint-bob 1.1s ease-in-out infinite;
+  }
+
+  .idoc-map-hint-pointer {
+    animation: idoc-map-hint-tap 1.1s ease-in-out infinite;
+    transform-origin: 30% 30%;
+  }
+
+  .idoc-map-hint-ring {
+    animation: idoc-map-hint-ring 1.1s ease-out infinite;
+  }
+}
+
+@keyframes idoc-map-hint-flash {
+  0%,
+  100% {
+    border-color: var(--color-border);
+    box-shadow: 0 0 0 0 rgb(211 175 55 / 0%);
+  }
+
+  50% {
+    border-color: rgb(211 175 55 / 85%);
+    box-shadow: 0 0 0 4px rgb(211 175 55 / 25%);
+  }
+}
+
+/* A small bounce toward the dot, so the hint visibly moves and catches the eye. */
+@keyframes idoc-map-hint-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* The pointer icon "taps" once per cycle, in step with the bounce. */
+@keyframes idoc-map-hint-tap {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  50% {
+    transform: scale(0.8) rotate(-12deg);
+  }
+}
+
+@keyframes idoc-map-hint-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.85);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
