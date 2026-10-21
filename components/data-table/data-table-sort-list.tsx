@@ -324,7 +324,7 @@ function DataTableSortItem({
         role="listitem"
         id={sortItemId}
         tabIndex={-1}
-        className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/30 p-2"
+        className="flex flex-nowrap items-center gap-2 rounded-md border border-border/60 bg-background/30 p-2"
         onKeyDown={onItemKeyDown}
       >
         <Popover open={showFieldSelector} onOpenChange={setShowFieldSelector}>
@@ -333,7 +333,7 @@ function DataTableSortItem({
               id={fieldTriggerId}
               aria-controls={fieldListboxId}
               variant="outline"
-              className="w-52 justify-between rounded font-normal"
+              className="min-w-0 flex-1 justify-between rounded font-normal"
             >
               <span className="truncate">{columnLabels.get(sort.id) ?? 'Hidden field'}</span>
               <ChevronsUpDown className="opacity-50" />
@@ -373,7 +373,7 @@ function DataTableSortItem({
         >
           <SelectTrigger
             aria-controls={directionListboxId}
-            className="w-24 rounded"
+            className="w-24 shrink-0 rounded"
           >
             <SelectValue />
           </SelectTrigger>
