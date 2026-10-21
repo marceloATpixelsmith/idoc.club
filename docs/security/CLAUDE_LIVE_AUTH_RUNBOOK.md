@@ -1,4 +1,4 @@
-# Claude Code Cloud — Live Authentication & Security Runbook
+# GitHub Actions — Live Authentication & Security Runbook
 
 ## Authority
 
@@ -10,7 +10,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Test only the explicitly provided staged/live hostname.
 - Never substitute localhost or a Vercel preview.
-- Use disposable accounts and the Pixelsmith E2E Email connector for flows requiring real mail.
+- Use disposable accounts and the existing Pixelsmith E2E Email connector for flows requiring real mail. Do not claim GitHub Actions can create/read mailboxes until its MXroute integration is implemented.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
@@ -54,15 +54,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
   (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
   actually performed.
-- **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
-  `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
-  blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
-  the human operator using this account, on request from Claude at the right point in the run; Claude
-  independently verifies the resulting database state (identity row, session, audit_log entry) via
-  the read-only connector above rather than trusting the operator's report alone. The
-  adversarial/tamper/replay/cancel-deny portions of the same case do not need this account and are
-  run by Claude directly. Do not ask the operator which account to use -- use this one unless they
-  say otherwise.
+- Google OAuth real consent/account-linking is manual-only (`LIVE-AUTH-004`) and excluded from unattended GitHub runs. `LIVE-AUTH-022` remains automated using password/email authentication for safe return-path behavior. The GitHub result must identify the Google steps as `blocked` / manual-required, never pass.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
   -- query `idoc.application_roles` via the read-only connector above.
@@ -80,11 +72,11 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 ## Real email
 
 For every case with `requiresEmail=true`:
-- create a mailbox with the connected Pixelsmith E2E Email tools;
-- make the staged application itself send the transactional email;
-- poll/read the mailbox and use the real link/code in the browser flow;
-- never use `send_e2e_test_message` as a substitute for the application's own outbound email;
-- delete the mailbox only after the flow passes; preserve it temporarily when failure evidence depends on it.
+- Reuse the run's existing disposable mailbox/account when it can safely support the next step; create another mailbox or account only when a clean identity or distinct email address is required.
+- Until the GitHub Actions MXroute integration is implemented, use the existing Pixelsmith E2E Email connector for manual live runs.
+- Make the staged application itself send the transactional email; poll/read the mailbox and use the real link/code in the browser flow.
+- Never use `send_e2e_test_message` as a substitute for the application's own outbound email.
+- Delete each mailbox once after all dependent flows that use it have passed; preserve it temporarily when failure evidence depends on it.
 
 ## Privileged (administrator/super_admin) test identities
 
