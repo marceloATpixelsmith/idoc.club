@@ -2066,8 +2066,8 @@
         "preconditions": [
           "Use the designated staged/live hostname, never a Vercel preview or localhost.",
           "Use only disposable test identities and test data.",
-          "Use a disposable member account; an administrator account is optional for the idle-limit check.",
-          "Staging keeps DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true; only authentication OTP to this run's disposable @pixelsmith.space mailbox may be delivered."
+          "Staging keeps DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true; only authentication OTP to this run's disposable @pixelsmith.space mailbox may be delivered.",
+          "Use a disposable member account; an administrator account is optional for the idle-limit check."
         ],
         "steps": [
           "Sign in and open a deep protected page such as /dashboard/profile?tab=security.",
