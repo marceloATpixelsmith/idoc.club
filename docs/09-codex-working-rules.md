@@ -2,6 +2,10 @@
 
 These are mandatory instructions for Codex work in `marceloATpixelsmith/idoc.club`. They supplement the repository instructions in `AGENTS.md` and the authoritative project documentation in this directory. If a task-specific instruction is stricter, follow the stricter instruction.
 
+## Mandatory PR completion for every Codex task
+
+The **Mandatory task-to-merge PR completion contract** in `AGENTS.md` is binding on each Codex prompt whether or not repeated in the prompt. Reuse one open, non-draft PR for the entire task; do not split without asking the owner. Stay on that PR through every CI failure, review comment/thread (explicitly mark addressed threads Resolved/closed/collapsed), outdated base, and rerun of risk-required checks on its latest head. When all checks are green, all threads resolved, the branch is current and mergeable, approvals satisfied, and no owner hold exists, **merge into `staging` immediately without asking**. Confirm the merge and link the PR. Never auto-promote to `main`. If execution is blocked or ends while checks are pending, explicitly report the current state and next step; do not imply continuous monitoring outside an active execution.
+
 ## 1. Repository and pull-request workflow
 
 1. Work only in this repository unless the task explicitly requires an approved external integration.
