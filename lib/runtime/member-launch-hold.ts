@@ -26,8 +26,7 @@ export function logMemberLaunchHold(action: string) {
 export function liveAuthE2eOtpMayBypassCommunicationsHold(recipient: string, environment: Environment = process.env): boolean {
   if (!memberCommunicationsDisabled(environment)
     || environment.VERCEL_ENV !== 'preview'
-    || environment.VERCEL_GIT_COMMIT_REF !== 'staging'
-    || environment.BASE_URL !== 'https://staging.idoc.club') return false;
+    || environment.VERCEL_GIT_COMMIT_REF !== 'staging') return false;
   return /^[^@\s]+@pixelsmith\.space$/i.test(recipient);
 }
 
