@@ -24,8 +24,7 @@ The test password `Password#1` is the designated breached-password fixture. It i
 ## Filtered membership and revenue reporting
 
 `/admin/members` is the canonical administrator roster. It defaults explicitly to active
-entitlements and performs name/email search, status, inclusive expiration date, canonical address
-country, federation, IDOC region, and professional-classification filtering in PostgreSQL. Filters
+entitlements and performs name/email search, status, inclusive expiration date, federation, IDOC region, and professional-classification filtering in PostgreSQL. Filters
 are combinable, URL-addressable, sorted deterministically, and returned in pages of 25. The
 filtered CSV endpoint reruns that same authorized query, exports at most 25,000 rows, records only
 the actor, filters, and result count in the audit log, emits a UTF-8 BOM, and prefixes formula-like

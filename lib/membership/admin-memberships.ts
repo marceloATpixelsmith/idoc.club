@@ -26,7 +26,7 @@ export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 // calling any string method on it.
 type RawFilterValue = string | string[] | undefined;
 export type MemberFilters = {
-  column?: RawFilterValue; country?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
+  column?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
   membershipType?: RawFilterValue; officialStatus?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
   direction?: RawFilterValue; filters?: RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
   status?: RawFilterValue; joinOperator?: RawFilterValue;
@@ -43,7 +43,7 @@ export type AdminMemberRow = {
 
 const SORT_FIELDS = ['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
 type SortField = typeof SORT_FIELDS[number];
-type AdvancedMemberFilter = { id: 'status' | 'type' | 'country' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
+type AdvancedMemberFilter = { id: 'status' | 'type' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
 export const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
 
@@ -64,7 +64,7 @@ function firstValue(value: RawFilterValue): string | undefined {
 function pageNumber(value: number | RawFilterValue): number {
   return Number(typeof value === 'number' ? value : firstValue(value));
 }
-// A multi-select filter (status, type, country, federation, region) can arrive two ways: a real
+// A multi-select filter (status, type, federation, region) can arrive two ways: a real
 // repeated-key array from a raw request (?status=active&status=expired), or the single comma-joined
 // query param the admin toolbar's multi-select actually sends (?status=active,expired). Both mean
 // "match any of these", so both collapse to the same deduped token list here.
@@ -74,7 +74,7 @@ function allValues(value: RawFilterValue): string[] {
 }
 
 type NormalizedMemberFilters = {
-  countries: string[]; officialStatuses: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
+  officialStatuses: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
   direction: 'asc' | 'desc'; membershipTypes: MembershipTypeOption[]; page: number; pageSize: 10 | 25 | 50 | 100; q?: string; regions: string[];
   sort: SortField; sorts: { id: SortField; desc: boolean }[]; advancedFilters: AdvancedMemberFilter[];
   joinOperator: 'and' | 'or'; statuses: MembershipStatusFilter[];
@@ -100,7 +100,6 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
   const rawPageSize = pageNumber(input.pageSize);
   const filters: NormalizedMemberFilters = {
     direction: parsedSort?.desc === true ? 'desc' : parsedSort?.desc === false ? 'asc' : firstValue(input.direction) === 'desc' || legacyDirection === 'desc' ? 'desc' : 'asc',
-    countries: allValues(input.country).map((value) => value.trim().toUpperCase()).filter(Boolean),
     expiresFrom: firstValue(input.expiresFrom) || undefined,
     expiresTo: firstValue(input.expiresTo) || undefined,
     officialStatuses: allValues(input.officialStatus).filter((value) => OFFICIAL_STATUS_VALUES.includes(value)),
@@ -113,7 +112,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     sort: sort && SORT_FIELDS.includes(sort as SortField) ? sort as SortField : 'name',
     sorts, advancedFilters: [], joinOperator: firstValue(input.joinOperator) === 'or' ? 'or' : 'and',
     // An empty selection means "no status restriction" here, exactly like every other facet below
-    // (countries/federations/regions/membershipTypes) -- it does NOT fall back to a default. The
+    // (federations/regions/membershipTypes) -- it does NOT fall back to a default. The
     // "active by default" behavior a brand-new administrator sees is applied once, by the caller,
     // only when no preference has ever been saved (see app/(dashboard)/admin/members/page.tsx);
     // baking that default in here as well made Reset unable to distinguish "never customized" from
@@ -125,7 +124,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     try {
       const advanced: unknown = JSON.parse(rawAdvancedFilters);
       if (Array.isArray(advanced)) filters.advancedFilters = advanced.slice(0, 20).filter((filter): filter is AdvancedMemberFilter =>
-        filter && ['status', 'type', 'country', 'federation', 'region', 'expires'].includes(filter.id)
+        filter && ['status', 'type', 'federation', 'region', 'expires'].includes(filter.id)
         && typeof filter.operator === 'string' && (typeof filter.value === 'string'
           || Array.isArray(filter.value) && filter.value.every((value: unknown) => typeof value === 'string')));
     } catch { /* Invalid advanced state is ignored and server defaults remain authoritative. */ }
@@ -171,8 +170,7 @@ function advancedCondition(filter: AdvancedMemberFilter, effectiveStatus: SQL): 
     : filter.id === 'region' ? IDOC_REGIONS : ISO_COUNTRY_CODES;
   const selected = [...new Set(values.filter((value) => (allowed as readonly string[]).includes(value)))];
   if (!selected.length || !['eq', 'ne', 'inArray', 'notInArray'].includes(filter.operator)) return null;
-  const field = filter.id === 'type' ? sql`roles.membership_type` : filter.id === 'federation' ? sql`roles.federation`
-    : filter.id === 'country' ? sql`p.country_code` : sql`roles.region`;
+  const field = filter.id === 'type' ? sql`roles.membership_type` : filter.id === 'federation' ? sql`roles.federation` : sql`roles.region`;
   const matches = filter.id === 'status' ? selected.map((value) => statusCondition(value as MembershipStatusFilter, effectiveStatus))
     : selected.map((value) => sql`${field} = ${value}`);
   const match = sql`(${sql.join(matches, sql` or `)})`;
@@ -207,7 +205,6 @@ function queryParts(raw: MemberFilters) {
   }
   if (filters.expiresFrom) conditions.push(sql`m.valid_until >= ${filters.expiresFrom}`);
   if (filters.expiresTo) conditions.push(sql`m.valid_until <= ${filters.expiresTo}`);
-  if (filters.countries.length) conditions.push(sql`p.country_code in (${sql.join(filters.countries.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.federations.length) conditions.push(sql`roles.federation in (${sql.join(filters.federations.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.regions.length) conditions.push(sql`roles.region in (${sql.join(filters.regions.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.officialStatuses.length) {

@@ -30,7 +30,7 @@ import { HorseshoeIcon } from '@/components/membership/professional-role-icons';
 import { formatTableDate } from '@/lib/format';
 
 type Filters = {
-  countries?: string[]; direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federations?: string[];
+  direction: 'asc' | 'desc'; expiresFrom?: string; expiresTo?: string; federations?: string[];
   membershipTypes?: string[]; officialStatuses?: string[]; page: number; q?: string; regions?: string[]; sort: string; statuses?: string[];
 };
 
@@ -38,7 +38,7 @@ type Filters = {
 // no accessorFn, so it never appears in the View popover to be restored -- a saved preference
 // predating this column (or missing it) must never be able to hide it with no way back.
 const OPTIONAL_COLUMNS = ['email', 'type', 'officialStatus', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
-const MULTI_SELECT_FILTERS = ['status', 'type', 'officialStatus', 'federation', 'country', 'region'] as const;
+const MULTI_SELECT_FILTERS = ['status', 'type', 'officialStatus', 'federation', 'region'] as const;
 const COLUMN_LABELS: Record<string, string> = { actions: 'Actions', country: 'Country', email: 'Email', expires: 'Expiration', federation: 'National Federation', lastPayment: 'Last Payment', name: 'Member Name', officialStatus: 'Official Status', region: 'IDOC Region', status: 'Status', type: 'Membership Type', updated: 'Updated' };
 const STATUS_OPTIONS = [
   { label: 'Active Members', value: 'active' }, { label: 'Expired Members', value: 'expired' },
@@ -55,7 +55,6 @@ const OFFICIAL_STATUS_FILTER_OPTIONS = [
   ...JUDGE_STATUSES.map((status) => ({ label: `Judge: ${status}`, value: `judge:${status}` })),
   ...STEWARD_STATUSES.map((status) => ({ label: `Steward: ${status}`, value: `steward:${status}` })),
 ];
-const COUNTRY_FILTER_OPTIONS = COUNTRY_OPTIONS.map(({ code, name }) => ({ label: name, value: code }));
 const REGION_FILTER_OPTIONS = IDOC_REGIONS.map((region) => ({ label: region, value: region }));
 const TYPE_DISPLAY = {
   judge: { icon: Bell, label: 'JUDGE' }, steward: { icon: HorseshoeIcon, label: 'STEWARD' },
@@ -107,7 +106,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'officialStatus', accessorFn: (row) => row.officialStatuses ?? [], enableColumnFilter: true, header: header('officialStatus'), meta: { label: 'Official Status', options: OFFICIAL_STATUS_FILTER_OPTIONS, variant: 'multiSelect' }, enableSorting: false, cell: ({ row }) => row.original.officialStatuses?.length ? <span className="flex flex-col gap-0.5">{row.original.officialStatuses.map((token) => <span key={token}>{token.replace(/^judge:/, 'Judge: ').replace(/^steward:/, 'Steward: ')}</span>)}</span> : '—' },
     { id: 'status', accessorKey: 'status', enableColumnFilter: true, header: header('status'), meta: { label: 'Member Status', options: STATUS_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => { const status = STATUS_DISPLAY[row.original.status as keyof typeof STATUS_DISPLAY]; return status ? <span className="inline-flex items-center gap-2"><status.icon aria-hidden="true" className="size-4 shrink-0" data-icon-tooltip={status.label} />{status.label}</span> : row.original.status.toUpperCase(); } },
     { id: 'federation', accessorKey: 'federation', enableColumnFilter: true, header: header('federation'), meta: { label: 'National Federation', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.federation ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.federation)}<CountryFlag code={row.original.federation} /></span> : '—' },
-    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country', options: COUNTRY_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.country ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.country)}<CountryFlag code={row.original.country} /></span> : '—' },
+    { id: 'country', accessorKey: 'country', enableColumnFilter: true, header: header('country'), meta: { label: 'Address Country' }, cell: ({ row }) => row.original.country ? <span className="inline-flex items-center gap-2">{countryNameForCode(row.original.country)}<CountryFlag code={row.original.country} /></span> : '—' },
     { id: 'region', accessorKey: 'region', enableColumnFilter: true, header: header('region'), meta: { label: 'IDOC Region', options: REGION_FILTER_OPTIONS, variant: 'multiSelect' }, cell: ({ row }) => row.original.region ?? '—' },
     { id: 'expires', accessorKey: 'validUntil', header: header('expires'), meta: { label: 'Expiration Date' }, cell: ({ row }) => row.original.validUntil ? formatTableDate(row.original.validUntil) : '—' },
     { id: 'lastPayment', accessorKey: 'lastPaymentAt', header: header('lastPayment'), meta: { label: 'Last Payment' }, cell: ({ row }) => row.original.lastPaymentAt ? formatTableDate(row.original.lastPaymentAt) : '—' },
@@ -116,7 +115,7 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
   ], [pathname]);
   const defaultColumnOrder = ['select', 'name', 'status', 'type', 'expires', 'region', 'officialStatus', 'email', 'federation', 'country', 'lastPayment', 'updated', 'actions'];
   const initialSorting = filters.sort ? [{ desc: filters.direction === 'desc', id: filters.sort as keyof AdminMemberRow }] : [{ desc: false, id: 'name' as keyof AdminMemberRow }];
-  // Facet filters (status/type/federation/country/region) are applied server-side from saved
+  // Facet filters (status/type/federation/region) are applied server-side from saved
   // preferences regardless of this initial state, so this must mirror what the server actually
   // applied -- otherwise the toolbar shows no active facets while the table is already filtered,
   // and the next unrelated change persists `undefined` for these, silently clearing the saved view.
@@ -125,7 +124,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     { id: 'officialStatus', value: filters.officialStatuses ?? [] },
     { id: 'status', value: filters.statuses ?? [] },
     { id: 'federation', value: filters.federations ?? [] },
-    { id: 'country', value: filters.countries ?? [] },
     { id: 'region', value: filters.regions ?? [] },
   ].filter((filter) => filter.value.length > 0);
 
@@ -141,7 +139,6 @@ export function MembersTable({ filters, initialColumnOrder, initialVisibleColumn
     void persistTablePreferences('memberships', {
       columnOrder: table.getState().columnOrder.join(','),
       columns,
-      country: filterToken(state.columnFilters, 'country'),
       expiresFrom: effectiveFrom,
       expiresTo: effectiveTo,
       federation: filterToken(state.columnFilters, 'federation'),
