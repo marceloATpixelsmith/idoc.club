@@ -43,24 +43,16 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        {user ? (
-          //ALIGN THE SECONDARY LEVEL WITH THE LEFT EDGE OF THE SEMINARS CONTENT AREA.
-          <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
-            <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
+          <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
               <Link
-                aria-current={!showMySeminars ? 'page' : undefined}
+                aria-current={!showMySeminars && !showPastSeminars ? 'page' : undefined}
                 href="/seminars"
-                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold text-foreground'}`}
+                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${!showMySeminars && !showPastSeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
               >
                 Available Seminars/Courses
               </Link>
-              <Link
-                aria-current={showMySeminars ? 'page' : undefined}
-                href="/seminars?view=my"
-                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-              >
-                My Seminars/Courses
-              </Link>
+
               <Link
                 aria-current={showPastSeminars ? 'page' : undefined}
                 href="/seminars?view=past"
@@ -68,8 +60,20 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
               >
                 Past Seminars/Courses
               </Link>
-            </nav>
-            {showMySeminars ? (
+
+          {user ? (
+                <Link
+                  aria-current={showMySeminars ? 'page' : undefined}
+                  href="/seminars?view=my"
+                  className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                >
+                  My Seminars/Courses
+                </Link>
+  
+          ) : null}
+          </nav>
+        </div>
+        {showMySeminars ? (
               <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
                 <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
                   <Link
