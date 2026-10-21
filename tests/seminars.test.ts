@@ -16,6 +16,7 @@ const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/rou
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
 const levelsField = readFileSync('components/seminars/seminar-levels-field.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+const seminarsRoute = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
 const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
 test('seminar and registration states, and their documented length limits, are constrained in the migration', () => {
@@ -238,16 +239,18 @@ test('Available Seminars is one flat list (open, full, or closed together, not s
   assert.match(availableBlock as string, /AvailabilityTag/);
 });
 
-test('both the member catalog and the signed-out public catalog show an already-ended, published seminar under a "Past seminars" section-label heading', () => {
+test('past seminars and courses have their own top-level tab between available and My Seminars', () => {
+  const availableTab = seminarsRoute.indexOf('Available Seminars/Courses');
+  const pastTab = seminarsRoute.indexOf('Past Seminars/Courses');
+  const myTab = seminarsRoute.indexOf('My Seminars/Courses');
+  assert.ok(availableTab > -1 && availableTab < pastTab && pastTab < myTab, 'tabs should be ordered Available, Past, My');
+  assert.match(seminarsRoute, /href="\\/seminars\\?view=past"/);
+  assert.match(seminarsRoute, /<MemberRegistrations view="past" \/>/);
+  assert.match(memberPage, /async function PastSeminars/);
   assert.match(memberPage, /listPastPublishedSeminars/);
-  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
-  const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
-  for (const block of [availableBlock, publicBlock]) {
-    assert.ok(block, 'catalog block not found');
-    assert.match(block as string, /<h3 className="section-label">Past seminars\/courses<\/h3>/);
-  }
+  assert.doesNotMatch(memberPage.match(/async function AvailableSeminars[\\s\\S]*?\\n\\}/)?.[0] ?? '', /listPastPublishedSeminars/);
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
-  assert.match(registrationsSource, /s\.status='published' and s\.end_date < current_date/);
+  assert.match(registrationsSource, /s\\.status='published' and s\\.end_date < current_date/);
 });
 
 test('all seminar listing surfaces reuse a compact, uniformly constrained card with independent navigation and FEI links', () => {
