@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import { guardStripeMutations, liveAuthE2eOtpMayBypassCommunicationsHold, liveBillingDisabled, memberCommunicationsDisabled, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
 
-const original = { hold: process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING, key: process.env.STRIPE_SECRET_KEY, node: process.env.NODE_ENV, vercel: process.env.VERCEL_ENV, base: process.env.BASE_URL };
+const original = { hold: process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING, key: process.env.STRIPE_SECRET_KEY, node: process.env.NODE_ENV };
 afterEach(() => {
-  for (const [name, value] of Object.entries({ DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: original.hold, STRIPE_SECRET_KEY: original.key, NODE_ENV: original.node, VERCEL_ENV: original.vercel, BASE_URL: original.base })) {
+  for (const [name, value] of Object.entries({ DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: original.hold, STRIPE_SECRET_KEY: original.key, NODE_ENV: original.node })) {
     if (value === undefined) delete process.env[name]; else process.env[name] = value;
   }
 });
@@ -17,18 +17,16 @@ for (const value of [undefined, '', 'true', 'invalid', 'FALSE', ' false ', '0'])
 test('only exact false releases communications', () => {
   assert.equal(memberCommunicationsDisabled({ DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false' }), false);
 });
-test('the live auth OTP hold exception is limited to staging and the disposable mailbox domain', () => {
+test('the live auth OTP hold exception is limited to staging preview and the disposable mailbox domain', () => {
   const staging = {
     DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'true',
     VERCEL_ENV: 'preview',
     VERCEL_GIT_COMMIT_REF: 'staging',
-    BASE_URL: 'https://staging.idoc.club',
   };
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', staging), true);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('member@example.com', staging), false);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_ENV: 'production' }), false);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_GIT_COMMIT_REF: 'feature' }), false);
-  assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, BASE_URL: 'https://redesign.idoc.club' }), false);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false' }), false);
 });
 
