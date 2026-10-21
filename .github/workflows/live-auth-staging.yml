@@ -1,0 +1,82 @@
+name: Live authentication staging suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_target:
+        description: Type staging.idoc.club to confirm the authorized target
+        required: true
+        type: string
+  schedule:
+    - cron: '0 9 * * 1'
+
+concurrency:
+  group: live-auth-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-auth:
+    if: github.event_name == 'schedule' || inputs.confirm_target == 'staging.idoc.club'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LIVE_AUTH_BASE_URL: https://staging.idoc.club
+      STAGING_POSTGRES_URL: ${{ secrets.STAGING_POSTGRES_URL }}
+      E2E_SERVICE_TOKEN: ${{ secrets.E2E_SERVICE_TOKEN }}
+      E2E_SERVICE_URL: ${{ vars.E2E_SERVICE_URL }}
+      LIVE_AUTH_TEST_PASSWORD: ${{ secrets.LIVE_AUTH_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Validate required secrets and staging database boundary
+        shell: bash
+        run: |
+          test -n "$STAGING_POSTGRES_URL"
+          test -n "$E2E_SERVICE_TOKEN"
+          test -n "$LIVE_AUTH_TEST_PASSWORD"
+          node --conditions=react-server --import tsx --input-type=module -e "import { validateStagingDatabaseUrl } from './lib/db/staging-database-url.ts'; validateStagingDatabaseUrl(process.env.STAGING_POSTGRES_URL, true);"
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Create one disposable mailbox for the sequential auth journey
+        id: mailbox
+        run: |
+          node --input-type=module -e "import { appendFileSync } from 'node:fs'; import { createMailbox } from './scripts/live-auth-mailbox.mjs'; const email = await createMailbox(); appendFileSync(process.env.GITHUB_OUTPUT, 'email=' + email + '\\n'); console.log('Created one disposable mailbox for this run.');"
+      - name: Run live auth journey against staging
+        id: live_tests
+        env:
+          LIVE_AUTH_EMAIL: ${{ steps.mailbox.outputs.email }}
+        run: pnpm exec playwright test --config=playwright.live-auth.config.mjs
+      - name: Build matrix result report
+        if: always() && steps.mailbox.outputs.email != ''
+        run: node scripts/write-live-auth-results.mjs
+      - name: Clean up disposable staging account
+        if: always() && steps.mailbox.outputs.email != ''
+        env:
+          LIVE_AUTH_EMAIL: ${{ steps.mailbox.outputs.email }}
+        run: node --conditions=react-server --import tsx scripts/e2e-delete-test-account.ts --email="$LIVE_AUTH_EMAIL" --confirm-staging
+      - name: Delete disposable mailbox
+        if: always() && steps.mailbox.outputs.email != ''
+        env:
+          LIVE_AUTH_EMAIL: ${{ steps.mailbox.outputs.email }}
+        run: node --input-type=module -e "import { deleteMailbox } from './scripts/live-auth-mailbox.mjs'; await deleteMailbox(process.env.LIVE_AUTH_EMAIL); console.log('Deleted the run mailbox.');"
+      - name: Upload live auth results and browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-auth-staging-results
+          path: |
+            test-results/auth/auth-live-results.json
+            test-results/live-auth/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 30

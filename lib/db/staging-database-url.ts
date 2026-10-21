@@ -1,13 +1,5 @@
-/** Fail-closed guard for operator scripts that intentionally target the real staging database.
- *
- * This is deliberately separate from validateTestDatabaseUrl (lib/db/test-database-url.ts), which
- * exists for the opposite case -- an ephemeral, throwaway CI database -- and explicitly REJECTS any
- * URL naming a Render host. Staging is a real, persistent Render Postgres instance, and it
- * deliberately shares the same database as production (docs/07-administrator-and-operations-runbook.md
- * "Branch, environment, and deployment workflow"), so STAGING_POSTGRES_URL and POSTGRES_URL are
- * expected to be identical -- that is not a mistake to guard against. The reliable boundary here is
- * the operator's own explicit confirmation, plus requiring a well-formed, explicitly-supplied URL.
- */
+/** Fail-closed guard for live-auth tooling. The Render database instance is shared, but staging
+ * and production are isolated by schema and application role. */
 export function validateStagingDatabaseUrl(value: string | undefined, confirmed: boolean): URL {
   if (!confirmed) {
     throw new Error(
@@ -26,6 +18,13 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
   }
   if (!['postgres:', 'postgresql:'].includes(candidate.protocol) || !candidate.hostname || !candidate.username) {
     throw new Error('STAGING_POSTGRES_URL must be a complete PostgreSQL URL.');
+  }
+  if (candidate.username !== 'idoc_staging_app' || candidate.pathname !== '/ayni_space') {
+    throw new Error('STAGING_POSTGRES_URL must use the idoc_staging_app role and ayni_space database.');
+  }
+  const options = candidate.searchParams.get('options') ?? '';
+  if (!/(?:^|\s)-c\s*search_path=idoc_staging(?:\s|$)/.test(options)) {
+    throw new Error('STAGING_POSTGRES_URL must set search_path=idoc_staging.');
   }
 
   return candidate;

@@ -2,21 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { requireDisposableTestEmail, validateStagingDatabaseUrl } from '../lib/db/staging-database-url.ts';
 
-const STAGING = 'postgres://tester:secret@staging-db.render.com/idoc_staging';
+const STAGING = 'postgres://idoc_staging_app:secret@staging-db.render.com/ayni_space?options=-c%20search_path%3Didoc_staging';
 
 test('requires explicit staging confirmation before touching anything', () => {
   assert.throws(() => validateStagingDatabaseUrl(STAGING, false));
-  assert.equal(validateStagingDatabaseUrl(STAGING, true).pathname, '/idoc_staging');
+  const url = validateStagingDatabaseUrl(STAGING, true);
+  assert.equal(url.username, 'idoc_staging_app');
+  assert.equal(url.pathname, '/ayni_space');
 });
 
-test('rejects missing or malformed URLs even when confirmed', () => {
-  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/idoc_staging', 'postgres://localhost/idoc_staging']) {
+test('rejects missing or malformed URLs and production schema credentials', () => {
+  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/ayni_space', 'postgres://localhost/ayni_space', 'postgres://idoc_production_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/ayni_space?options=-c%20search_path%3Didoc_production', 'postgres://idoc_staging_app:secret@db.render.com/other?options=-c%20search_path%3Didoc_staging', 'postgres://idoc_staging_app:secret@db.render.com/ayni_space']) {
     assert.throws(() => validateStagingDatabaseUrl(value, true));
   }
-});
-
-test('accepts a staging URL that is identical to production -- staging deliberately shares the production database', () => {
-  assert.equal(validateStagingDatabaseUrl(STAGING, true).hostname, 'staging-db.render.com');
 });
 
 test('only accepts disposable @pixelsmith.space test addresses', () => {
