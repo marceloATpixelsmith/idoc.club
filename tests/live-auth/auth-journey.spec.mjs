@@ -18,8 +18,8 @@ async function submitPassword(page, value) {
   await page.getByRole("button", { name: "Sign In" }).click();
 }
 
-test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through signup, OTP, login, logout, and safe return", async ({ page, context }) => {
-  test.info().annotations.push({ type: "live-auth-cases", description: "LIVE-AUTH-001,LIVE-AUTH-002,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006,LIVE-AUTH-022,LIVE-AUTH-038" });
+test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, login, and logout", async ({ page, context }) => {
+  test.info().annotations.push({ type: "live-auth-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
   const evidence = [];
   const beforeSignup = (await messages(email)).length;
   await page.goto("/sign-up");
@@ -32,7 +32,7 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
   await page.reload();
   await page.locator('input[name="code"]').fill(signupCode);
   await expect(page.getByRole("heading", { name: "Create your password" })).toBeVisible();
-  evidence.push("LIVE-AUTH-001", "LIVE-AUTH-002");
+  evidence.push("LIVE-AUTH-001");
 
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
@@ -54,12 +54,14 @@ test("LIVE-AUTH-001,002,003,005,006,022,038: reuse one mailbox/account through s
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const loginCode = await waitForOtp(email, "sign-in code", beforeLogin);
   await page.locator('input[name="code"]').fill(loginCode);
-  if (await page.getByLabel(/Remember me/).count()) await page.getByRole("button", { name: "Verify" }).click();
+  await page.getByRole("button", { name: "Verify" }).click();
   await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
   evidence.push("LIVE-AUTH-003");
 
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  // Exercise the approved protected return destination without claiming the full
+  // adversarial return-path matrix or administrator session-lifetime case.
   await startSignIn(page, "/dashboard/membership");
   const beforeSecondLogin = (await messages(email)).length;
   await submitPassword(page, password);
