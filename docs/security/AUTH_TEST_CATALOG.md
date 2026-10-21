@@ -105,6 +105,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Canonical controls:** AUTH-OAUTH-002, AUTH-TRANSACTION-010, AUTH-IDENTITY-005
 - **CI coverage:** mapped — `tests/security-e2e/google-oauth.spec.ts`, `tests/identity-ownership.integration.ts`, `tests/google-oauth-secret-rotation.test.ts`, `tests/google-oauth-secret-audit.integration.ts`
 - **Live:** required; email=no; admin=no; destructive=no
+- **Automation:** manual-only — Real Google OAuth consent and account selection are excluded from automated GitHub live tests by the agreed test scope; provider configuration and callback security remain covered by CI tests.
 
 ### Preconditions
 - Manual verification only. Do not run Google OAuth consent/account-selection as an automated GitHub live test.
@@ -646,6 +647,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Canonical controls:** AUTH-TRANSACTION-010
 - **CI coverage:** mapped — `tests/return-to-path.test.ts`, `tests/general-navigation.test.ts` — Safe return-path behavior is tested with the application's password/email sign-in flow; Google consent and provider callback replay remain in LIVE-AUTH-004 and are manual-only.
 - **Live:** required; email=no; admin=no; destructive=no
+- **Automation:** automated — These return-path checks do not require Google consent and run through password/email authentication.
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
@@ -1124,8 +1126,8 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
 - Use only disposable test identities and test data.
-- Use a disposable member account; an administrator account is optional for the idle-limit check.
 - Staging keeps DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true; only authentication OTP to this run's disposable @pixelsmith.space mailbox may be delivered.
+- Use a disposable member account; an administrator account is optional for the idle-limit check.
 
 ### Steps
 1. Sign in and open a deep protected page such as /dashboard/profile?tab=security.
