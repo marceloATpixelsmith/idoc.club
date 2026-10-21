@@ -325,6 +325,25 @@ test('clicking a country on the map opens the directory filtered to that federat
   assert.doesNotMatch(openDirectorySource, /federation=/);
 });
 
+test('every seminar row (homepage and seminars page) hovers like the homepage news cards and uses the compact homepage column', () => {
+  const registrations = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+  const home = readFileSync('app/(marketing)/page.tsx', 'utf8');
+  const globals = readFileSync('app/globals.css', 'utf8');
+  // Same effect as `card-midnight` on the news cards: gold border at 45% and a 2px lift over 0.3s.
+  assert.match(globals, /@utility card-midnight \{[^}]*border-color 0\.3s ease,\s*transform 0\.3s ease;\s*&:hover \{\s*border-color: rgb\(211 175 55 \/ 45%\);\s*transform: translateY\(-2px\);/);
+  assert.match(registrations, /SEMINAR_ROW_CLASS = 'outline outline-1 outline-transparent transition-\[outline-color,translate\] duration-300 ease-out has-\[article:hover\]:-translate-y-0\.5 has-\[article:hover\]:outline-gold\/45 has-\[a:focus-visible\]:outline-gold\/45'/);
+  assert.doesNotMatch(registrations, /bg-surface-raised\/35/);
+  // The row's whole <li> (rule to rule) takes the effect, on the homepage and in all three seminars listings.
+  assert.equal((registrations.match(/<li className=\{SEMINAR_ROW_CLASS\} key=\{seminar\.id\}>/g) ?? []).length, 3);
+  assert.equal((home.match(/<li className=\{SEMINAR_ROW_CLASS\} key=\{seminar\.id\}>/g) ?? []).length, 2);
+  // The card fills its row (so the clickable overlay covers the full width) and no list is stretched past the homepage's column.
+  assert.match(registrations, /<article className="relative grid max-w-full gap-5 px-4 py-6/);
+  assert.match(registrations, /SEMINAR_LIST_CLASS = '-mx-4 w-\[calc\(100%\+2rem\)\] max-w-\[37rem\] divide-y/);
+  assert.doesNotMatch(registrations, /w-fit max-w-full divide-y/);
+  // The list overhangs 1rem, so the cancel control under a My Seminars row gets the same 1rem padding as the card.
+  assert.match(registrations, /<div className="px-4 pb-6"><SeminarForm action=\{cancelSeminarRegistrationAction\}/);
+});
+
 test('every sort row keeps the column, direction, remove and drag controls on one line, down to phone width', () => {
   const sortList = readFileSync('components/data-table/data-table-sort-list.tsx', 'utf8');
   const row = sortList.slice(sortList.indexOf('role="listitem"'));

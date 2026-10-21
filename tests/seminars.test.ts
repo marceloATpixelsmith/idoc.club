@@ -260,10 +260,10 @@ test('all seminar listing surfaces reuse a compact, uniformly constrained card w
   assert.match(cardBlock as string, /relative z-20[^"]*w-fit shrink-0/);
   const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
   assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
-  assert.match(memberPage, /w-fit max-w-full divide-y/);
+  assert.match(memberPage, /SEMINAR_LIST_CLASS = '-mx-4 w-\[calc\(100%\+2rem\)\] max-w-\[37rem\] divide-y/);
   const homePage = readFileSync('app/(marketing)/page.tsx', 'utf8');
   assert.match(homePage, /SeminarListingCard/);
-  assert.match(homePage, /w-full max-w-3xl divide-y/);
+  assert.match(homePage, /-mx-4 mt-6 w-\[calc\(100%\+2rem\)\] max-w-\[calc\(48rem\+2rem\)\] divide-y/);
 });
 
 test('pricing follows title and date-only metadata inside the shared seminar information column', () => {
