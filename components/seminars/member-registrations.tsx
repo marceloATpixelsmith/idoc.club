@@ -123,8 +123,8 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
   </section>;
 }
 
-/** The public seminar/course catalog for a signed-out visitor (or a signed-in account with no profile):
- * the same real, published data as AvailableSeminars, plus the "Past" archive. Each row links to the
+/** The public seminar/course catalog for a signed-out visitor (or a signed-in account with no profile).
+ * Past seminars are available through the separate Past Seminars/Courses tab. Each row links to the
  * detail page, which shows full details but offers no registration -- registering requires signing in
  * as an active member. */
 export async function PublicSeminarsCatalog() {
@@ -141,12 +141,6 @@ export async function PublicSeminarsCatalog() {
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="section-label" id="available-seminars-heading">Available seminars/courses</h2>
     {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
-    {pastSeminars.length ? (
-      <div className="mt-12">
-        <h3 className="section-label">Past seminars/courses</h3>
-        <ul className={`mt-4 ${SEMINAR_LIST_CLASS}`}>{pastSeminars.map(row)}</ul>
-      </div>
-    ) : null}
   </section>;
 }
 
