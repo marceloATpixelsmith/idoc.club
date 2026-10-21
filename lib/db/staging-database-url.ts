@@ -23,7 +23,7 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
     throw new Error('STAGING_POSTGRES_URL must use the idoc_staging_app role and ayni_space database.');
   }
   const options = candidate.searchParams.get('options') ?? '';
-  if (!/(?:^|\\s)-c\\s*search_path=idoc_staging(?:\\s|$)/.test(options)) {
+  if (!/(?:^|\s)-c\s*search_path=idoc_staging(?:\s|$)/.test(options)) {
     throw new Error('STAGING_POSTGRES_URL must set search_path=idoc_staging.');
   }
 
