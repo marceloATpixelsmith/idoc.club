@@ -3,6 +3,9 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import {
+  MAP_HINT_FADE_MS, MAP_HINT_VISIBLE_MS, MapFirstVisitHint, mapHintAlreadySeen, markMapHintSeen,
+} from './map-first-visit-hint';
 import { openDirectoryForCountry } from './open-directory-for-country';
 import type { MemberMapDot } from '@/lib/directory/map-dots';
 
@@ -19,12 +22,16 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
   routerRef.current = router;
   const [failed, setFailed] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
+  // First-visit hint: the US bubble's pixel position inside the map (null = not showing).
+  const [hint, setHint] = useState<{ radius: number; width: number; x: number; y: number } | null>(null);
+  const [hintLeaving, setHintLeaving] = useState(false);
 
   useEffect(() => {
     const element = container.current;
     if (!element) return;
     let cancelled = false;
     let teardown: (() => void) | undefined;
+    const hintTimers: ReturnType<typeof setTimeout>[] = [];
 
     (async () => {
       try {
@@ -110,6 +117,35 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
           console.warn('Members map error:', event.error?.message);
           if (!map.loaded()) setFailed(true);
         });
+        // One-time, short-lived hint for signed-in members (the only ones a click works for): shown the
+        // first time this browser sees the map, pointing at the US bubble, then never again.
+        const us = canOpenDirectory ? dots.find((dot) => dot.countryCode === 'US') : undefined;
+        if (us && !mapHintAlreadySeen()) {
+          const place = () => {
+            const point = map.project([us.lng, us.lat]);
+            setHint({ radius: us.radius, width: element.clientWidth, x: point.x, y: point.y });
+          };
+          // Fade out, then remove it once the fade has finished.
+          const dismiss = () => {
+            setHintLeaving(true);
+            hintTimers.push(setTimeout(() => setHint(null), MAP_HINT_FADE_MS));
+          };
+          const show = () => {
+            if (cancelled) return;
+            markMapHintSeen();
+            place();
+            map.on('move', place);
+            map.on('resize', place);
+            // Touching the map means they have found their way around: fade the hint out at once.
+            map.on('mousedown', dismiss);
+            map.on('touchstart', dismiss);
+            map.on('wheel', dismiss);
+            hintTimers.push(setTimeout(dismiss, MAP_HINT_VISIBLE_MS));
+          };
+          // Show as soon as the map is ready (immediately if it already finished loading).
+          if (map.loaded()) show();
+          else map.once('load', show);
+        }
         teardown = () => map.remove();
         if (cancelled) teardown();
       } catch {
@@ -120,6 +156,9 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
 
     return () => {
       cancelled = true;
+      hintTimers.forEach(clearTimeout);
+      setHint(null);
+      setHintLeaving(false);
       teardown?.();
     };
   }, [canOpenDirectory, dots]);
@@ -128,7 +167,10 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
     return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser.</p>;
   }
   return <>
-    <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />
+    <div className="relative">
+      <div aria-label={`Map of member concentration by country. Leading countries: ${summary}.`} className="aspect-[4/3] w-full overflow-hidden border border-border sm:aspect-auto sm:h-[520px]" ref={container} role="img" />
+      {hint ? <MapFirstVisitHint leaving={hintLeaving} radius={hint.radius} width={hint.width} x={hint.x} y={hint.y} /> : null}
+    </div>
     {openFailed ? <p className="mt-3 text-sm text-muted-foreground" role="alert">Could not open the directory. Please try again.</p> : null}
   </>;
 }
