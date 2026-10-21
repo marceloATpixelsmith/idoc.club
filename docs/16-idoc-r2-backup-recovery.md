@@ -254,7 +254,7 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 **One-person operation.** IDOC has a single operator, so no second approver is required. The controls are instead: Super Admin role, fresh privileged TOTP step-up for every action, an explicit confirmation, an immutable audit row, and the existing GitHub environment protections.
 
-**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the backup and drill workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
+**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the backup, restore-drill, staging-migration and live-auth workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
 
 **How a drill works.**
 1. The Super Admin presses *Run restore drill* (choose the latest backup or a listed one), passes TOTP, confirms. The app records an audit row and dispatches the `IDOC Restore Drill` workflow on `main`.
@@ -277,6 +277,13 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 **Reading a result.** The Backups page shows **PASS** only when the workflow finished, the downloaded file's SHA-256 matched the manifest, every manifest table was restored, and every table's restored row count equalled the count recorded in the same snapshot as the dump. Anything else is **FAIL** with the reason, and the "workflow log" link opens the GitHub run. The same result is the `idoc-restore-result` annotation on the run, and each request is recorded in the audit log (`admin.restore_drill.requested`).
 
 **Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.
+
+
+## Super Admin Manual GitHub Operations
+
+The Super Admin **Manual GitHub Operations** page is directly below **Backups & restore**. It can dispatch only `Auto-migrate Staging Schema` and `Live authentication staging suite`, always against `staging`. The action requires fresh TOTP, CSRF validation, server-side Super Admin authorization, an audit entry, and duplicate-run protection. It reuses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not create another token or expose it to client code. The token's repository scope and Actions read/write permission remain as specified above.
+
+GitHub accepts `workflow_dispatch` only after the workflow file is present on the repository's default branch (`main`). `auto-migrate-staging.yml` is already on `main`; `live-auth-staging.yml` must reach `main` through the normal reviewed staging promotion before the page can dispatch it. The `ref` passed to both workflows remains `staging`, so the migration target is `idoc_staging` and the live suite tests `staging.idoc.club`. Recent run links appear on the page; the live-auth matrix, screenshots, video and trace are in the run's `live-auth-staging-results` artifact.
 
 ## Known pre-existing blocker
 
