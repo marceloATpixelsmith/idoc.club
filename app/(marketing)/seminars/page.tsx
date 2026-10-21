@@ -20,9 +20,9 @@ export const metadata: Metadata = {
 export default async function SeminarsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
   const { tab, view } = await searchParams;
   const user = await getPublicUser();
-  // Available Seminars (the full published catalog) is always the landing view, whether or not a
-  // visitor is signed in. "My Seminars" is an explicit second tab, reachable only by a logged-in
-  // member -- a signed-out visitor sees no tabs at all, just the catalog.
+  // Available Seminars is the default view; Past Seminars is a published archive for all
+  // visitors, while My Seminars remains a member-only registration history.
+  const showPastSeminars = view === 'past';
   const showMySeminars = Boolean(user) && view === 'my';
 
   return (
@@ -61,6 +61,13 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
               >
                 My Seminars/Courses
               </Link>
+              <Link
+                aria-current={showPastSeminars ? 'page' : undefined}
+                href="/seminars?view=past"
+                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showPastSeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              >
+                Past Seminars/Courses
+              </Link>
             </nav>
             {showMySeminars ? (
               <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
@@ -80,8 +87,12 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
             ) : null}
           </div>
         ) : null}
-        {user ? (
-          <MemberRegistrations tab={tab} view={showMySeminars ? 'my' : 'available'} />
+        {showMySeminars ? (
+          <MemberRegistrations tab={tab} view="my" />
+        ) : showPastSeminars ? (
+          <MemberRegistrations view="past" />
+        ) : user ? (
+          <MemberRegistrations view="available" />
         ) : (
           <PublicSeminarsCatalog />
         )}

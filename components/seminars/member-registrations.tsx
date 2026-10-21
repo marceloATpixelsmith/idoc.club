@@ -59,7 +59,7 @@ export function SeminarListingCard({ children, href, seminar }: {
  * registration form lives -- the listing itself is just a scannable summary, not a form.
  */
 async function AvailableSeminars({ profileId }: { profileId: number }) {
-  const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(profileId), listPastPublishedSeminars()]);
+  const seminars = await listCurrentSeminarsForMember(profileId);
   //SHOW THE COMPLETE CATALOG; REGISTRATION STATUS CONTROLS ONLY THE REGISTER CTA ON DETAIL PAGES.
   const priceLine = (seminar: (typeof seminars)[number]) => money(seminar.member_price_cents);
   const row = (seminar: (typeof seminars)[number]) => (
@@ -74,12 +74,22 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="section-label" id="available-seminars-heading">Available seminars/courses</h2>
     {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
-    {pastSeminars.length ? (
-      <div className="mt-12">
-        <h3 className="section-label">Past seminars/courses</h3>
-        <ul className={`mt-4 ${SEMINAR_LIST_CLASS}`}>{pastSeminars.map(row)}</ul>
-      </div>
-    ) : null}
+  </section>;
+}
+
+async function PastSeminars() {
+  const seminars = await listPastPublishedSeminars();
+  const row = (seminar: { id: number; end_date: string; is_fei: boolean; location: string; start_date: string; title: string; member_price_cents: number }) => (
+    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
+      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
+        <p className="font-medium">{money(seminar.member_price_cents)}</p>
+      </SeminarListingCard>
+    </li>
+  );
+
+  return <section className="mt-10" aria-labelledby="past-seminars-heading">
+    <h2 className="section-label" id="past-seminars-heading">Past seminars/courses</h2>
+    {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no past seminars/courses.</p>}
   </section>;
 }
 
@@ -118,7 +128,7 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
  * detail page, which shows full details but offers no registration -- registering requires signing in
  * as an active member. */
 export async function PublicSeminarsCatalog() {
-  const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(null), listPastPublishedSeminars()]);
+  const seminars = await listCurrentSeminarsForMember(null);
   const row = (seminar: (typeof seminars)[number]) => (
     <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
@@ -154,6 +164,7 @@ export async function MemberRegistrations({ tab, view }: { tab?: string; view?: 
   // (docs/08). A signed-in user with no member profile at all (an administrator, most commonly) sees
   // the same public catalog a signed-out visitor does rather than being blocked entirely. A profile
   // gets its own profile-scoped catalog for registration-aware detail navigation without hiding rows.
+  if (view === 'past') return <PastSeminars />;
   if (view !== 'my') {
     if (!member) return <PublicSeminarsCatalog />;
     return <AvailableSeminars profileId={member.profile.id} />;
