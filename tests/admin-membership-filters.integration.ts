@@ -144,3 +144,54 @@ test('the Official Status filter matches members holding any selected Judge or S
   const unknown = await asAdmin(admin.id, () => listAdminMembers({ officialStatus: 'judge:Not A Status' }));
   assert.deepEqual(unknown.filters.officialStatuses, []);
 });
+
+test('admin member search matches first name, last name, full name and displayed email, and pages stay ordered and complete', async () => {
+  const admin = await adminUser();
+  const members: { id: number; lastName: string }[] = [];
+  for (const [first, last] of [['Anna', 'Zeta'], ['Bruno', 'Alpha'], ['Carla', 'Mid'], ['Dora', 'Alpha']]) {
+    const user = await createUser();
+    const profile = await createProfile(user.id);
+    await sql`update idoc.profiles set first_name=${first}, last_name=${last} where id=${profile.id}`;
+    await createMembership(profile.id);
+    members.push({ id: profile.id, lastName: last });
+  }
+  const [anna, bruno, carla, dora] = members;
+  const search = async (q: string) => (await asAdmin(admin.id, () => listAdminMembers({ q }))).rows.map((row) => row.profileId);
+
+  assert.deepEqual(await search('anna'), [anna.id], 'first name, case-insensitive');
+  assert.deepEqual(await search('ALPH'), [bruno.id, dora.id], 'last name; ties on last name sort by first name');
+  assert.deepEqual(await search('Carla Mid'), [carla.id], 'full name');
+  assert.deepEqual(await search('no-such-member'), []);
+  const [{ email }] = await sql<{ email: string }[]>`select u.email from idoc.users u join idoc.profiles p on p.user_id=u.id where p.id=${dora.id}`;
+  await sql`update idoc.users set email_display=${`Dora.Display@Example.test`} where email=${email}`;
+  assert.deepEqual(await search('dora.display@EXAMPLE'), [dora.id], 'displayed email, case-insensitive');
+  assert.deepEqual(await search('50%_'), [], 'LIKE wildcards in the search text are literal');
+
+  // Default Name sort across pages: the page query now finds the page's ids first, then loads the rows.
+  const everyone = (await asAdmin(admin.id, () => listAdminMembers({ pageSize: 100 }))).rows.map((row) => row.profileId);
+  assert.deepEqual(everyone, [bruno.id, dora.id, carla.id, anna.id], 'last name, then first name');
+  const paged = [];
+  for (const page of [1, 2]) {
+    const listing = await asAdmin(admin.id, () => listAdminMembers({ page, pageSize: 10 }));
+    paged.push(...listing.rows.map((row) => row.profileId));
+    assert.equal(listing.total, 4);
+  }
+  assert.deepEqual(paged, everyone);
+});
+
+test('admin member list: a payment-date sort pages correctly and every column is still populated on a paged result', async () => {
+  const admin = await adminUser();
+  const ids: number[] = [];
+  for (const paidAt of ['2026-01-01', '2026-03-01', '2026-02-01']) {
+    const user = await createUser();
+    const profile = await createProfile(user.id);
+    await createMembership(profile.id);
+    await sql`insert into idoc.payments(profile_id,source,amount_cents,paid_at,administrator_id,reason) values(${profile.id},'cash',5000,${paidAt},${admin.id},'test')`;
+    ids.push(profile.id);
+  }
+  const sort = JSON.stringify([{ id: 'lastPayment', desc: true }]);
+  const first = await asAdmin(admin.id, () => listAdminMembers({ page: 1, pageSize: 10, sort }));
+  assert.deepEqual(first.rows.map((row) => row.profileId), [ids[1], ids[2], ids[0]]);
+  assert.ok(first.rows.every((row) => row.lastPaymentAt && row.membershipType && row.validUntil && row.status === 'active'));
+  assert.equal(first.total, 3);
+});

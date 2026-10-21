@@ -189,7 +189,15 @@ function queryParts(raw: MemberFilters) {
   const conditions = [sql`p.id is not null`];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
+    // One indexed lookup per column, combined with a union, so each branch can use its own trigram GIN index (profiles_*_trgm_idx
+    // and users_display_email_trgm_idx, migration 0081). An OR across the users and profiles tables in one predicate cannot use
+    // any of them and scans both tables in full. Every predicate below repeats its index's expression exactly, which is what lets
+    // the planner pick the index. The email branch matches the displayed address (email_display, falling back to email).
+    conditions.push(sql`p.id in (
+      select id from profiles where first_name ilike ${pattern} escape '\\'
+      union select id from profiles where last_name ilike ${pattern} escape '\\'
+      union select id from profiles where (first_name || ' ' || last_name) ilike ${pattern} escape '\\'
+      union select sp.id from users su join profiles sp on sp.user_id = su.id where coalesce(su.email_display, su.email) ilike ${pattern} escape '\\')`);
   }
   const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when ((m.status in ('active','complimentary','canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date)) and u.account_state <> 'suspended' then 'active' else 'expired' end`;
   const advancedStatus = filters.advancedFilters.some((filter) => filter.id === 'status' && advancedCondition(filter, effectiveStatus));
@@ -227,13 +235,14 @@ function queryParts(raw: MemberFilters) {
   const order = sql`${sql.join(sorts.flatMap(({ id, desc }) => [
     sql`${sortExpression(id)} ${desc ? sql`desc` : sql`asc`} nulls last`,
     ...(id === 'name' ? [sql`p.first_name ${desc ? sql`desc` : sql`asc`} nulls last`] : []),
-  ]), sql`, `)}, p.first_name, coalesce(p.id,u.id), u.id`;
+  ]), sql`, `)}, p.first_name, p.id, u.id`;
   return { effectiveStatus, filters, order, where: sql.join(conditions, sql` and `) };
 }
 
-// Each lateral join below returns exactly one row per member (an aggregate without GROUP BY, or LIMIT 1), so a join the filters
-// never reference cannot change how many rows match. The page query needs all of them for its columns and sorts; the count query
-// below includes only the ones its WHERE clause actually reads, which skips the per-member work on the role, payment and support tables.
+// Each lateral join below returns exactly one row per member (an aggregate without GROUP BY, or LIMIT 1), so a join the query
+// never references cannot change how many rows match. The page query's two phases and the count query each include only the
+// joins their WHERE and ORDER BY clauses actually read, which skips the per-member work on the role, payment and support tables
+// for every member that is not on the page being shown.
 const baseFrom = sql`from users u left join profiles p on p.user_id = u.id`;
 const lateralJoins: Record<'m' | 'roles' | 'payment' | 'app_roles' | 'support', SQL> = {
   m: sql`left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true`,
@@ -245,8 +254,9 @@ const lateralJoins: Record<'m' | 'roles' | 'payment' | 'app_roles' | 'support', 
 const lateralAliases = Object.keys(lateralJoins) as (keyof typeof lateralJoins)[];
 const from = sql`${baseFrom} ${sql.join(lateralAliases.map((alias) => lateralJoins[alias]), sql` `)}`;
 const sqlDialect = new PgDialect();
-function countFrom(where: SQL): SQL {
-  const text = sqlDialect.sqlToQuery(where).sql;
+/** `from` with only the lateral joins whose alias the given clauses reference. */
+function fromFor(...clauses: SQL[]): SQL {
+  const text = clauses.map((clause) => sqlDialect.sqlToQuery(clause).sql).join(' ');
   const needed = lateralAliases.filter((alias) => new RegExp(`\\b${alias}\\.`).test(text));
   return needed.length ? sql`${baseFrom} ${sql.join(needed.map((alias) => lateralJoins[alias]), sql` `)}` : baseFrom;
 }
@@ -257,9 +267,14 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   await authorize();
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const offset = (filters.page - 1) * filters.pageSize;
+  // Two phases: the inner query finds only the ids on the requested page (filtering and sorting with just the joins those need),
+  // and the outer query then computes every displayed column for those few members. Sorting by name with the default filters
+  // reads the first page straight off profiles_name_sort_idx, and no per-member role, payment or support work happens for the
+  // thousands of members who are not on the page.
+  const pageIds = sql`select u.id ${fromFor(where, order)} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`;
   const [rows, counts] = await Promise.all([
-    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
-    db.execute<{ count: number }>(sql`select count(*)::int count ${countFrom(where)} where ${where}`),
+    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where u.id in (${pageIds}) order by ${order}`),
+    db.execute<{ count: number }>(sql`select count(*)::int count ${fromFor(where)} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
 }

@@ -67,14 +67,19 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   }
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const hasValidProfileId = Boolean(profileId && Number.isInteger(profileId));
-  // getPrivateMember and listAuditHistory both depend only on profileId, not on each other; once
-  // `selected` resolves, the remaining four detail-panel queries depend only on `selected`, not on
-  // each other either. Six round trips to the database run one at a time here previously (~6x the
-  // latency of a single query), which is the dominant cost in this route's render time whenever a
-  // member's profile is open -- Promise.all lets them overlap instead.
-  const [selected, auditHistory] = await Promise.all([
+  // getPrivateMember, listAuditHistory and the Stripe payment query all depend only on profileId (the
+  // payment query filters on the same profile id `selected.profile.id` resolves to), not on each other;
+  // once `selected` resolves, the remaining detail-panel queries depend only on `selected`, not on each
+  // other either. Running them one at a time costs ~one database round trip each, which is the dominant
+  // cost in this route's render time whenever a member's profile is open -- Promise.all lets them overlap.
+  // The payment query is the same one the standalone /admin/payments page used to run -- now feeding the
+  // Sheet's Payment tab instead of a separate route (see components/admin-navigation.tsx).
+  const [selected, auditHistory, stripePayments] = await Promise.all([
     hasValidProfileId ? getPrivateMember(profileId!) : Promise.resolve(null),
     hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
+    hasValidProfileId ? client<{ amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string }[]>`select p.id,p.source,p.amount_cents,p.currency,p.paid_at,
+      (select status from payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
+      from payments p where p.profile_id=${profileId!} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : Promise.resolve([]),
   ]);
   const [activeRoles, accountState, paymentHistory, seminarHistory, rawNotificationHistory] = await Promise.all([
     selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),
@@ -92,13 +97,6 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     created: row.createdAt.toISOString(), sent: row.sentAt ? row.sentAt.toISOString() : '—',
     attempts: String(row.attemptCount), lastError: row.lastErrorCode ?? '—', status: notificationOutcome(row),
   }));
-  // Same query the standalone /admin/payments page used to run -- now feeding the Sheet's Payment
-  // tab instead of a separate route (see components/admin-navigation.tsx: that nav item just told
-  // admins to go back to Members and search, so it's gone).
-  const stripePayments = selected ? await client<{ amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string }[]>`select p.id,p.source,p.amount_cents,p.currency,p.paid_at,
-    (select status from payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
-    from payments p where p.profile_id=${selected.profile.id} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : [];
-
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-3xl font-semibold text-gold">Members</h1>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
