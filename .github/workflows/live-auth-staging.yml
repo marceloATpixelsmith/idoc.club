@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 35
     env:
       LIVE_AUTH_BASE_URL: https://staging.idoc.club
-      STAGING_POSTGRES_URL: ${{ secrets.STAGING_POSTGRES_URL }}
+      STAGING_POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
       E2E_SERVICE_TOKEN: ${{ secrets.E2E_SERVICE_TOKEN }}
       E2E_SERVICE_URL: ${{ vars.E2E_SERVICE_URL }}
       LIVE_AUTH_TEST_PASSWORD: ${{ secrets.LIVE_AUTH_TEST_PASSWORD }}
