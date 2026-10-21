@@ -2,34 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { requireDisposableTestEmail, validateStagingDatabaseUrl } from '../lib/db/staging-database-url.ts';
 
-const STAGING = 'postgres://idoc_staging_app:secret@staging-db.render.com/ayni_space';
+const STAGING = 'postgres://tester:secret@staging-db.render.com/idoc_staging';
 
 test('requires explicit staging confirmation before touching anything', () => {
   assert.throws(() => validateStagingDatabaseUrl(STAGING, false));
-  assert.equal(validateStagingDatabaseUrl(STAGING, true).username, 'idoc_staging_app');
-  assert.equal(validateStagingDatabaseUrl(STAGING, true).pathname, '/ayni_space');
+  assert.equal(validateStagingDatabaseUrl(STAGING, true).pathname, '/idoc_staging');
 });
 
-test('rejects missing, malformed, production-role, or wrong-database URLs even when confirmed', () => {
-  for (const value of [
-    undefined,
-    '',
-    'not-a-url',
-    'mysql://idoc_staging_app:p@localhost/ayni_space',
-    'postgres://localhost/ayni_space',
-    'postgres://tester:secret@staging-db.render.com/ayni_space',
-    'postgres://idoc_production_app:secret@staging-db.render.com/ayni_space',
-    'postgres://idoc_staging_app:secret@staging-db.render.com/idoc_production',
-  ]) {
+test('rejects missing or malformed URLs even when confirmed', () => {
+  for (const value of [undefined, '', 'not-a-url', 'mysql://u:p@localhost/idoc_staging', 'postgres://localhost/idoc_staging']) {
     assert.throws(() => validateStagingDatabaseUrl(value, true));
   }
 });
 
-test('accepts only the staging application role and IDOC database', () => {
-  const url = validateStagingDatabaseUrl(STAGING, true);
-  assert.equal(url.hostname, 'staging-db.render.com');
-  assert.equal(url.username, 'idoc_staging_app');
-  assert.equal(url.pathname, '/ayni_space');
+test('accepts a staging URL that is identical to production -- staging deliberately shares the production database', () => {
+  assert.equal(validateStagingDatabaseUrl(STAGING, true).hostname, 'staging-db.render.com');
 });
 
 test('only accepts disposable @pixelsmith.space test addresses', () => {

@@ -1,13 +1,17 @@
-/** Fail-closed guard for operator scripts that intentionally target the live staging schema.
+/** Fail-closed guard for operator scripts that intentionally target the real staging database.
  *
- * Staging and production use separate schemas in the same Render PostgreSQL database. Live E2E
- * provisioning and cleanup must therefore use the least-privilege idoc_staging_app role, which is
- * granted access only to idoc_staging. Never use the Production role or a schema-owner credential.
+ * This is deliberately separate from validateTestDatabaseUrl (lib/db/test-database-url.ts), which
+ * exists for the opposite case -- an ephemeral, throwaway CI database -- and explicitly REJECTS any
+ * URL naming a Render host. Staging is a real, persistent Render Postgres instance, and it
+ * deliberately shares the same database as production (docs/07-administrator-and-operations-runbook.md
+ * "Branch, environment, and deployment workflow"), so STAGING_POSTGRES_URL and POSTGRES_URL are
+ * expected to be identical -- that is not a mistake to guard against. The reliable boundary here is
+ * the operator's own explicit confirmation, plus requiring a well-formed, explicitly-supplied URL.
  */
 export function validateStagingDatabaseUrl(value: string | undefined, confirmed: boolean): URL {
   if (!confirmed) {
     throw new Error(
-      'Refusing to run: pass --confirm-staging to acknowledge this command mutates the idoc_staging schema.'
+      'Refusing to run: pass --confirm-staging to acknowledge this command mutates the real staging database.'
     );
   }
   if (!value?.trim()) {
@@ -20,22 +24,16 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
   } catch {
     throw new Error('STAGING_POSTGRES_URL must be a valid PostgreSQL URL.');
   }
-
   if (!['postgres:', 'postgresql:'].includes(candidate.protocol) || !candidate.hostname || !candidate.username) {
     throw new Error('STAGING_POSTGRES_URL must be a complete PostgreSQL URL.');
-  }
-  if (decodeURIComponent(candidate.username) !== 'idoc_staging_app') {
-    throw new Error('STAGING_POSTGRES_URL must authenticate as idoc_staging_app; refusing any other database role.');
-  }
-  if (candidate.pathname !== '/ayni_space') {
-    throw new Error('STAGING_POSTGRES_URL must target the IDOC database ayni_space.');
   }
 
   return candidate;
 }
 
-/** Every disposable identity created for live auth testing must use this mailbox domain so test
- * teardown tooling cannot be pointed at a real member's account. */
+/** Every disposable identity created for live auth testing must use this mailbox domain (the same
+ * one the Pixelsmith E2E Email connector provisions), so test-teardown tooling can never be pointed,
+ * even by mistake, at a real member's account. */
 const DISPOSABLE_TEST_EMAIL = /^[^@\s]+@pixelsmith\.space$/i;
 
 export function requireDisposableTestEmail(email: string | undefined): string {

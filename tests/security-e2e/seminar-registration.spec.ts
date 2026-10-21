@@ -200,7 +200,11 @@ test.describe('signed-out visitor', () => {
     const row = page.locator('li', { hasText: SEMINARS.publicOnly.title });
     await expect(row).toContainText('€30.00');
     await expect(row).not.toContainText('Non-members');
-    await expect(page.getByRole('navigation', { name: 'Seminars/Courses view' })).toHaveCount(0);
+    const catalogNavigation = page.getByRole('navigation', { name: 'Seminars/Courses view' });
+    await expect(catalogNavigation).toBeVisible();
+    await expect(catalogNavigation.getByRole('link', { name: 'Available Seminars/Courses' })).toBeVisible();
+    await expect(catalogNavigation.getByRole('link', { name: 'Past Seminars/Courses' })).toBeVisible();
+    await expect(catalogNavigation.getByRole('link', { name: 'My Seminars/Courses' })).toHaveCount(0);
   });
 
   test('the detail page shows the full details but offers no way to register -- no Register button and no guest flow', async ({ page }) => {

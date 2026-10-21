@@ -39,7 +39,6 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const savedPreferences = await getTablePreferences('memberships');
   const visibleColumns = Array.isArray(savedPreferences?.columns) ? savedPreferences.columns : undefined;
   const listParams: MemberFilters = {
-    country: typeof savedPreferences?.country === 'string' ? savedPreferences.country : undefined,
     expiresFrom: typeof savedPreferences?.expiresFrom === 'string' ? savedPreferences.expiresFrom : undefined,
     expiresTo: typeof savedPreferences?.expiresTo === 'string' ? savedPreferences.expiresTo : undefined,
     federation: typeof savedPreferences?.federation === 'string' ? savedPreferences.federation : undefined,
