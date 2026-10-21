@@ -255,13 +255,24 @@ test('paid directory: a page beyond the documented maximum is clamped, bounding 
   assert.equal(listing.filters.page, DIRECTORY_MAX_PAGE);
 });
 
-test('paid directory: sustained searching from one origin is rate-limited using the existing repository rate-limit facility', async () => {
+test('paid directory: ordinary browsing is not blocked, and one account is limited at its own 60-search allowance', async () => {
   const { user } = await entitledMemberIn('DE');
   const origin = '198.51.100.9';
-  for (let index = 0; index < 10; index += 1) {
+  // Well past the generic 10-per-IP login allowance: filtering/sorting/paging is many searches.
+  for (let index = 0; index < 60; index += 1) {
     await asMember(user.id, () => listMemberDirectory(), origin);
   }
   await assert.rejects(() => asMember(user.id, () => listMemberDirectory(), origin), DirectoryRateLimitedError);
+});
+
+test('paid directory: sustained searching from one origin across several accounts is rate-limited at 180', async () => {
+  const origin = '198.51.100.10';
+  const members: { id: number }[] = [];
+  for (let index = 0; index < 4; index += 1) members.push((await entitledMemberIn('DE')).user);
+  for (const member of members) {
+    for (let index = 0; index < 45; index += 1) await asMember(member.id, () => listMemberDirectory(), origin);
+  }
+  await assert.rejects(() => asMember(members[0].id, () => listMemberDirectory(), origin), DirectoryRateLimitedError);
 });
 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
