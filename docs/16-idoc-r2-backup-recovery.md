@@ -281,9 +281,14 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 ## Super Admin Manual GitHub Operations
 
-The Super Admin **Manual GitHub Operations** page is directly below **Backups & restore**. It can dispatch only `Auto-migrate Staging Schema` and `Live authentication staging suite`, always against `staging`. The action requires fresh TOTP, CSRF validation, server-side Super Admin authorization, an audit entry, and duplicate-run protection. It reuses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not create another token or expose it to client code. The token's repository scope and Actions read/write permission remain as specified above.
+The Super Admin **Manual GitHub Operations** page appears directly below **Backups & restore** and offers two actions:
 
-GitHub accepts `workflow_dispatch` only after the workflow file is present on the repository's default branch (`main`). `auto-migrate-staging.yml` is already on `main`; `live-auth-staging.yml` must reach `main` through the normal reviewed staging promotion before the page can dispatch it. The `ref` passed to both workflows remains `staging`, so the migration target is `idoc_staging` and the live suite tests `staging.idoc.club`. Recent run links appear on the page; the live-auth matrix, screenshots, video and trace are in the run's `live-auth-staging-results` artifact.
+- **Promote Staging to Production:** opens an ordinary, non-draft `staging` → `main` pull request, or links to the existing open promotion PR. This does **not** push to `main`, execute migrations, merge the PR, or deploy production automatically. The operator must verify staging readiness under `docs/07-administrator-and-operations-runbook.md`, and complete the main-branch CI/review gates before merging the promotion PR with a merge commit.
+- **Run Live Authentication Tests:** dispatches `live-auth-staging.yml` against `staging`. Recent run links appear on the page; artifacts are available in GitHub Actions.
+
+Both operations reuse Super Admin authorization, CSRF protection, fresh TOTP step-up, audit logging, and duplicate-request protection. The server uses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not expose this token to client code. The token must have **Actions: read/write** for the live-auth operation and **Pull requests: read/write** for promotion PR lookup/creation. Update the existing token's permissions in GitHub and its stored value in Vercel if the permissions are missing; no new environment-variable name is needed.
+
+GitHub accepts a `workflow_dispatch` call only once the target workflow exists on the default branch (`main`). The live-auth action uses `ref: staging` and tests `staging.idoc.club`. No migration workflow is exposed through this Super Admin page.
 
 ## Known pre-existing blocker
 
