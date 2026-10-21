@@ -86,8 +86,6 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
                 </div>
               </nav>
             ) : null}
-          </div>
-        ) : null}
         {showMySeminars ? (
           <MemberRegistrations tab={tab} view="my" />
         ) : showPastSeminars ? (
