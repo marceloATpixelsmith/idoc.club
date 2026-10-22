@@ -160,6 +160,8 @@ Because of this near-total sharing:
 
 Before this policy existed, work had been merged directly into both branches independently: as of 24 September 2026, 16 commits had reached `main` without ever passing through `staging` (process debt from before this policy, not something to redo), and 8 commits were verified on `staging` but never promoted (normal backlog, just overdue). The one-time reconciliation is: (a) merge those 16 main-only commits into `staging` so `staging` reflects everything already live, then (b) open the overdue `staging` → `main` promotion PR for the 8 staging-only commits so they actually ship. Once both land, the branches are aligned and the policy above governs from there.
 
+**Main-history synchronization when a promotion PR is outdated:** If `main` contains commits absent from `staging`, first open a separately authorized reconciliation PR into `staging`. It must carry an actual merge parent from `main`, not merely copy the differing file contents. Confirm the result preserves staging's intended tree, resolves any conflicts without losing production fixes, passes the required checks, and leaves no open review threads. Only then revisit the existing `staging` → `main` promotion PR. Never bypass branch protections or treat a no-diff file comparison as proof that commit histories agree.
+
 ### Claude's and the operator's responsibility specifically
 
 - Branch feature/fix work off `staging` and target `staging` with the PR — not `main` — unless the task is an explicitly declared production emergency.
