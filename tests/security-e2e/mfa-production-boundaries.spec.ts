@@ -134,7 +134,7 @@ test('real step-up action uses its isolated persisted rate-limit purpose and blo
   await page.getByRole('button', { name: 'Verify and continue' }).click();
   await expect.poll(maxPersistedCount).toBe(11);
   await expect(page.getByRole('alert')).toContainText('Too many verification attempts');
-  await expect(page.getByRole('alert')).toContainText('Retry available in');
+  await expect(page.getByRole('alert')).toContainText('Restart available in');
 
   const rows = await sql<{ purpose: string; request_count: number }[]>`select purpose,request_count from idoc.account_request_limits
     where purpose like 'mfa_%' order by purpose,request_count desc`;
