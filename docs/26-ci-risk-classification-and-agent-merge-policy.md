@@ -65,3 +65,7 @@ If a workflow is skipped by path filtering but the agent determines that the cha
 ## Launch-hold boundary verification
 
 Changes to the member communications/live billing hold, its queue producers/consumers or webhook guards require the full release and authentication/security workflows. The fast workflow includes fail-closed parsing and mutation/read boundary tests in `tests/member-launch-hold.test.ts`; the release PostgreSQL suite discovers `tests/member-launch-hold.integration.ts` for actual email, renewal, durable queue and webhook coverage. The isolated browser suite explicitly releases the hold with intercepted providers; this is not a production configuration. See [the operator runbook](27-member-communications-and-billing-launch-hold.md).
+
+## Concurrent PR coordination and merge ordering
+
+For every merge, also apply `AGENTS.md`'s **Cross-agent PR coordination and anti-proliferation** section. Inspect other open PRs for dependencies, file overlap, in-progress repairs and holds; avoid creating repair PRs for an open PR. Merge independent eligible staging PRs in a safe order, refresh dependent/outdated heads, and verify required checks again on each new head. A completed check on an earlier SHA does not establish readiness on the current SHA. Production-promotion PRs must capture the final intended staging snapshot and meet the separate docs/07 readiness and owner-authorization gates. These coordination rules do not relax any risk classification or required verification.
