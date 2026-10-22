@@ -21,7 +21,7 @@ async function submitPassword(page, value) {
 }
 
 test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, login, and logout", async ({ page, context }) => {
-  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
+  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006,LIVE-AUTH-029" });
   const evidence = [];
   const beforeSignup = await otpSnapshot(email, "verification code");
   await page.goto("/sign-up");
@@ -31,6 +31,8 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   await signupButton.click();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const signupCode = await waitForOtp(email, "verification code", beforeSignup);
+  // Email delivery and code redemption are exercised live, but password-reset/email-change mail are not.
+  evidence.push("LIVE-AUTH-029");
   await page.locator('input[name="code"]').fill(signupCode === "000000" ? "111111" : "000000");
   await expect(page.locator(".idoc-auth-error")).toBeVisible();
   await page.reload();
