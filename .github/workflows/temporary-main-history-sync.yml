@@ -1,0 +1,37 @@
+name: Temporary main history synchronization
+
+on:
+  push:
+    branches:
+      - sync/main-history-into-staging-20261022
+    paths:
+      - .github/workflows/temporary-main-history-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  synchronize:
+    if: github.repository == 'marceloATpixelsmith/idoc.club' && github.ref == 'refs/heads/sync/main-history-into-staging-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Merge current staging into main-derived synchronization branch
+        uses: actions/checkout@v4
+        with:
+          ref: sync/main-history-into-staging-20261022
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Reconcile history and remove this one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "idoc-history-sync[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main staging
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          git merge --no-ff -X theirs -m "Merge main and staging histories without changing staging application code" origin/staging
+          grep -q 'poweredByHeader: false' next.config.ts
+          git rm .github/workflows/temporary-main-history-sync.yml
+          git commit --amend --no-edit
+          git push origin HEAD:refs/heads/sync/main-history-into-staging-20261022
