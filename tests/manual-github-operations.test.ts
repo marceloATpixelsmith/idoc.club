@@ -100,26 +100,34 @@ test('recent runs expose only safe status and run-link fields', async () => {
   }
 });
 
-test('the Super Admin page authorizes, verifies, audits and protects manual dispatches', () => {
-  const page = readFileSync('app/(dashboard)/admin/operations/github-operations/page.tsx', 'utf8');
+test('dedicated Super Admin pages share protected launch actions and show live-auth report drawers', () => {
+  const actions = readFileSync('app/(dashboard)/admin/operations/github-operations/actions.ts', 'utf8');
   const navigation = readFileSync('components/admin-navigation.tsx', 'utf8');
+  const livePage = readFileSync('app/(dashboard)/admin/operations/live-auth-tests/page.tsx', 'utf8');
+  const promotionPage = readFileSync('app/(dashboard)/admin/operations/production-promotion/page.tsx', 'utf8');
+  const history = readFileSync('app/(dashboard)/admin/operations/live-auth-tests/live-auth-run-history.tsx', 'utf8');
+  const drawer = readFileSync('app/(dashboard)/admin/operations/live-auth-tests/live-auth-results-drawer.tsx', 'utf8');
+  const api = readFileSync('lib/admin/live-auth-reports.ts', 'utf8');
   const workflow = readFileSync('.github/workflows/live-auth-staging.yml', 'utf8');
-  assert.match(page, /requireSuperAdmin\(actor\)/);
-  assert.match(page, /requireCsrfToken\(formData/);
-  assert.match(page, /requireFreshStepUp\(actor, 'change-security-settings'/);
-  assert.match(page, /admin\.github_operation\.requested/);
-  assert.match(page, /listManualGithubOperationRuns\(\)[\s\S]*reserveRequest[\s\S]*dispatchManualGithubOperation/);
-  assert.match(navigation, /Backups & restore'[\s\S]*Manual GitHub Operations/);
+  assert.match(actions, /requireSuperAdmin\(actor\)/);
+  assert.match(actions, /requireCsrfToken\(formData/);
+  assert.match(actions, /requireFreshStepUp\(actor, 'change-security-settings'/);
+  assert.match(actions, /admin\.github_operation\.requested/);
+  assert.match(actions, /listManualGithubOperationRuns\(\)[\s\S]*reserveRequest[\s\S]*dispatchManualGithubOperation/);
+  assert.match(navigation, /Backups & restore'[\s\S]*Promote To Production[\s\S]*Live Authentication Tests/);
+  assert.match(livePage, /ManualGithubOperationForm[\s\S]*LiveAuthRunHistory/);
+  assert.match(promotionPage, /PromotionStatusRefresh/);
+  assert.match(history, /LiveAuthResultsDrawer/);
+  assert.match(drawer, /BLOCKED \/ NOT RUN/);
+  assert.match(api, /requireSuperAdmin/);
+  assert.match(api, /auth-live-results\.json/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(page, /Promote Staging to Production/);
-  assert.doesNotMatch(page, /Apply Staging Migrations/);
 });
-
 
 test('promotion workflow reports CI, reviews, merge, Vercel and production health separately', () => {
   const workflow = readFileSync('.github/workflows/monitored-production-promotion.yml', 'utf8');
   const script = readFileSync('scripts/monitored-production-promotion.mjs', 'utf8');
-  const page = readFileSync('app/(dashboard)/admin/operations/github-operations/page.tsx', 'utf8');
+  const page = readFileSync('app/(dashboard)/admin/operations/production-promotion/page.tsx', 'utf8');
   assert.match(workflow, /environment: production-promotion/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /monitored-production-promotion\.mjs verify/);
