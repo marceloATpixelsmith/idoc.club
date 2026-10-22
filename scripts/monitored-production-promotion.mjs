@@ -74,10 +74,10 @@ async function promotionPullRequest() {
   const repositoryOwner = repository.split('/')[0].toLowerCase();
   for (const comment of comments) {
     const text = comment.body ?? '';
-    if (/(?:^|\\s)(?:hold-merge|do not merge|hold promotion)(?:\\s|$|[.,!:])/im.test(text)) {
+    if (/(?:^|\s)(?:hold-merge|do not merge|hold promotion)(?:\s|$|[.,!:])/im.test(text)) {
       activeHold = true;
     }
-    if (/(?:^|\\s)clear-hold-merge(?:\\s|$|[.,!:])/im.test(text) &&
+    if (/(?:^|\s)clear-hold-merge(?:\s|$|[.,!:])/im.test(text) &&
       comment.user?.login?.toLowerCase() === repositoryOwner) {
       activeHold = false;
     }
