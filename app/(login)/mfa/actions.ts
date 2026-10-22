@@ -10,7 +10,7 @@ import { clearSession, getSession, rawCanonicalSessionId, rawCanonicalUserId, se
 import { requireCsrfTokenOrPendingNonce } from '@/lib/security/csrf';
 import { users } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
-import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
+import { checkRateLimit, rateLimitRetryAfterSeconds, requestOrigin } from '@/lib/security/rate-limit';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { clearPendingPrimaryAuth, getPendingPrimaryAuth, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
@@ -38,7 +38,7 @@ export const cancelStepUp = validatedAction(z.object({}), async () => {
 export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
   const context = await getPendingStepUp();
   if (!context) return { error: 'Your verification session expired. Try the action again.' };
-  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many attempts. Try again later.' };
+  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many verification attempts. Please try again when the countdown ends.', retryAfterSeconds: rateLimitRetryAfterSeconds() };
   const config = mfaConfiguration();
   let result;
   try {
