@@ -51,6 +51,7 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   onResult: (state: StepUpActionState) => void; open: boolean;
 }) {
   const [code, setCode] = useState('');
+  const [state, verify, verifying] = useActionState<StepUpActionState, FormData>(verifyStepUpTotp, {});
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
     setRetrySeconds(Math.max(0, Math.ceil(state.retryAfterSeconds ?? 0)));
@@ -60,7 +61,6 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
     const interval = window.setInterval(() => setRetrySeconds((current) => Math.max(0, current - 1)), 1000);
     return () => window.clearInterval(interval);
   }, [retrySeconds]);
-  const [state, verify, verifying] = useActionState<StepUpActionState, FormData>(verifyStepUpTotp, {});
   const [cancelState, cancel, cancelling] = useActionState<StepUpActionState, FormData>(cancelStepUp, {});
   const [resuming, startResume] = useTransition();
   const resumeStarted = useRef(false);
