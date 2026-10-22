@@ -140,6 +140,11 @@ test('production promotion blocks missing risk-classified workflows and comment 
   assert.match(script, /\/issues\/\$\{prNumber\}\/comments\?per_page=100/);
   assert.match(script, /hold-merge\|do not merge\|hold promotion/);
   assert.match(script, /clear-hold-merge/);
+  assert.match(script, /\^\\s\*clear-hold-merge\\s\*\$\/i/);
+  assert.doesNotMatch(script, /\(\?:\^\|\\s\)clear-hold-merge/);
+  //VERIFY WHITESPACE TOKENS ARE ACTUAL REGEX ESCAPES, NOT LITERAL BACKSLASH-S.
+  assert.match(script, /\(\?:\^\|\\s\)\(\?:hold-merge/);
+  assert.doesNotMatch(script, /\(\?:\^\|\\\\s\)\(\?:hold-merge/);
   assert.match(script, /repositoryOwner/);
   assert.match(script, /head_sha=\$\{expectedHead\}&per_page=100/);
   assert.doesNotMatch(script, /event=pull_request&per_page/);
