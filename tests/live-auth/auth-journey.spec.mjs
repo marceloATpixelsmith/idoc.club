@@ -68,6 +68,8 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   // adversarial return-path matrix or administrator session-lifetime case.
   await startSignIn(page, "/dashboard/membership");
   const beforeSecondLogin = await otpSnapshot(email, "sign-in code");
+  // The app enforces a 30-second email OTP resend cooldown after the prior sign-in.
+  await page.waitForTimeout(31_000);
   await submitPassword(page, password);
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
