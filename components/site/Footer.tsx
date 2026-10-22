@@ -17,7 +17,7 @@ export async function Footer({ signedIn }: { signedIn: boolean }) {
         </div>
 
         <div>
-          <h4 className="eyebrow">Contact</h4>
+          <h2 className="eyebrow">Contact</h2>
           <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
             {addressLines.length > 0 && <li><address className="not-italic">{addressLines.map((line) => <span className="block" key={line}>{line}</span>)}</address></li>}
             <li>
@@ -34,7 +34,7 @@ export async function Footer({ signedIn }: { signedIn: boolean }) {
         </div>
 
         <div>
-          <h4 className="eyebrow">FEI Downloads</h4>
+          <h2 className="eyebrow">FEI Downloads</h2>
           <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
             {[
               'Dressage Rules',
@@ -57,7 +57,7 @@ export async function Footer({ signedIn }: { signedIn: boolean }) {
         </div>
 
         <div>
-          <h4 className="eyebrow">Useful Links</h4>
+          <h2 className="eyebrow">Useful Links</h2>
           <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
             <li>
               <a href="https://www.eurodressage.com" target="_blank" rel="noreferrer" className="hover:text-gold">
