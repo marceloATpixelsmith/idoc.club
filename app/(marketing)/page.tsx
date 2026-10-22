@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import { SeminarListingCard } from '@/components/seminars/member-registrations';
+import { SEMINAR_ROW_CLASS, SeminarListingCard } from '@/components/seminars/member-registrations';
 import { HeroSlider } from '@/components/site/HeroSlider';
 import { Button } from '@/components/ui/button';
 import { PublicNewsCard } from '@/components/news/public-news-card';
@@ -86,9 +86,9 @@ export default async function Home() {
               {upcomingSeminars.length === 0 ? (
                 <p className="mt-6 text-muted-foreground">No seminars/courses have been published yet. Check back soon.</p>
               ) : (
-                <ul className="mt-6 w-full max-w-3xl divide-y divide-border border-y border-border">
+                <ul className="-mx-4 mt-6 w-[calc(100%+2rem)] max-w-[calc(48rem+2rem)] divide-y divide-border border-y border-border">
                   {upcomingSeminars.map((seminar) => (
-                    <li key={seminar.id}>
+                    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
                       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
                     </li>
                   ))}
@@ -97,9 +97,9 @@ export default async function Home() {
               {pastSeminars.length ? (
                 <div className="mt-12">
                   <h3 className="section-label">Past seminars/courses</h3>
-                  <ul className="mt-4 w-full max-w-3xl divide-y divide-border border-y border-border">
+                  <ul className="-mx-4 mt-4 w-[calc(100%+2rem)] max-w-[calc(48rem+2rem)] divide-y divide-border border-y border-border">
                     {pastSeminars.map((seminar) => (
-                      <li key={seminar.id}>
+                      <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
                         <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar} />
                       </li>
                     ))}

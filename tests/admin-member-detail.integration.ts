@@ -53,3 +53,51 @@ test('expiration extension rejects shortening, preserves ledger and Stripe state
   const [subscription] = await sql`select external_subscription_id,status,current_period_end from idoc.subscriptions where profile_id=${profile.id}`;
   assert.deepEqual(subscription, { current_period_end: '2099-12-31', external_subscription_id: 'sub_unchanged', status: 'active' });
 });
+
+test('extending a lapsed membership into the future makes it active again; other statuses and past dates keep their status', async () => {
+  const admin = await adminUser();
+  const statusOf = async (profileId: number) => (await sql`select status,valid_until,grace_ends_on from idoc.memberships where profile_id=${profileId}`)[0];
+  const lapsed = async (status: string) => {
+    const profile = await createProfile((await createUser()).id);
+    await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source,grace_ends_on)
+      values(${profile.id},${status},'2020-01-01','2020-12-31','migration',${status === 'grace' ? '2021-01-05' : null})`;
+    return profile.id;
+  };
+
+  const expired = await lapsed('expired');
+  await asAdmin(admin.id, () => extendMembershipExpiration(expired, { reason: 'Renewed by bank transfer', validUntil: '2099-06-30' }));
+  assert.deepEqual(await statusOf(expired), { grace_ends_on: null, status: 'active', valid_until: '2099-06-30' });
+
+  const grace = await lapsed('grace');
+  await asAdmin(admin.id, () => extendMembershipExpiration(grace, { reason: 'Renewed', validUntil: '2099-06-30' }));
+  assert.deepEqual(await statusOf(grace), { grace_ends_on: null, status: 'active', valid_until: '2099-06-30' });
+
+  const stillPast = await lapsed('expired');
+  await asAdmin(admin.id, () => extendMembershipExpiration(stillPast, { reason: 'Corrected date', validUntil: '2021-03-31' }));
+  assert.deepEqual(await statusOf(stillPast), { grace_ends_on: null, status: 'expired', valid_until: '2021-03-31' });
+
+  for (const status of ['suspended', 'canceled', 'review_required']) {
+    const kept = await lapsed(status);
+    await asAdmin(admin.id, () => extendMembershipExpiration(kept, { reason: 'Date only', validUntil: '2099-06-30' }));
+    assert.equal((await statusOf(kept)).status, status, `${status} keeps its status`);
+  }
+  // Unsent lapse notices of a reactivated member are retired; sent ones, other kinds and other members' notices are untouched.
+  const notice = (profileId: number, kind: string, sent: boolean) => sql`insert into idoc.notification_outbox(kind,profile_id,payload,sent_at) values(${kind},${profileId},'{}'::jsonb,${sent ? '2026-01-01T00:00:00Z' : null})`;
+  const lapsedForNotices = await lapsed('grace');
+  const bystander = await lapsed('grace');
+  await notice(lapsedForNotices, 'membership.grace_expired', false);
+  await notice(lapsedForNotices, 'membership.payment_failed', true);
+  await notice(lapsedForNotices, 'membership.manual_payment_recorded', false);
+  await notice(bystander, 'membership.grace_expired', false);
+  await asAdmin(admin.id, () => extendMembershipExpiration(lapsedForNotices, { reason: 'Renewed', validUntil: '2099-06-30' }));
+  const rows = await sql`select profile_id,kind,sent_at is not null as sent,dead_lettered_at is not null as dead,last_error_code from idoc.notification_outbox order by id`;
+  assert.deepEqual(rows.map((row) => [row.profile_id === lapsedForNotices ? 'member' : 'other', row.kind, row.sent, row.dead, row.last_error_code]), [
+    ['member', 'membership.grace_expired', false, true, 'superseded_by_reactivation'],
+    ['member', 'membership.payment_failed', true, false, null],
+    ['member', 'membership.manual_payment_recorded', false, false, null],
+    ['other', 'membership.grace_expired', false, false, null],
+  ]);
+  const [audit] = await sql`select before_json,after_json from idoc.audit_log where entity_id=${String(expired)} and action='admin.membership.expiration_extended'`;
+  assert.equal(audit.before_json.status, 'expired');
+  assert.equal(audit.after_json.status, 'active');
+});

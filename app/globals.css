@@ -620,3 +620,230 @@ body:has([data-idoc-admin-root]) [data-idoc-table-panel] [data-slot='select-trig
   margin-block: 1rem;
   max-width: 100%;
 }
+
+/* Header dropdowns (About IDOC / My IDOC): a 3D perspective flip. The panel hangs from its top edge
+ * and folds down out of the trigger row like a lid being lifted, with a small spring overshoot.
+ * perspective sits on the parent container, never on the rotating panel itself. */
+.idoc-flip-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 60;
+  transform: translateX(-50%);
+  /* Hug the widest item: an absolutely positioned box would otherwise shrink to the narrow trigger. */
+  width: max-content;
+  padding-top: 10px;
+  perspective: 800px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.idoc-flip-menu[data-open='true'] {
+  pointer-events: auto;
+}
+
+.idoc-flip-menu__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+  transform: rotateX(-90deg);
+  transform-origin: top center;
+  opacity: 0;
+  transition:
+    transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.22s ease;
+}
+
+.idoc-flip-menu[data-open='true'] .idoc-flip-menu__panel {
+  transform: rotateX(0deg);
+  opacity: 1;
+}
+
+.idoc-flip-menu__link {
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-flip-menu__panel {
+    transition: none;
+  }
+}
+
+/* Mobile nav: the whole panel unfolds with the same 3D flip as the desktop dropdowns, and each
+ * accordion submenu animates its height via a 0fr -> 1fr grid row. */
+.idoc-mobile-nav {
+  display: grid;
+  grid-template-rows: 0fr;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    grid-template-rows 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+
+.idoc-mobile-nav[data-open='true'] {
+  grid-template-rows: 1fr;
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* The clip collapses to zero height when closed so the sticky header doesn't reserve the panel. */
+.idoc-mobile-nav__clip {
+  min-height: 0;
+  overflow: hidden;
+  perspective: 800px;
+}
+
+.idoc-mobile-nav__panel {
+  transform: rotateX(-90deg);
+  transform-origin: top center;
+  opacity: 0;
+  transition:
+    transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.22s ease;
+}
+
+.idoc-mobile-nav[data-open='true'] .idoc-mobile-nav__panel {
+  transform: rotateX(0deg);
+  opacity: 1;
+}
+
+.idoc-mobile-submenu {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.idoc-mobile-submenu[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-mobile-nav,
+  .idoc-mobile-nav__panel,
+  .idoc-mobile-submenu {
+    transition: none;
+  }
+}
+
+/* Avatar (initials) menu: the same 3D perspective flip as the header nav dropdowns. Radix keeps the
+ * content mounted while the closing animation runs, so open and close are separate keyframes. The
+ * perspective() transform function stands in for a perspective parent, which a portaled menu lacks.
+ * Unlayered so it wins over the shared menu's tw-animate utilities. */
+.idoc-flip-content {
+  transform-origin: top center;
+  backface-visibility: hidden;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+}
+
+.idoc-flip-content[data-state='open'] {
+  animation: idoc-flip-open 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.idoc-flip-content[data-state='closed'] {
+  animation: idoc-flip-close 0.22s ease-in both;
+}
+
+@keyframes idoc-flip-open {
+  from {
+    opacity: 0;
+    transform: perspective(800px) rotateX(-90deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: perspective(800px) rotateX(0deg);
+  }
+}
+
+@keyframes idoc-flip-close {
+  from {
+    opacity: 1;
+    transform: perspective(800px) rotateX(0deg);
+  }
+
+  to {
+    opacity: 0;
+    transform: perspective(800px) rotateX(-90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idoc-flip-content[data-state='open'],
+  .idoc-flip-content[data-state='closed'] {
+    animation: none;
+  }
+}
+
+/* First-visit map hint: the bubble's border and the ring around the US dot pulse gold so the eye is drawn
+ * to it, and the bubble bounces toward the dot while the pointer icon taps, only for visitors who have not asked
+ * for reduced motion (they get the same hint, static). */
+@media (prefers-reduced-motion: no-preference) {
+  .idoc-map-hint-bubble {
+    animation:
+      idoc-map-hint-flash 1.1s ease-in-out infinite,
+      idoc-map-hint-bob 1.1s ease-in-out infinite;
+  }
+
+  .idoc-map-hint-pointer {
+    animation: idoc-map-hint-tap 1.1s ease-in-out infinite;
+    transform-origin: 30% 30%;
+  }
+
+  .idoc-map-hint-ring {
+    animation: idoc-map-hint-ring 1.1s ease-out infinite;
+  }
+}
+
+@keyframes idoc-map-hint-flash {
+  0%,
+  100% {
+    border-color: var(--color-border);
+    box-shadow: 0 0 0 0 rgb(211 175 55 / 0%);
+  }
+
+  50% {
+    border-color: rgb(211 175 55 / 85%);
+    box-shadow: 0 0 0 4px rgb(211 175 55 / 25%);
+  }
+}
+
+/* A small bounce toward the dot, so the hint visibly moves and catches the eye. */
+@keyframes idoc-map-hint-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* The pointer icon "taps" once per cycle, in step with the bounce. */
+@keyframes idoc-map-hint-tap {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  50% {
+    transform: scale(0.8) rotate(-12deg);
+  }
+}
+
+@keyframes idoc-map-hint-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.85);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}

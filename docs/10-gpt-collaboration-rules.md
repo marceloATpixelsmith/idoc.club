@@ -2,11 +2,15 @@
 
 These are mandatory instructions for GPT while collaborating with the client on `marceloATpixelsmith/idoc.club`. They govern planning, Codex prompts, CI and review follow-up, direct pull-request patching, and handoffs. They supplement `AGENTS.md`, document 09, and the authoritative project documentation in this directory.
 
+## Mandatory PR ownership and completion for every GPT task
+
+The **Mandatory task-to-merge PR completion contract** in `AGENTS.md` applies to every GPT task and every Codex/Claude prompt, delegation, patch, or handoff. First check for the task's existing open PR; keep all requested changes and subsequent fixes in **that single non-draft PR** unless the owner approves a split. Personally follow CI, all required workflows, review submissions, **resolution and collapse of every addressed thread**, branch currency, and mergeability through successive repair/check rounds. Once the **current head** is green, every thread is resolved/closed/collapsed, the branch is current, required approvals are satisfied, and no owner hold remains, **merge to `staging` immediately without asking**, verify success, and provide its URL. Do not merge to `main` without the explicit production-promotion authorization. If blocked or checks remain pending at the end of execution, report that accurately and specify continuation rather than claiming background monitoring.
+
 ## 1. Codex prompts
 
 1. Start with a broad Codex prompt. Tighten later prompts only when the prior approach averages more than two rounds of CI errors or pull-request review comments.
 2. Every Codex prompt must include the complete rule set from [Codex Working Rules](09-codex-working-rules.md), without exception.
-3. Do not ask Codex to target a pull request by number. Each Codex prompt must assume earlier pull requests are close and merged, then instruct Codex to work from the latest available `staging` and open its PR into `staging` — per docs/07's branch policy, `main` receives only reviewed promotions, never ordinary Codex work directly. **Exception:** when the prompt is for an explicitly declared production emergency, instruct Codex to work from `main` and open its PR into `main` instead, per docs/09 rule 6's `main`-then-back-merge exception — `staging` may carry unpromoted, unverified backlog that an emergency fix must not pull in.
+3. Before prompting Codex, check whether the task already has an open pull request. If so, instruct Codex to continue that same open PR (identify it precisely); otherwise instruct Codex to start from current `staging` and create one new PR into `staging` — per docs/07's branch policy, `main` receives only reviewed promotions, never ordinary Codex work directly. **Exception:** when the prompt is for an explicitly declared production emergency, instruct Codex to work from `main` and open its PR into `main` instead, per docs/09 rule 6's `main`-then-back-merge exception — `staging` may carry unpromoted, unverified backlog that an emergency fix must not pull in.
 4. Keep Codex prompts scoped to the approved task and aligned with the architecture, security, documentation, and testing requirements in the governing documents.
 
 ## 2. CI failures and pull-request review comments
@@ -17,10 +21,10 @@ These are mandatory instructions for GPT while collaborating with the client on 
 4. This `[skip ci]` rule is GPT-only. Codex must never use `[skip ci]`, because Codex prompts must batch related changes.
 5. Before every manual patch, inspect the affected file(s) closely enough to preserve repository formatting and behavior. Validate every changed file against the repository's configured formatting rules; when Ultracite or Biome is configured, verify that the patch follows it.
 6. Give the client manual-edit instructions only when the affected source can be retrieved completely and safely and the repair is reasonably bounded.
-7. If more than ten files require modification, or any needed file is too large to retrieve whole and intact for safe manual editing, provide a Codex prompt to resolve the issue instead. That prompt must assume the failing pull request may be merged with its errors so Codex can begin from `staging` — not `main`, per docs/07's branch policy and docs/09 rule 6 — unless the repair is itself an explicitly declared production emergency, in which case follow docs/09 rule 6's `main`-then-back-merge exception instead. This temporary development-stage exception does not authorize production-risky changes.
+7. If more than ten files require modification, or any needed file is too large to retrieve whole and intact for safe manual editing, delegate repair to Codex on the **same existing open PR**, not a replacement branch or PR. If that PR has already merged or closed, use a new PR from current `staging` for additional work (subject to the documented production-emergency exception). Do not bypass risk-required CI or review gates.
 8. If CI was green and a review comment appears only after the pull request merged, create a new pull request for the repair and run CI on that new pull request.
 9. Before any GPT-authored patch or push, verify the target pull request is still open. **Never add new commits to a branch whose pull request is merged or closed.** If the pull request has merged or closed, create a fresh branch from the current `staging` head, apply the new change there, and open a new pull request into `staging` (except an explicitly declared production emergency, which follows docs/09's `main` workflow).
-9. Whenever the client says a pull request is green and merged and asks for the next task, first check whether unresolved review comments appeared. Address them before proposing the next broad Codex prompt.
+10. Whenever the client says a pull request is green and merged and asks for the next task, first check whether unresolved review comments appeared. Address them before proposing the next broad Codex prompt.
 
 ## 3. Handoffs and project continuity
 

@@ -138,7 +138,9 @@ export function reconcileWithStripe(members: PlannedMember[], snapshot: StripeSn
     if (subId && !stripeSub && !snapshot.truncated.subscriptions) by.stripe_subscription_missing.rows.push(row(member, {}));
     if (stripeSub) {
       const detail = { subscriptionId: stripeSub.id, customerId: stripeSub.customerId, status: stripeSub.status };
-      if (DEAD_SUBSCRIPTION.has(stripeSub.status)) by.stripe_cancelled_legacy_active.rows.push(row(member, detail));
+      // An expired member whose subscription has ended in Stripe is consistent: they are imported as expired. Only a member who would be
+      // imported with access (active or grace) or with an unknown paid-through date conflicts with a cancelled subscription.
+      if (DEAD_SUBSCRIPTION.has(stripeSub.status) && member.membership.status !== 'expired') by.stripe_cancelled_legacy_active.rows.push(row(member, detail));
       if (customerId && stripeSub.customerId !== customerId) by.stripe_customer_mismatch.rows.push(row(member, detail));
     }
     if (!snapshot.truncated.customers && customerId && !snapshot.customerIds.has(customerId)) by.stripe_customer_missing.rows.push(row(member, { customerId }));

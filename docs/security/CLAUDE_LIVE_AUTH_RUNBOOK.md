@@ -1,4 +1,4 @@
-# Claude Code Cloud — Live Authentication & Security Runbook
+# GitHub Actions — Live Authentication & Security Runbook
 
 ## Authority
 
@@ -10,7 +10,7 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Test only the explicitly provided staged/live hostname.
 - Never substitute localhost or a Vercel preview.
-- Use disposable accounts and the Pixelsmith E2E Email connector for flows requiring real mail.
+- Use the Pixelsmith E2E Email service for staging runs. GitHub Actions creates one disposable mailbox per run, reuses it through the sequential auth journey, and deletes it once during cleanup. Do not print mailbox credentials or message contents in logs.
 - Do not perform denial-of-service, high-volume load, destructive actions against non-test data, social engineering, third-party attacks, or testing outside the authorized hostname.
 - Request replay/tampering is allowed only against disposable test identities and at bounded rates.
 
@@ -18,6 +18,9 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 - Staging hostname: `staging.idoc.club` (a dedicated Vercel Preview deployment on the `staging`
   branch, built specifically for this audit -- `redesign.idoc.club` is production; never target it).
+  Use the existing shared Vercel variables `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and
+  `TURNSTILE_SECRET_KEY`; they must resolve to Cloudflare's official always-pass testing pair for
+  staging. Do not create project-specific duplicates. Never expose the testing secret to production.
   `staging.idoc.club` uses Cloudflare Turnstile always-pass testing keys scoped to the `staging`
   branch, so automated signup/reset flows can complete Turnstile without weakening real bot
   protection on production. This requires `lib/auth/turnstile.ts`'s narrow, explicit exception
@@ -28,44 +31,12 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
   exception (or revert staging to a real Turnstile widget) without re-checking this file: a prior
   version of this setup used a real per-hostname widget, and every Turnstile-gated live-auth case
   needed a human to solve it manually, one flow at a time.
-- **The staging and production deployments deliberately share the same Postgres database** (one
-  `POSTGRES_URL` value, `target: ["production", "preview"]`, no `gitBranch` override) -- staging
-  is deliberately near-identical to production under `docs/07` §15's policy, not isolated from
-  it; the database is one of the values staging shares verbatim (Stripe and Brevo credentials
-  and the URL-family values are the named exceptions that differ instead). Sharing the database
-  specifically also avoids paying for a second Render Postgres instance. See `docs/07` "Branch,
-  environment, and deployment workflow" for the full policy. This is a permanent,
-  operator-confirmed decision, not a temporary gap or an oversight of this runbook. Practical
-  consequences for this audit:
-  - Every disposable test account, adversarial request, and piece of test data created during a
-    live-auth run lands in the real production database alongside genuine member data.
-  - The read-only `query_render_postgres` connector below is querying the **same** database
-    production reads/writes -- a query result may include real member rows, not just test rows.
-  - End-of-run cleanup (`scripts/e2e-delete-test-account.sql`) is not optional cosmetic tidying
-    here -- it is removing real rows from the production database. Treat every disposable
-    `@pixelsmith.space` account created during a run as required cleanup, not best-effort.
-  - Prefer the least invasive adversarial techniques that still validate the control (e.g. avoid
-    bulk/high-count operations even where the case would otherwise tolerate them), since there is
-    no environment isolation backstopping a mistake.
-- Staging's Postgres is reachable **read-only** from Claude Code's sandboxed session via the Render
-  MCP connector's `query_render_postgres` tool (`postgresId` `dpg-d3c3gd2li9vc73d8n3o0-a`,
-  `workspaceId` `tea-d3c3eq7diees7392talg`; the app schema inside it is `idoc`). Useful for
-  verification queries (confirming target/revision, checking a grant landed, session-policy
-  inspection for LIVE-AUTH-033) but cannot run any INSERT/UPDATE/DELETE -- see "Privileged
-  (administrator/super_admin) test identities" below for why, and how role grants and cleanup are
-  actually performed.
-- **Operator's standing Google test identity for LIVE-AUTH-004/022 (Google OAuth):**
-  `pixelsmithtest@gmail.com`. Claude cannot complete a real Google consent screen itself (Google
-  blocks automated/headless logins), so the case's happy-path and account-linking steps are done by
-  the human operator using this account, on request from Claude at the right point in the run; Claude
-  independently verifies the resulting database state (identity row, session, audit_log entry) via
-  the read-only connector above rather than trusting the operator's report alone. The
-  adversarial/tamper/replay/cancel-deny portions of the same case do not need this account and are
-  run by Claude directly. Do not ask the operator which account to use -- use this one unless they
-  say otherwise.
+- **Staging and production share one Render PostgreSQL database instance but use separate schemas and application roles.** Staging writes belong only in schema `idoc_staging` through role `idoc_staging_app`; production uses schema `idoc_production` through role `idoc_production_app`. The live-auth provisioning and cleanup scripts must qualify every table as `idoc_staging.*`, verify the active role/database/schema before writes, and reject production credentials. Keep `STAGING_POSTGRES_URL` scoped to the staging application role. Never connect with a schema-owner or production role. The shared database instance does not mean the schemas are shared: test rows and cleanup must remain inside `idoc_staging`.
+- The read-only `query_render_postgres` connector can verify staging data in `idoc_staging`; it cannot run provisioning or cleanup writes.
+- Google OAuth real consent/account-linking is manual-only (`LIVE-AUTH-004`) and excluded from unattended GitHub runs. `LIVE-AUTH-022` remains automated using password/email authentication for safe return-path behavior. The GitHub result must identify the Google steps as `blocked` / manual-required, never pass.
 - Known real Super Admin id on staging for `--granted-by` / `GRANTED_BY_USER_ID`: user id `7`
   (`zangfuqi@gmail.com`). Confirm it still holds an active `super_admin` grant before relying on it
-  -- query `idoc.application_roles` via the read-only connector above.
+  -- query `idoc_staging.application_roles` via the read-only connector above.
 
 ## Execution order
 
@@ -79,12 +50,27 @@ Do not invent alternate pass criteria. Do not silently omit a live-enabled case.
 
 ## Real email
 
-For every case with `requiresEmail=true`:
-- create a mailbox with the connected Pixelsmith E2E Email tools;
-- make the staged application itself send the transactional email;
-- poll/read the mailbox and use the real link/code in the browser flow;
-- never use `send_e2e_test_message` as a substitute for the application's own outbound email;
-- delete the mailbox only after the flow passes; preserve it temporarily when failure evidence depends on it.
+For every automated case with `requiresEmail=true`:
+- The `Live authentication staging suite` creates one disposable mailbox through `scripts/live-auth-mailbox.mjs`, reads only the OTP needed by the browser test, and reuses that mailbox for all sequential steps.
+- The staged application itself sends the transactional message. The runner never uses the service's `send` endpoint as a substitute.
+- Keep `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true`. The application permits only the explicitly opted-in authentication OTP to the run's `@pixelsmith.space` mailbox when `VERCEL_ENV=preview`, `VERCEL_GIT_COMMIT_REF=staging`, and `BASE_URL=https://staging.idoc.club`. All other member and operational email remains held; billing remains held.
+- Mailbox cleanup runs once after account cleanup, including when the browser test fails.
+- The first automated journey covers LIVE-AUTH-001, 002, 003, 005, 006, 022, and 038 using one account and one mailbox. Every other live case is reported as blocked until its own safe browser journey is implemented. LIVE-AUTH-004 remains manual-only and is always reported as blocked/manual-required.
+
+## GitHub Actions live staging configuration
+
+The workflow is `.github/workflows/live-auth-staging.yml`. A push to the `staging` branch (normally a merged PR) starts the run; it never runs on pull requests. Before entering the `staging-live-e2e` environment or using its secrets, a separate job waits for a successful Vercel status on that exact commit, verifies the status points to the IDOC Vercel project, and confirms `staging` has not advanced. A failed deployment, stale commit, or missing deployment status stops the run before mailbox or account creation. The workflow is currently defined on `staging`, not the default `main` branch, so it does not appear in the Actions list when viewing `main`.
+
+Configure these GitHub Actions secrets:
+- `STAGING_POSTGRES_URL`: Render URL for database `ayni_space` and role `idoc_staging_app`. The workflow validates that role and database, then adds `search_path=idoc_staging` for its connection; the Vercel `POSTGRES_URL` value can be reused if it passes those checks.
+- `E2E_SERVICE_TOKEN`: bearer token for the Pixelsmith E2E Email service.
+- `LIVE_AUTH_TEST_PASSWORD`: disposable account password used only for the live signup/login journey.
+
+Optional repository variable:
+- `E2E_SERVICE_URL`: service base URL; defaults to the existing Pixelsmith E2E service URL.
+
+The workflow hard-fails before browser activity unless the database URL is restricted to the staging role/database/schema. All database provisioning and cleanup SQL is explicitly qualified with `idoc_staging`. Never configure the production role, schema, or URL in these secrets.
+
 
 ## Privileged (administrator/super_admin) test identities
 
@@ -123,7 +109,7 @@ ready-to-run SQL instead:
    batch: if one account is ever referenced on a row it does not own (verified someone else's
    professional role, authored real content, recorded a real member's payment), that account alone
    is skipped with a warning and every other account in the list is still cleaned up. The account row
-   itself and its profile are **not** physically deleted -- `idoc.audit_log`/`idoc.profile_change_history`
+   itself and its profile are **not** physically deleted -- `idoc_staging.audit_log`/`idoc_staging.profile_change_history`
    are immutable by design (a database trigger unconditionally rejects updating or deleting them),
    and the foreign keys referencing them block deleting their parent rows too, once any audited
    action was ever recorded for the account. Instead the account is neutralized exactly like the

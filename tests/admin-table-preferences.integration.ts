@@ -31,13 +31,26 @@ test('invalid saved JSON is ignored and reset affects only the authenticated own
 test('a multi-select facet filter\'s comma-joined value (as the toolbar itself writes it) is accepted and persists', async () => {
   const admin = await adminUser();
   await asAdmin(admin.id, () => saveTablePreferences('memberships', {
-    country: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
+    federation: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
   }));
   assert.deepEqual(await asAdmin(admin.id, () => getTablePreferences('memberships')), {
-    country: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
+    federation: 'DE,FR', region: 'Western Europe & Africa,Central & Eastern Europe', status: 'active,expired', type: 'judge,steward',
   });
   await asAdmin(admin.id, () => saveTablePreferences('support', { category: 'billing_membership,seminars', status: 'admin_responded,member_replied' }));
   assert.deepEqual(await asAdmin(admin.id, () => getTablePreferences('support')), { category: 'billing_membership,seminars', status: 'admin_responded,member_replied' });
+});
+
+test('legacy Address Country preference values are dropped without losing other member-table settings', async () => {
+  const admin = await adminUser();
+  const advancedFilters = JSON.stringify([
+    { id: 'country', operator: 'eq', value: 'DE' },
+    { id: 'federation', operator: 'eq', value: 'PL' },
+  ]);
+  await sql`insert into idoc.administrator_table_preferences(user_id,table_identifier,preferences) values(${admin.id},'memberships',${JSON.stringify({ country: 'DE', federation: 'PL', filters: advancedFilters })})`;
+  assert.deepEqual(await asAdmin(admin.id, () => getTablePreferences('memberships')), {
+    federation: 'PL',
+    filters: JSON.stringify([{ id: 'federation', operator: 'eq', value: 'PL' }]),
+  });
 });
 
 test('a multi-select value containing any token outside the column\'s real allow-list is rejected entirely', async () => {

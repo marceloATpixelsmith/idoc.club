@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { cache } from 'react';
 import { headers } from 'next/headers';
 import { requestCookies, testRequestEnvironment, testRequestUserAgent } from '@/lib/auth/request-cookies';
 import { describeUserAgent } from '@/lib/auth/session-device-label';
+import { sessionActivityNeedsTouch } from '@/lib/auth/session-activity';
 import { NewUser } from '@/lib/db/schema';
 import {
   readActiveSession,
@@ -68,17 +70,24 @@ async function requestDeviceLabel(): Promise<string | null> {
 async function registeredSessionIsValid(session: SessionData, now = new Date()) {
   // Database failures intentionally propagate. Only an absent/mismatched registry record is an
   // authentication-validation failure that should be treated as an invalid session.
-  const record = await readActiveSession(session.sessionId, session.user.id);
+  // The two reads are independent (the token carries the session version), so they run concurrently: one round trip of latency, not two.
+  const [record, versionIsCurrent] = await Promise.all([
+    readActiveSession(session.sessionId, session.user.id),
+    sessionVersionIsCurrent(session.user.id, session.user.sessionVersion),
+  ]);
   if (!record) return false;
   if (record.sessionVersion !== session.user.sessionVersion) return false;
-  if (!(await sessionVersionIsCurrent(session.user.id, session.user.sessionVersion))) return false;
+  if (!versionIsCurrent) return false;
   if (new Date(record.authenticatedAt).getTime() !== new Date(session.authenticatedAt).getTime()) return false;
   if (new Date(record.absoluteExpiresAt).getTime() !== new Date(session.absoluteExpiresAt).getTime()) return false;
-  await touchSession(session.sessionId, session.user.id, now);
+  if (sessionActivityNeedsTouch(record.lastActivityAt, now)) await touchSession(session.sessionId, session.user.id, now);
   return true;
 }
 
-export async function getSession() {
+/** Memoized per server render (React cache): a page, its layouts and the components they render all ask who is signed in, and each
+ * used to repeat the registry reads and the activity write. Outside a render (Server Actions, Route Handlers, tests) React does not
+ * memoize, so every such call still validates the session against the registry. */
+export const getSession = cache(async function getSession() {
   const cookieStore = await requestCookies();
   const canonicalValue = cookieStore.get(sessionCookieName(requestEnvironment()))?.value;
   if (!canonicalValue) return null;
@@ -94,7 +103,7 @@ export async function getSession() {
   // legacy pre-retrofit cookie is never accepted here at all -- only ever cleared defensively, in
   // setSession/clearSession below and in middleware.ts.
   return (await registeredSessionIsValid(session)) ? session : null;
-}
+});
 
 /** The session id claimed by the canonical cookie's JWT, verified only for a valid signature and
  * expiry -- deliberately NOT registry-checked (contrast getSession() above), and NOT sufficient

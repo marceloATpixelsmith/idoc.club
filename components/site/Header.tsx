@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { Suspense, useState } from 'react';
-import { Menu, X, ChevronDown, Facebook, UserCog } from 'lucide-react';
+import { Suspense, useRef, useState } from 'react';
+import { Menu, X, Facebook, UserCog } from 'lucide-react';
 import { AuthenticatedUserMenu } from '@/components/authenticated-user-menu';
 import { dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 import { HeaderShell } from './HeaderShell';
@@ -60,6 +60,9 @@ function NavDropdown({
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLAnchorElement>(null);
+  // Escape hands focus back to the trigger; without this guard that refocus would reopen the menu.
+  const escapedRef = useRef(false);
   const active = items.some((item) => isItemActive(pathname, item.href));
 
   return (
@@ -67,29 +70,103 @@ function NavDropdown({
       className="relative"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
+      onFocus={() => {
+        if (!escapedRef.current) setOpen(true);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        escapedRef.current = true;
+        setOpen(false);
+        triggerRef.current?.focus();
+        escapedRef.current = false;
+      }}
     >
-      <Link href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
+      <Link ref={triggerRef} href={href} className={`flex items-center gap-1 ${navClassName(active)}`}>
         {label}
-        <ChevronDown className="size-3" />
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 8 5"
+          className={`h-[5px] w-2 fill-current transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="M0 0h8L4 5z" />
+        </svg>
       </Link>
 
-      {open && (
-        <div className="absolute left-0 top-full z-[60] min-w-[16rem] border border-border bg-background/95 pt-2 backdrop-blur-md">
-          <ul className="flex flex-col">
-            {items.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`block px-5 py-3 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+      {/* Always mounted so the 3D flip can animate both ways. The container's top padding is the
+       * hover bridge across the gap between trigger and panel. */}
+      <div className="idoc-flip-menu" data-open={open}>
+        <div className="idoc-flip-menu__panel border border-border bg-background/95 backdrop-blur-md">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              tabIndex={open ? 0 : -1}
+              className={`idoc-flip-menu__link block px-4 py-2.5 text-xs font-medium uppercase tracking-[0.14em] transition-colors hover:bg-surface hover:text-foreground ${isItemActive(pathname, item.href) ? 'text-gold' : 'text-muted-foreground'}`}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+const mobileLinkClassName = 'block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground';
+
+/** Mobile counterpart of NavDropdown: the label row toggles an inline submenu, with the same gold
+ * triangle that flips when open. The submenu stays mounted so the height can animate both ways. */
+function MobileNavSection({
+  isItemActive = isActive,
+  items,
+  label,
+  onNavigate,
+  pathname,
+}: {
+  isItemActive?: (pathname: string, href: string) => boolean;
+  items: readonly { href: string; label: string }[];
+  label: string;
+  onNavigate: () => void;
+  pathname: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 bg-transparent px-1 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold"
+      >
+        {label}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 8 5"
+          className={`h-[5px] w-2 fill-current transition-transform duration-300 motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`}
+        >
+          <path d="M0 0h8L4 5z" />
+        </svg>
+      </button>
+      <div className="idoc-mobile-submenu" data-open={expanded} inert={!expanded}>
+        <ul className="flex flex-col overflow-hidden">
+          {items.map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                className={`${mobileLinkClassName} pl-3 ${isItemActive(pathname, item.href) ? 'text-gold' : ''}`}
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </li>
   );
 }
 
@@ -130,10 +207,11 @@ export function Header({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isAdminArea = pathname === '/admin' || pathname.startsWith('/admin/');
+  const closeMenu = () => setOpen(false);
 
   return (
     <HeaderShell
-      onLogoClick={() => setOpen(false)}
+      onLogoClick={closeMenu}
       right={
         <>
           <div className="hidden items-center gap-10 lg:flex">
@@ -211,113 +289,67 @@ export function Header({
         </>
       }
       below={
-        open && !isAdminArea && (
-          <nav className="border-t border-border bg-background px-5 py-4 lg:hidden">
-            <ul className="flex flex-col gap-1">
-              <li>
-                <Link
-                  href="/"
-                  onClick={() => setOpen(false)}
-                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  Home
-                </Link>
-              </li>
-              <li className="pt-2">
-                <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
-                  About IDOC
-                </p>
-                <ul className="flex flex-col">
-                  {aboutLinks.map((item) => (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                      >
-                        {item.label}
+        !isAdminArea && (
+          // Always mounted so the flip animation can run both ways; inert keeps the closed panel
+          // out of the tab order and away from assistive technology.
+          <div className="idoc-mobile-nav lg:hidden" data-open={open} inert={!open}>
+            <div className="idoc-mobile-nav__clip">
+            <nav className="idoc-mobile-nav__panel border-t border-border bg-background px-5 py-4">
+              <ul className="flex flex-col gap-1">
+                <li>
+                  <Link href="/" onClick={closeMenu} className={mobileLinkClassName}>
+                    Home
+                  </Link>
+                </li>
+                <MobileNavSection isItemActive={isAboutItemActive} items={aboutLinks} label="About IDOC" onNavigate={closeMenu} pathname={pathname} />
+                {topNavItems(signedIn).map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href} onClick={closeMenu} className={mobileLinkClassName}>
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+                {signedIn &&
+                  (entitled ? (
+                    <MobileNavSection isItemActive={isDashboardNavItemActive} items={dashboardNavItems()} label="My IDOC" onNavigate={closeMenu} pathname={pathname} />
+                  ) : (
+                    <li>
+                      <Link href="/dashboard/membership" onClick={closeMenu} className={mobileLinkClassName}>
+                        My IDOC
                       </Link>
                     </li>
                   ))}
-                </ul>
-              </li>
-              {topNavItems(signedIn).map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                  >
-                    {item.label}
+                <li>
+                  <Link href={contactLink.href} onClick={closeMenu} className={mobileLinkClassName}>
+                    {contactLink.label}
                   </Link>
                 </li>
-              ))}
-              {signedIn && (
-                entitled ? (
-                  <li className="pt-2">
-                    <p className="px-1 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
-                      My IDOC
-                    </p>
-                    <ul className="flex flex-col">
-                      {dashboardNavItems().map((item) => (
-                        <li key={item.href}>
-                          <Link
-                            href={item.href}
-                            onClick={() => setOpen(false)}
-                            className="block py-2 pl-3 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                          >
-                            {item.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ) : (
-                  <li>
-                    <Link
-                      href="/dashboard/membership"
-                      onClick={() => setOpen(false)}
-                      className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                    >
-                      My IDOC
-                    </Link>
-                  </li>
-                )
-              )}
-              <li>
-                <Link
-                  href={contactLink.href}
-                  onClick={() => setOpen(false)}
-                  className="block py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  {contactLink.label}
-                </Link>
-              </li>
-              <li>
-                <a
-                  href="https://www.facebook.com/groups/646981818825549/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 py-2 text-sm uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  <Facebook className="size-4" />
-                  Facebook
-                </a>
-              </li>
-              <li>
-                <div className="mt-3 flex justify-center">
+                <li>
+                  <a
+                    href="https://www.facebook.com/groups/646981818825549/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={closeMenu}
+                    className={`flex items-center gap-2 ${mobileLinkClassName}`}
+                  >
+                    <Facebook className="size-4" />
+                    Facebook
+                  </a>
+                </li>
+                <li className="mt-2">
                   <Suspense fallback={<div className="h-9" />}>
                     <AuthenticatedUserMenu
+                      mobile
                       showAdminDashboard={showAdminDashboard}
-                      onNavigate={() => setOpen(false)}
-                      loggedOut={loggedOut ?? <MemberLoginLink onClick={() => setOpen(false)} className="block rounded-full border border-gold/60 px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gold" />}
+                      onNavigate={closeMenu}
+                      loggedOut={loggedOut ?? <MemberLoginLink onClick={closeMenu} className={`${mobileLinkClassName} text-gold`} />}
                     />
                   </Suspense>
-                </div>
-              </li>
-            </ul>
-          </nav>
+                </li>
+              </ul>
+            </nav>
+            </div>
+          </div>
         )
       }
     />

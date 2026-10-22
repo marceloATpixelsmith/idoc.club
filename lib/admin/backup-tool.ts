@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, users } from '@/lib/db/schema';
-import { parseBackupManifest, parseDrillResult, type BackupManifest, type DrillResult } from './backup-results';
+import { parseBackupManifest, parseDrillResult, type BackupManifest, type DrillResult, type RunState } from './backup-results';
 
 const BACKUP_WORKFLOW = 'idoc-r2-backups.yml';
 const DRILL_WORKFLOW = 'idoc-restore-drill.yml';
@@ -37,19 +37,44 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
 
 type RawRun = { id: number; status: string; conclusion: string | null; created_at: string; updated_at: string; html_url: string; run_number: number };
 
+// Per-instance caches for the GitHub reads behind the Backups page, which otherwise made a run list plus two sequential calls per run
+// (jobs, then annotations) on every render and again after every action. A completed run's annotation never changes, so it is kept
+// for the life of the instance; run lists are kept for a short time and dropped whenever this instance dispatches a workflow.
+const RUN_LIST_CACHE_MS = 30_000;
+const CACHE_MAX_ENTRIES = 200;
+const runListCache = new Map<string, { at: number; runs: RawRun[] }>();
+const annotationCache = new Map<string, string>();
+
+function clearRunListCache() { runListCache.clear(); }
+export function resetBackupToolCachesForTests() { runListCache.clear(); annotationCache.clear(); }
+
 async function listRuns(workflow: string, limit: number, success?: boolean): Promise<RawRun[]> {
+  const key = `${workflow}:${limit}:${success ? 'success' : 'all'}`;
+  const hit = runListCache.get(key);
+  if (hit && Date.now() - hit.at < RUN_LIST_CACHE_MS) return hit.runs;
   const query = new URLSearchParams({ per_page: String(limit), ...(success ? { status: 'success' } : {}) });
   const body = await (await github(`/actions/workflows/${workflow}/runs?${query}`)).json() as { workflow_runs?: RawRun[] };
-  return Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
+  const runs = Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
+  if (runListCache.size >= CACHE_MAX_ENTRIES) runListCache.clear();
+  runListCache.set(key, { at: Date.now(), runs });
+  return runs;
 }
 
-/** The first job's annotations of one run, filtered to the notice with the given title. */
+/** The first job's annotations of one COMPLETED run, filtered to the notice with the given title. Only a found message is cached, so
+ * a transient failure or a run whose notice is not written yet is read again next time. */
 async function runAnnotation(runId: number, title: string): Promise<string | null> {
+  const cacheKey = `${runId}:${title}`;
+  const cached = annotationCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const jobs = await (await github(`/actions/runs/${runId}/jobs?per_page=5`)).json() as { jobs?: Array<{ id: number }> };
   for (const job of jobs.jobs ?? []) {
     const annotations = await (await github(`/check-runs/${job.id}/annotations?per_page=50`)).json() as Array<{ title?: string; message?: string }>;
     const found = Array.isArray(annotations) ? annotations.find((item) => item.title === title && typeof item.message === 'string') : undefined;
-    if (found?.message) return found.message;
+    if (found?.message) {
+      if (annotationCache.size >= CACHE_MAX_ENTRIES) annotationCache.clear();
+      annotationCache.set(cacheKey, found.message);
+      return found.message;
+    }
   }
   return null;
 }
@@ -65,13 +90,57 @@ export async function listBackups(limit = 10): Promise<BackupEntry[]> {
   return entries.filter((entry): entry is BackupEntry => entry !== null);
 }
 
-export type DrillRunEntry = { id: number; runNumber: number; state: 'queued' | 'running' | 'completed' | 'failed'; startedAt: string; runUrl: string; result: DrillResult | null };
+function runState(run: RawRun): RunState {
+  if (run.status !== 'completed') return run.status === 'queued' ? 'queued' : 'running';
+  return run.conclusion === 'success' ? 'completed' : 'failed';
+}
+
+export type BackupRunEntry = { id: number; runNumber: number; state: RunState; startedAt: string; runUrl: string };
+/** Recent runs of the backup workflow, scheduled and on-demand alike, whatever their outcome. */
+export async function listBackupRuns(limit = 5): Promise<BackupRunEntry[]> {
+  const runs = await listRuns(BACKUP_WORKFLOW, limit);
+  return runs.map((run) => ({ id: run.id, runNumber: run.run_number, state: runState(run), startedAt: run.created_at, runUrl: run.html_url }));
+}
+
+export async function dispatchBackup(): Promise<void> {
+  await github(`/actions/workflows/${BACKUP_WORKFLOW}/dispatches`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }),
+  });
+  clearRunListCache();
+}
+
+/** Seconds during which a second on-demand backup is refused. GitHub's runs list can lag a few seconds behind a dispatch, so the
+ * run check alone cannot stop two overlapping submissions; this reservation is made under a database lock and is visible at once. */
+const BACKUP_REQUEST_COOLDOWN_SECONDS = 120;
+
+/** Records the audit row for an on-demand backup, unless one was recorded in the last two minutes. Returns whether this request holds the reservation. */
+export async function reserveBackupRequest(actorId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('idoc-on-demand-backup'))`);
+    const [recent] = await tx.select({ id: auditLog.id }).from(auditLog)
+      .where(and(eq(auditLog.action, 'admin.backup.requested'), gt(auditLog.createdAt, sql`now() - make_interval(secs => ${BACKUP_REQUEST_COOLDOWN_SECONDS})`))).limit(1);
+    if (recent) return false;
+    await tx.insert(auditLog).values({ actorId, action: 'admin.backup.requested', entityType: 'backup', entityId: 'on-demand', afterJson: { workflow: BACKUP_WORKFLOW } });
+    return true;
+  });
+}
+
+export async function listBackupRequests(limit = 8) {
+  const rows = await db.select({ id: auditLog.id, createdAt: auditLog.createdAt, actorId: auditLog.actorId })
+    .from(auditLog).where(eq(auditLog.action, 'admin.backup.requested')).orderBy(desc(auditLog.createdAt)).limit(limit);
+  const ids = [...new Set(rows.map((row) => row.actorId).filter((id): id is number => id !== null))];
+  const names = ids.length ? await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, ids)) : [];
+  const byId = new Map(names.map((row) => [row.id, row.email]));
+  return rows.map((row) => ({ id: row.id, createdAt: row.createdAt, by: row.actorId ? byId.get(row.actorId) ?? 'unknown' : 'system' }));
+}
+
+export type DrillRunEntry = { id: number; runNumber: number; state: RunState; startedAt: string; runUrl: string; result: DrillResult | null };
 export async function listDrillRuns(limit = 8): Promise<DrillRunEntry[]> {
   const runs = await listRuns(DRILL_WORKFLOW, limit);
   return Promise.all(runs.map(async (run) => {
     const completed = run.status === 'completed';
     const message = completed ? await runAnnotation(run.id, 'idoc-restore-result').catch(() => null) : null;
-    const state = !completed ? (run.status === 'queued' ? 'queued' : 'running') : run.conclusion === 'success' ? 'completed' : 'failed';
+    const state = runState(run);
     return { id: run.id, runNumber: run.run_number, state, startedAt: run.created_at, runUrl: run.html_url, result: message ? parseDrillResult(message) : null };
   }));
 }
@@ -80,6 +149,7 @@ export async function dispatchRestoreDrill(selection: string): Promise<void> {
   await github(`/actions/workflows/${DRILL_WORKFLOW}/dispatches`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main', inputs: { backup: selection } }),
   });
+  clearRunListCache();
 }
 
 export async function recordDrillRequest(actorId: number, selection: string): Promise<void> {

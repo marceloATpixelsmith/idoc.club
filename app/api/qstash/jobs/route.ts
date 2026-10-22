@@ -11,6 +11,7 @@ import { GET as renewalDelivery } from '@/app/api/cron/renewal-notice-delivery/r
 import { GET as reconciliation } from '@/app/api/cron/reconciliation-scan/route';
 import { GET as retention } from '@/app/api/cron/data-retention-purge/route';
 import { GET as clockSkew } from '@/app/api/cron/clock-skew-check/route';
+import { GET as marketingPreferenceSync } from '@/app/api/cron/marketing-preference-sync/route';
 import { GET as newsPublishing } from '@/app/api/cron/news-scheduled-publish/route';
 import { GET as newRelicHealthCheck } from '@/app/api/cron/new-relic-health-check/route';
 import { POST as postgresMetricsExport } from '@/app/api/internal/postgres-metrics/route';
@@ -24,6 +25,7 @@ const handlers: Record<QStashJob, (request: Request) => Promise<Response>> = {
   'reconciliation-scan': reconciliation,
   'data-retention-purge': retention,
   'news-scheduled-publish': newsPublishing,
+  'marketing-preference-sync': marketingPreferenceSync,
   'new-relic-weekly-health-check': newRelicHealthCheck,
   // The export route is POST-only and keeps its own staging-branch and CRON_SECRET guards.
   'postgres-metrics-export': (request) => postgresMetricsExport(new Request(request.url, { method: 'POST', headers: request.headers })),

@@ -13,5 +13,10 @@ export const COUNTRY_OPTIONS: CountryOption[] = ISO_COUNTRY_CODES
   .sort((a, b) => a.name.localeCompare(b.name, 'en'));
 
 export function countryNameForCode(code: string): string {
-  return englishRegionNames.of(code.toUpperCase()) ?? code.toUpperCase();
+  try {
+    return englishRegionNames.of(code.toUpperCase()) ?? code.toUpperCase();
+  } catch {
+    // Intl.DisplayNames throws RangeError for a malformed code (e.g. a blank legacy country).
+    return code.toUpperCase();
+  }
 }

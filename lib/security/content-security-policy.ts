@@ -21,6 +21,8 @@ export function contentSecurityPolicy(
     "default-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
+    // MapLibre (members map) runs its worker from same-origin /maplibre/maplibre-gl-worker.mjs.
+    "worker-src 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "img-src 'self' data: https://res.cloudinary.com",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
+import { buildMemberRows } from '../lib/legacy-import/import-rows.ts';
 import { parseMysqlDump, DumpParseError } from '../lib/legacy-import/mysql-dump.ts';
 import { checkedKeysFromPhpArray } from '../lib/legacy-import/php-serialized.ts';
 import { reduceDumpText, isNeededLegacyTable } from '../lib/legacy-import/reduce-dump.ts';
@@ -153,8 +154,10 @@ test('planLegacyImport applies the agreed rules', () => {
   assert.ok(byId.get('7')!.exceptions.includes('invalid_email') && byId.get('7')!.held, 'an address the application would reject is held');
 
   // Cleanup rules.
-  assert.equal(byId.get('8')!.exclusion, 'expired_over_a_year');
-  assert.equal(byId.get('10')!.exclusion, 'expired_over_a_year', 'exactly one year ago counts as a year or more');
+  for (const id of ['8', '10']) {
+    assert.equal(byId.get(id)!.exclusion, null, `user ${id} expired a year or more ago: still imported`);
+    assert.equal(byId.get(id)!.membership.status, 'expired');
+  }
   assert.equal(byId.get('11')!.exclusion, null, 'one day inside the year is kept');
   assert.equal(byId.get('11')!.membership.status, 'expired');
   for (const id of ['9', '12', '14']) assert.equal(byId.get(id)!.exclusion, 'never_paid', `user ${id} has no completed payment`);
@@ -167,21 +170,21 @@ test('planLegacyImport applies the agreed rules', () => {
 test('summarizePlan leaves removed members out of every figure and separates expected from review', () => {
   const report = summarizePlan(planLegacyImport(buildDump(), { asOf: '2026-10-16' }));
   assert.equal(report.legacyUsers, 14);
-  assert.equal(report.removedByRules, 5);
-  assert.equal(report.inScope, 9);
+  assert.equal(report.removedByRules, 3);
+  assert.equal(report.inScope, 11);
   assert.equal(report.held, 4);
-  assert.equal(report.importable, 5);
-  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['expired_over_a_year', 2], ['never_paid', 3]]);
-  assert.deepEqual(report.membershipStatus, { active: 3, expired: 2 });
-  assert.equal(report.profile.needsOnboarding, 3);
-  assert.equal(report.payments.paid, 5, 'payments of held and removed members are not counted');
+  assert.equal(report.importable, 7);
+  assert.deepEqual(report.excluded.map((item) => [item.key, item.count]), [['never_paid', 3]]);
+  assert.deepEqual(report.membershipStatus, { active: 3, expired: 4 });
+  assert.equal(report.profile.needsOnboarding, 5);
+  assert.equal(report.payments.paid, 7, 'payments of held and removed members are not counted');
   assert.equal(report.payments.ignoredFailedOrPending, 1);
-  assert.equal(report.stripe.withActiveSubscription, 1, 'the removed member with an active subscription is not counted');
-  assert.deepEqual(report.subscriptionsByStatus, { active: 3, cancelled: 1 });
+  assert.equal(report.stripe.withActiveSubscription, 2);
+  assert.deepEqual(report.subscriptionsByStatus, { active: 4, cancelled: 1 });
 
   const expected = new Map(report.expected.map((item) => [item.key, item]));
   const review = new Map(report.review.map((item) => [item.key, item]));
-  assert.equal(expected.get('incomplete_profile')?.count, 7, 'removed members are not counted as incomplete');
+  assert.equal(expected.get('incomplete_profile')?.count, 9, 'removed members are not counted as incomplete');
   assert.ok(expected.get('incomplete_profile')?.remedy);
   assert.ok(expected.has('country_filled_from_federation') && expected.has('unsupported_password_hash'));
   assert.equal(review.get('duplicate_email')?.count, 2);
@@ -198,7 +201,7 @@ test('summarizePlan leaves removed members out of every figure and separates exp
   assert.equal(dup.rows.length, 2);
   assert.ok(dup.rows.every((row) => dup.columns.every((column) => column in row)));
   assert.deepEqual(dup.rows.map((row) => row.email).sort(), ['dup@example.com', 'dup@example.com']);
-  assert.equal(report.excluded[1].rows.length, 3);
+  assert.equal(report.excluded[0].rows.length, 3);
 
   // People's details may be downloaded, but never password hashes or Stripe payment references.
   const serialized = JSON.stringify(report);
@@ -366,4 +369,53 @@ test('a completed payment whose reference is not a Stripe ID is imported as lega
   assert.equal(member('3').payments[0]?.source, 'stripe');
   assert.equal(member('2').notes.includes('non_stripe_payment_reference'), false);
   assert.ok(summarizePlan(plan).expected.some((group) => group.key === 'non_stripe_payment_reference'));
+});
+
+test('a live paid Stripe subscription decides the paid-through date; a stale or unpaid one does not', () => {
+  const hal = planLegacyImport(buildDump(), { asOf: '2026-10-16' }).members.find((member) => member.legacyUserId === '8')!;
+  assert.equal(hal.membership.status, 'expired');
+  assert.equal(hal.stripe.subscriptionId, 'sub_hal');
+  const forms = { normalizeEmail: (email: string) => email.toLowerCase(), emailDisplayForm: (email: string) => email };
+  const snapshot = (status: string, currentPeriodEnd: string) => ({
+    subscriptions: [{ id: 'sub_hal', customerId: 'cus_hal', status, email: 'hal@example.com', priceId: 'price_x', currentPeriodEnd, cancelAtPeriodEnd: false }],
+    customerIds: new Set<string>(), chargeRefs: new Set<string>(), truncated: { subscriptions: false, customers: false, charges: false },
+  });
+  const today = '2026-10-20';
+
+  const live = buildMemberRows(hal, snapshot('active', '2026-11-20'), forms, today);
+  assert.equal(live.membership.status, 'active');
+  assert.equal(live.membership.validUntil, '2026-11-20');
+  assert.equal(live.membership.graceEndsOn, null);
+  assert.match(live.membership.notes ?? '', /live Stripe subscription/);
+  assert.equal(live.renewal.currentMode, 'recurring');
+
+  assert.equal(buildMemberRows(hal, snapshot('trialing', '2026-11-20'), forms, today).membership.status, 'active');
+  for (const [status, end] of [['past_due', '2026-11-20'], ['canceled', '2026-11-20'], ['active', '2026-10-01']] as const) {
+    const kept = buildMemberRows(hal, snapshot(status, end), forms, today);
+    assert.equal(kept.membership.status, 'expired', `${status} ending ${end} does not make them paid up`);
+    assert.equal(kept.membership.validUntil, hal.membership.paidThrough ?? kept.membership.validUntil);
+  }
+  assert.equal(buildMemberRows(hal, { ...snapshot('active', '2026-11-20'), subscriptions: [] }, forms, today).membership.status, 'expired');
+});
+
+test('a cancelled or unpaid Stripe subscription only needs a decision when the member would be imported with access', async () => {
+  const { reconcileWithStripe } = await import('../lib/legacy-import/stripe-reconcile.ts');
+  const plan = planLegacyImport(buildDump(), { asOf: '2026-10-16' });
+  const hal = plan.members.find((member) => member.legacyUserId === '8')!;
+  const ada = plan.members.find((member) => member.legacyUserId === '1')!;
+  assert.equal(hal.membership.status, 'expired');
+  assert.equal(ada.membership.status, 'active');
+  const snapshot = (id: string, status: string) => ({
+    subscriptions: [{ id, customerId: 'cus_x', status, email: 'x@example.com', priceId: 'price_x', currentPeriodEnd: '2026-11-20', cancelAtPeriodEnd: false }],
+    customerIds: new Set<string>(), chargeRefs: new Set<string>(), truncated: { subscriptions: false, customers: false, charges: false },
+  });
+  const group = (id: string, status: string, key: string) => reconcileWithStripe(plan.members, snapshot(id, status), plan.orphans).groups.find((candidate) => candidate.key === key);
+  // Expired in the legacy data and cancelled, past due, unpaid or paused in Stripe: consistent, imported as expired, nothing to decide.
+  for (const status of ['canceled', 'past_due', 'unpaid', 'paused']) {
+    const listed = reconcileWithStripe(plan.members, snapshot('sub_hal', status), plan.orphans).groups
+      .filter((candidate) => ['stripe_cancelled_legacy_active', 'stripe_not_paid_up_for_expired'].includes(candidate.key) && candidate.rows.some((row) => row.legacy_user_id === '8'));
+    assert.deepEqual(listed, [], `expired + ${status} is not a decision`);
+  }
+  // Active in the legacy data but cancelled in Stripe: a real conflict.
+  assert.ok(group('sub_new', 'canceled', 'stripe_cancelled_legacy_active')?.rows.some((row) => row.legacy_user_id === '1'));
 });

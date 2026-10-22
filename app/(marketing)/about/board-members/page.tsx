@@ -53,29 +53,33 @@ export default async function BoardMembersPage() {
                   <h2 className="mt-3 font-display text-2xl leading-snug">
                     {member.firstName} {member.lastName}
                   </h2>
+                  {member.boardSubtitle ? (
+                    <p className="mt-1 font-display text-xl leading-snug">{member.boardSubtitle}</p>
+                  ) : null}
                   {member.countryCode ? (
-                    <p className="mt-1 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                       {countryNameForCode(member.countryCode)}
                       <CountryFlag code={member.countryCode} className="size-4" />
                     </p>
                   ) : null}
-                  {member.boardSubtitle ? <p className="mt-3 text-sm text-muted-foreground">{member.boardSubtitle}</p> : null}
                   {member.officialDetails.length > 0 ? (
                     <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
                       {member.officialDetails.map((detail) => <li key={detail}>{detail}</li>)}
                     </ul>
                   ) : null}
                   {member.boardFacebookUrl ? (
+                    <div className="mt-4">
                     <a
                       href={member.boardFacebookUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`${member.firstName} ${member.lastName} on Facebook`}
-                      className="mt-5 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-gold/50 hover:text-gold"
+                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-gold/50 hover:text-gold"
                     >
                       <FacebookIcon />
                       Facebook
                     </a>
+                    </div>
                   ) : null}
                 </div>
               </article>

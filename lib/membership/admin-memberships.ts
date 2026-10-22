@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { sql, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { ISO_COUNTRY_CODES, IDOC_REGIONS, JUDGE_STATUSES, STEWARD_STATUSES } from '@/lib/membership/validation';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
@@ -25,7 +26,7 @@ export type MembershipStatusFilter = typeof MEMBERSHIP_STATUSES[number];
 // calling any string method on it.
 type RawFilterValue = string | string[] | undefined;
 export type MemberFilters = {
-  column?: RawFilterValue; country?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
+  column?: RawFilterValue; expiresFrom?: RawFilterValue; expiresTo?: RawFilterValue; federation?: RawFilterValue;
   membershipType?: RawFilterValue; officialStatus?: RawFilterValue; page?: number | RawFilterValue; pageSize?: number | RawFilterValue;
   direction?: RawFilterValue; filters?: RawFilterValue; q?: RawFilterValue; region?: RawFilterValue; sort?: RawFilterValue;
   status?: RawFilterValue; joinOperator?: RawFilterValue;
@@ -42,7 +43,7 @@ export type AdminMemberRow = {
 
 const SORT_FIELDS = ['name', 'email', 'status', 'type', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated'] as const;
 type SortField = typeof SORT_FIELDS[number];
-type AdvancedMemberFilter = { id: 'status' | 'type' | 'country' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
+type AdvancedMemberFilter = { id: 'status' | 'type' | 'federation' | 'region' | 'expires'; operator: string; value: string | string[] };
 export const MEMBERSHIP_TYPE_OPTIONS = ['judge', 'steward', 'combo', 'veterinarian'] as const;
 type MembershipTypeOption = typeof MEMBERSHIP_TYPE_OPTIONS[number];
 
@@ -63,7 +64,7 @@ function firstValue(value: RawFilterValue): string | undefined {
 function pageNumber(value: number | RawFilterValue): number {
   return Number(typeof value === 'number' ? value : firstValue(value));
 }
-// A multi-select filter (status, type, country, federation, region) can arrive two ways: a real
+// A multi-select filter (status, type, federation, region) can arrive two ways: a real
 // repeated-key array from a raw request (?status=active&status=expired), or the single comma-joined
 // query param the admin toolbar's multi-select actually sends (?status=active,expired). Both mean
 // "match any of these", so both collapse to the same deduped token list here.
@@ -73,7 +74,7 @@ function allValues(value: RawFilterValue): string[] {
 }
 
 type NormalizedMemberFilters = {
-  countries: string[]; officialStatuses: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
+  officialStatuses: string[]; expiresFrom?: string; expiresTo?: string; federations: string[];
   direction: 'asc' | 'desc'; membershipTypes: MembershipTypeOption[]; page: number; pageSize: 10 | 25 | 50 | 100; q?: string; regions: string[];
   sort: SortField; sorts: { id: SortField; desc: boolean }[]; advancedFilters: AdvancedMemberFilter[];
   joinOperator: 'and' | 'or'; statuses: MembershipStatusFilter[];
@@ -99,7 +100,6 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
   const rawPageSize = pageNumber(input.pageSize);
   const filters: NormalizedMemberFilters = {
     direction: parsedSort?.desc === true ? 'desc' : parsedSort?.desc === false ? 'asc' : firstValue(input.direction) === 'desc' || legacyDirection === 'desc' ? 'desc' : 'asc',
-    countries: allValues(input.country).map((value) => value.trim().toUpperCase()).filter(Boolean),
     expiresFrom: firstValue(input.expiresFrom) || undefined,
     expiresTo: firstValue(input.expiresTo) || undefined,
     officialStatuses: allValues(input.officialStatus).filter((value) => OFFICIAL_STATUS_VALUES.includes(value)),
@@ -112,7 +112,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     sort: sort && SORT_FIELDS.includes(sort as SortField) ? sort as SortField : 'name',
     sorts, advancedFilters: [], joinOperator: firstValue(input.joinOperator) === 'or' ? 'or' : 'and',
     // An empty selection means "no status restriction" here, exactly like every other facet below
-    // (countries/federations/regions/membershipTypes) -- it does NOT fall back to a default. The
+    // (federations/regions/membershipTypes) -- it does NOT fall back to a default. The
     // "active by default" behavior a brand-new administrator sees is applied once, by the caller,
     // only when no preference has ever been saved (see app/(dashboard)/admin/members/page.tsx);
     // baking that default in here as well made Reset unable to distinguish "never customized" from
@@ -124,7 +124,7 @@ function normalized(input: MemberFilters): NormalizedMemberFilters {
     try {
       const advanced: unknown = JSON.parse(rawAdvancedFilters);
       if (Array.isArray(advanced)) filters.advancedFilters = advanced.slice(0, 20).filter((filter): filter is AdvancedMemberFilter =>
-        filter && ['status', 'type', 'country', 'federation', 'region', 'expires'].includes(filter.id)
+        filter && ['status', 'type', 'federation', 'region', 'expires'].includes(filter.id)
         && typeof filter.operator === 'string' && (typeof filter.value === 'string'
           || Array.isArray(filter.value) && filter.value.every((value: unknown) => typeof value === 'string')));
     } catch { /* Invalid advanced state is ignored and server defaults remain authoritative. */ }
@@ -170,8 +170,7 @@ function advancedCondition(filter: AdvancedMemberFilter, effectiveStatus: SQL): 
     : filter.id === 'region' ? IDOC_REGIONS : ISO_COUNTRY_CODES;
   const selected = [...new Set(values.filter((value) => (allowed as readonly string[]).includes(value)))];
   if (!selected.length || !['eq', 'ne', 'inArray', 'notInArray'].includes(filter.operator)) return null;
-  const field = filter.id === 'type' ? sql`roles.membership_type` : filter.id === 'federation' ? sql`roles.federation`
-    : filter.id === 'country' ? sql`p.country_code` : sql`roles.region`;
+  const field = filter.id === 'type' ? sql`roles.membership_type` : filter.id === 'federation' ? sql`roles.federation` : sql`roles.region`;
   const matches = filter.id === 'status' ? selected.map((value) => statusCondition(value as MembershipStatusFilter, effectiveStatus))
     : selected.map((value) => sql`${field} = ${value}`);
   const match = sql`(${sql.join(matches, sql` or `)})`;
@@ -188,7 +187,15 @@ function queryParts(raw: MemberFilters) {
   const conditions = [sql`p.id is not null`];
   if (filters.q) {
     const pattern = `%${filters.q.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(sql`(u.email ilike ${pattern} escape '\\' or p.first_name ilike ${pattern} escape '\\' or p.last_name ilike ${pattern} escape '\\' or concat_ws(' ', p.first_name, p.last_name) ilike ${pattern} escape '\\')`);
+    // One indexed lookup per column, combined with a union, so each branch can use its own trigram GIN index (profiles_*_trgm_idx
+    // and users_display_email_trgm_idx, migration 0081). An OR across the users and profiles tables in one predicate cannot use
+    // any of them and scans both tables in full. Every predicate below repeats its index's expression exactly, which is what lets
+    // the planner pick the index. The email branch matches the displayed address (email_display, falling back to email).
+    conditions.push(sql`p.id in (
+      select id from profiles where first_name ilike ${pattern} escape '\\'
+      union select id from profiles where last_name ilike ${pattern} escape '\\'
+      union select id from profiles where (first_name || ' ' || last_name) ilike ${pattern} escape '\\'
+      union select sp.id from users su join profiles sp on sp.user_id = su.id where coalesce(su.email_display, su.email) ilike ${pattern} escape '\\')`);
   }
   const effectiveStatus = sql`case when m.status = 'archived' or u.account_state = 'deleted' then 'archived' when ((m.status in ('active','complimentary','canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date)) and u.account_state <> 'suspended' then 'active' else 'expired' end`;
   const advancedStatus = filters.advancedFilters.some((filter) => filter.id === 'status' && advancedCondition(filter, effectiveStatus));
@@ -198,7 +205,6 @@ function queryParts(raw: MemberFilters) {
   }
   if (filters.expiresFrom) conditions.push(sql`m.valid_until >= ${filters.expiresFrom}`);
   if (filters.expiresTo) conditions.push(sql`m.valid_until <= ${filters.expiresTo}`);
-  if (filters.countries.length) conditions.push(sql`p.country_code in (${sql.join(filters.countries.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.federations.length) conditions.push(sql`roles.federation in (${sql.join(filters.federations.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.regions.length) conditions.push(sql`roles.region in (${sql.join(filters.regions.map((value) => sql`${value}`), sql`,`)})`);
   if (filters.officialStatuses.length) {
@@ -226,16 +232,31 @@ function queryParts(raw: MemberFilters) {
   const order = sql`${sql.join(sorts.flatMap(({ id, desc }) => [
     sql`${sortExpression(id)} ${desc ? sql`desc` : sql`asc`} nulls last`,
     ...(id === 'name' ? [sql`p.first_name ${desc ? sql`desc` : sql`asc`} nulls last`] : []),
-  ]), sql`, `)}, p.first_name, coalesce(p.id,u.id), u.id`;
+  ]), sql`, `)}, p.first_name, p.id, u.id`;
   return { effectiveStatus, filters, order, where: sql.join(conditions, sql` and `) };
 }
 
-const from = sql`from users u left join profiles p on p.user_id = u.id
-  left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true
-  left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,(select array_agg(distinct oc.concat_status order by oc.concat_status) from (select role_type||':'||st concat_status from professional_roles r2, unnest(r2.official_statuses) st where r2.profile_id=p.id and r2.effective_to is null) oc) official_statuses,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true
-  left join lateral (select max(paid_at) last_payment_at from payments where profile_id=p.id) payment on true
-  left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from application_roles where user_id=u.id and revoked_at is null) app_roles on true
-  left join lateral (select true has_support_history from support_conversations where member_user_id=u.id limit 1) support on true`;
+// Each lateral join below returns exactly one row per member (an aggregate without GROUP BY, or LIMIT 1), so a join the query
+// never references cannot change how many rows match. The page query's two phases and the count query each include only the
+// joins their WHERE and ORDER BY clauses actually read, which skips the per-member work on the role, payment and support tables
+// for every member that is not on the page being shown.
+const baseFrom = sql`from users u left join profiles p on p.user_id = u.id`;
+const lateralJoins: Record<'m' | 'roles' | 'payment' | 'app_roles' | 'support', SQL> = {
+  m: sql`left join lateral (select status, valid_until, grace_ends_on, updated_at from memberships where profile_id=p.id order by valid_until desc,id desc limit 1) m on true`,
+  roles: sql`left join lateral (select array_agg(distinct role_type)::text[] role_types, bool_or(role_type='judge') has_judge, bool_or(role_type='steward') has_steward, min(national_federation_country_code) federation, min(idoc_region) region,(select array_agg(distinct oc.concat_status order by oc.concat_status) from (select role_type||':'||st concat_status from professional_roles r2, unnest(r2.official_statuses) st where r2.profile_id=p.id and r2.effective_to is null) oc) official_statuses,case when bool_or(role_type='judge') and bool_or(role_type='steward') then 'combo' when count(distinct role_type)=1 then min(role_type) else null end membership_type from professional_roles where profile_id=p.id and effective_to is null) roles on true`,
+  payment: sql`left join lateral (select max(paid_at) last_payment_at from payments where profile_id=p.id) payment on true`,
+  app_roles: sql`left join lateral (select bool_or(role='administrator') is_administrator, bool_or(role='super_admin') is_super_admin from application_roles where user_id=u.id and revoked_at is null) app_roles on true`,
+  support: sql`left join lateral (select true has_support_history from support_conversations where member_user_id=u.id limit 1) support on true`,
+};
+const lateralAliases = Object.keys(lateralJoins) as (keyof typeof lateralJoins)[];
+const from = sql`${baseFrom} ${sql.join(lateralAliases.map((alias) => lateralJoins[alias]), sql` `)}`;
+const sqlDialect = new PgDialect();
+/** `from` with only the lateral joins whose alias the given clauses reference. */
+function fromFor(...clauses: SQL[]): SQL {
+  const text = clauses.map((clause) => sqlDialect.sqlToQuery(clause).sql).join(' ');
+  const needed = lateralAliases.filter((alias) => new RegExp(`\\b${alias}\\.`).test(text));
+  return needed.length ? sql`${baseFrom} ${sql.join(needed.map((alias) => lateralJoins[alias]), sql` `)}` : baseFrom;
+}
 
 async function authorize() { const actor = await requireAccountAccess('administration'); requireAdministrator(actor); return actor; }
 
@@ -243,9 +264,14 @@ export async function listAdminMembers(input: MemberFilters = {}) {
   await authorize();
   const { effectiveStatus, filters, order, where } = queryParts(input);
   const offset = (filters.page - 1) * filters.pageSize;
+  // Two phases: the inner query finds only the ids on the requested page (filtering and sorting with just the joins those need),
+  // and the outer query then computes every displayed column for those few members. Sorting by name with the default filters
+  // reads the first page straight off profiles_name_sort_idx, and no per-member role, payment or support work happens for the
+  // thousands of members who are not on the page.
+  const pageIds = sql`select u.id ${fromFor(where, order)} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`;
   const [rows, counts] = await Promise.all([
-    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where ${where} order by ${order} limit ${filters.pageSize} offset ${offset}`),
-    db.execute<{ count: number }>(sql`select count(*)::int count ${from} where ${where}`),
+    db.execute<AdminMemberRow>(sql`select p.id "profileId",u.id "userId",p.first_name "firstName",p.last_name "lastName",u.email,p.country_code country,m.valid_until "validUntil",${effectiveStatus} status,roles.federation,roles.region,roles.official_statuses "officialStatuses",roles.membership_type "membershipType",payment.last_payment_at "lastPaymentAt",greatest(u.updated_at,coalesce(p.updated_at,u.updated_at),coalesce(m.updated_at,u.updated_at)) "updatedAt",coalesce(support.has_support_history,false) "hasSupportHistory",coalesce(p.is_board_member,false) "isBoardMember",coalesce(app_roles.is_administrator,false) "isAdministrator",coalesce(app_roles.is_super_admin,false) "isSuperAdmin" ${from} where u.id in (${pageIds}) order by ${order}`),
+    db.execute<{ count: number }>(sql`select count(*)::int count ${fromFor(where)} where ${where}`),
   ]);
   return { filters, pageSize: filters.pageSize, rows: [...rows], total: counts[0]?.count ?? 0 };
 }

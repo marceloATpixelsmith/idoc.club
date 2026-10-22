@@ -16,6 +16,7 @@ const exportRoute = readFileSync('app/api/admin/export/seminar-registrations/rou
 const seminarFieldset = readFileSync('components/seminars/seminar-fieldset.tsx', 'utf8');
 const levelsField = readFileSync('components/seminars/seminar-levels-field.tsx', 'utf8');
 const memberPage = readFileSync('components/seminars/member-registrations.tsx', 'utf8');
+const seminarsRoute = readFileSync('app/(marketing)/seminars/page.tsx', 'utf8');
 const approvalMigration = readFileSync('lib/db/migrations/0072_seminar_approval_directory_optin_support_suggestion.sql', 'utf8');
 
 test('seminar and registration states, and their documented length limits, are constrained in the migration', () => {
@@ -238,16 +239,21 @@ test('Available Seminars is one flat list (open, full, or closed together, not s
   assert.match(availableBlock as string, /AvailabilityTag/);
 });
 
-test('both the member catalog and the signed-out public catalog show an already-ended, published seminar under a "Past seminars" section-label heading', () => {
+test('past seminars and courses have their own top-level tab between available and My Seminars', () => {
+  const availableTab = seminarsRoute.indexOf('Available Seminars/Courses');
+  const pastTab = seminarsRoute.indexOf('Past Seminars/Courses');
+  const myTab = seminarsRoute.indexOf('My Seminars/Courses');
+  assert.ok(availableTab > -1 && availableTab < pastTab && pastTab < myTab, 'tabs should be ordered Available, Past, My');
+  assert.ok(seminarsRoute.includes('href="/seminars?view=past"'));
+  assert.ok(seminarsRoute.includes('<MemberRegistrations view="past" />'));
+  assert.match(memberPage, /async function PastSeminars/);
   assert.match(memberPage, /listPastPublishedSeminars/);
-  const availableBlock = memberPage.match(/async function AvailableSeminars[\s\S]*?\n\}/)?.[0];
-  const publicBlock = memberPage.match(/export async function PublicSeminarsCatalog[\s\S]*?\n\}/)?.[0];
-  for (const block of [availableBlock, publicBlock]) {
-    assert.ok(block, 'catalog block not found');
-    assert.match(block as string, /<h3 className="section-label">Past seminars\/courses<\/h3>/);
-  }
+  const availableStart = memberPage.indexOf('async function AvailableSeminars');
+  const pastStart = memberPage.indexOf('async function PastSeminars');
+  assert.ok(availableStart > -1 && pastStart > availableStart);
+  assert.doesNotMatch(memberPage.slice(availableStart, pastStart), /listPastPublishedSeminars/);
   assert.match(registrationsSource, /export async function listPastPublishedSeminars/);
-  assert.match(registrationsSource, /s\.status='published' and s\.end_date < current_date/);
+  assert.ok(registrationsSource.includes("s.status='published' and s.end_date < current_date"));
 });
 
 test('all seminar listing surfaces reuse a compact, uniformly constrained card with independent navigation and FEI links', () => {
@@ -260,10 +266,10 @@ test('all seminar listing surfaces reuse a compact, uniformly constrained card w
   assert.match(cardBlock as string, /relative z-20[^"]*w-fit shrink-0/);
   const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
   assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
-  assert.match(memberPage, /w-fit max-w-full divide-y/);
+  assert.match(memberPage, /SEMINAR_LIST_CLASS = '-mx-4 w-\[calc\(100%\+2rem\)\] max-w-\[37rem\] divide-y/);
   const homePage = readFileSync('app/(marketing)/page.tsx', 'utf8');
   assert.match(homePage, /SeminarListingCard/);
-  assert.match(homePage, /w-full max-w-3xl divide-y/);
+  assert.match(homePage, /-mx-4 mt-6 w-\[calc\(100%\+2rem\)\] max-w-\[calc\(48rem\+2rem\)\] divide-y/);
 });
 
 test('pricing follows title and date-only metadata inside the shared seminar information column', () => {
@@ -672,6 +678,12 @@ test('member seminar navigation uses a clear unboxed parent and contextual secon
   assert.match(catalog, /aria-label="Seminars\/Courses view"/);
   assert.match(catalog, /border-b-\[3px\]/);
   assert.match(catalog, /aria-current=\{showMySeminars \? 'page' : undefined\}/);
+  assert.match(catalog, /href="\/seminars\?view=past"/);
+  assert.ok(catalog.indexOf('Available Seminars/Courses') < catalog.indexOf('Past Seminars/Courses'));
+  assert.ok(catalog.indexOf('Past Seminars/Courses') < catalog.indexOf('My Seminars/Courses'));
+  assert.match(catalog, /aria-current=\{showPastSeminars \? 'page' : undefined\}/);
+  assert.match(member, /if \(view === 'past'\) return <PastSeminars \/>/);
+  assert.match(member, /async function PastSeminars\(\)/);
   assert.match(catalog, /aria-label="Registration history"/);
   assert.match(catalog, /sm:grid-cols-subgrid/);
   assert.doesNotMatch(catalog, /sm:col-start-2/);

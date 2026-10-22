@@ -11,13 +11,15 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSession } from '@/lib/auth/session';
-import { subscribeToMarketingAudience, unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
+import { getMarketingPreference, settleOnboardingMarketingOptIn } from './marketing-preference';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type AdminBoardProfileInput, type MemberProfileInput } from './validation';
 import { mayAccessAccountFunction, type AccountFunction, type AccountState } from './account-access';
 import { isEntitled } from './entitlement';
+import { loadAccountFacts } from './session-gate-loader';
 import { lockLatestMembership } from './locking';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
@@ -46,25 +48,16 @@ async function authenticatedActor(operation: AccountFunction): Promise<Actor> {
   const session = injectedActor ? null : await getSession();
   const userId = injectedActor?.id ?? session?.user.id;
   if (!userId) throw new AuthorizationError();
-  const [account] = await db.select({ accountState: users.accountState })
-    .from(users).where(eq(users.id, userId)).limit(1);
-  if (!account) throw new AuthorizationError();
-  const [grants, profile] = await Promise.all([
-    db.select({ role: applicationRoles.role }).from(applicationRoles)
-      .where(and(eq(applicationRoles.userId, userId), isNull(applicationRoles.revokedAt))),
-    db.select({ id: profiles.id }).from(profiles).where(eq(profiles.userId, userId)).limit(1),
-  ]);
-  const actor = { id: userId, roles: grants.map(({ role }) => role) };
-  const latest = profile[0]
-    ? await db.select({ status: memberships.status, validUntil: memberships.validUntil })
-      .from(memberships).where(eq(memberships.profileId, profile[0].id))
-      .orderBy(desc(memberships.validUntil)).limit(1)
-    : [];
-  const entitled = latest[0]
-    ? isEntitled(latest[0], new Date().toISOString().slice(0, 10))
+  // One statement (memoized per render) instead of users, then roles and profile, then memberships as three sequential round trips.
+  const facts = await loadAccountFacts(userId);
+  if (!facts) throw new AuthorizationError();
+  const actor = { id: userId, roles: facts.roles };
+  // Entitlement here deliberately reads status and validUntil only (not graceEndsOn), exactly as it always has.
+  const entitled = facts.latestMembership
+    ? isEntitled({ status: facts.latestMembership.status, validUntil: facts.latestMembership.validUntil }, new Date().toISOString().slice(0, 10))
     : false;
   if (!mayAccessAccountFunction({
-    accountState: account.accountState as AccountState,
+    accountState: facts.accountState as AccountState,
     actor,
     entitled,
   }, operation)) throw new AuthorizationError();
@@ -80,14 +73,15 @@ export async function getPrivateMember(profileId: number) {
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return null;
   requireOwnerOrAdmin(actor, profile.userId);
-  const [roles, entitlement, subscription, account] = await Promise.all([
+  const [roles, entitlement, subscription, account, marketing] = await Promise.all([
     db.select().from(professionalRoles).where(and(eq(professionalRoles.profileId, profile.id), isNull(professionalRoles.effectiveTo))),
     db.select().from(memberships).where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1),
     db.select({ cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd, currentPeriodEnd: subscriptions.currentPeriodEnd, status: subscriptions.status })
       .from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.createdAt)).limit(1),
     db.select({ email: sql<string>`coalesce(${users.emailDisplay}, ${users.email})` }).from(users).where(eq(users.id, profile.userId)).limit(1),
+    getMarketingPreference(profile.id),
   ]);
-  return { email: account[0]?.email ?? '', entitlement: entitlement[0] ?? null, profile, roles, subscription: subscription[0] ?? null };
+  return { email: account[0]?.email ?? '', entitlement: entitlement[0] ?? null, marketing, profile, roles, subscription: subscription[0] ?? null };
 }
 
 export async function getOwnPrivateMember() {
@@ -164,7 +158,7 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
     });
     return { email: account.email, profile };
   });
-  if (consent.keepUpdated) await subscribeToMarketingAudience(result.email);
+  if (consent.keepUpdated) await settleOnboardingMarketingOptIn(result.profile.id, result.email);
   return result.profile;
 }
 

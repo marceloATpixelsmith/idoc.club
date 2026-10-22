@@ -11,7 +11,7 @@ const baseSecurityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Stop advertising the framework via the X-Powered-By: Next.js response header.
+  // Stop advertising the framework via the X-Powered-By response header.
   poweredByHeader: false,
   // The temporary Super Admin legacy-import dry run uploads two SQL dumps (about 3 MB together) through one Server Action. 4 MB stays under
   // Vercel's 4.5 MB request limit; delete this setting with the importer.
