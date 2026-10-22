@@ -10,6 +10,11 @@ import { resolveRequestOrigin } from './request-origin';
 import { testRequestOrigin } from '@/lib/auth/request-cookies';
 
 const WINDOW_MS = 15 * 60 * 1000;
+const STEP_UP_WINDOW_MS = 5 * 60 * 1000;
+
+function windowMsFor(purpose: string): number {
+  return purpose === 'mfa_step_up_verify' ? STEP_UP_WINDOW_MS : WINDOW_MS;
+}
 const DEFAULT_EMAIL_MAX_REQUESTS = 3;
 const IP_MAX_REQUESTS = 10;
 const PROVIDER_USER_MAX_REQUESTS = 60;
@@ -45,8 +50,9 @@ const IDENTIFIER_MAX_REQUESTS: Readonly<Record<string, number>> = {
 };
 
 /** Exact seconds until the current fixed rate-limit window expires. */
-export function rateLimitRetryAfterSeconds(now: Date = new Date()): number {
-  return Math.max(1, Math.ceil((Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS + WINDOW_MS - now.getTime()) / 1000));
+export function rateLimitRetryAfterSeconds(purpose: string, now: Date = new Date()): number {
+  const windowMs = windowMsFor(purpose);
+  return Math.max(1, Math.ceil((Math.floor(now.getTime() / windowMs) * windowMs + windowMs - now.getTime()) / 1000));
 }
 
 function identifierMaxRequestsFor(purpose: string): number {
@@ -94,7 +100,8 @@ async function takeBucket(purpose: string, identifierHash: string, originHash: s
  * contract (lib/membership/account-recovery.ts). */
 export async function checkRateLimit(purpose: string, email: string, origin: string, now: Date = new Date()): Promise<boolean> {
   const secret = rateLimitHashKeyForServer();
-  const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
+  const windowMs = windowMsFor(purpose);
+  const windowStartedAt = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
   const emailHash = digest(`${secret}:email:${email}`);
   const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
   const allOriginsMarker = digest(`${secret}:all-origins`);
