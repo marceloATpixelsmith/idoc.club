@@ -71,4 +71,3 @@ export async function runOperationAction(
     return { error: 'The GitHub operation could not be started safely.' };
   }
 }
-
