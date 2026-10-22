@@ -29,7 +29,7 @@ jobs:
           git config user.name "idoc-history-sync[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main staging
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test "$(git merge-base HEAD origin/main)" = "$(git rev-parse origin/main)"
           git merge --no-ff -X theirs -m "Merge main and staging histories without changing staging application code" origin/staging
           grep -q 'poweredByHeader: false' next.config.ts
           git rm .github/workflows/temporary-main-history-sync.yml
