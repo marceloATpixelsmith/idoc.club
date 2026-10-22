@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { SEMINAR_ROW_CLASS, SeminarListingCard } from '@/components/seminars/member-registrations';
@@ -168,8 +169,7 @@ export default async function Home() {
                 {PARTNER_CLUBS.map((club) => (
                   <li key={club.name}>
                     <a aria-label={club.name} href={club.href} rel="noopener noreferrer" target="_blank" title={club.name}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img alt={club.name} className="h-20 w-20 rounded-sm object-contain" height={80} src={club.image} width={80} />
+                      <Image alt={club.name} className="h-20 w-20 rounded-sm object-contain" height={80} src={club.image} width={80} sizes="80px" />
                     </a>
                   </li>
                 ))}
