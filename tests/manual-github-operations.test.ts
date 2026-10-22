@@ -18,6 +18,7 @@ test('the approved promotion opens a protected staging-to-main PR, while live au
     requests.push({ url, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? init.body : undefined });
     if (url.includes('/pulls?')) return new Response('[]', { status: 200 });
     if (url.endsWith('/pulls')) return new Response(JSON.stringify({ html_url: 'https://github.com/marceloATpixelsmith/idoc.club/pull/999' }), { status: 201 });
+    if (url.endsWith('/pulls/999')) return new Response(JSON.stringify({ state: 'open', head: { ref: 'staging', sha: 'a'.repeat(40) }, base: { ref: 'main' } }), { status: 200 });
     return new Response(null, { status: 204 });
   }) as typeof fetch;
   try {
@@ -28,14 +29,16 @@ test('the approved promotion opens a protected staging-to-main PR, while live au
     const result = await dispatchManualGithubOperation('production-promotion');
     await dispatchManualGithubOperation('live-auth');
     assert.equal(result, 'https://github.com/marceloATpixelsmith/idoc.club/pull/999');
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 5);
     assert.equal(requests[0].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/pulls?state=open&base=main&per_page=100');
     assert.equal(requests[1].method, 'POST');
     assert.equal(requests[1].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/pulls');
     assert.deepEqual(JSON.parse(requests[1].body ?? '{}').head, 'staging');
     assert.deepEqual(JSON.parse(requests[1].body ?? '{}').base, 'main');
-    assert.equal(requests[2].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/live-auth-staging.yml/dispatches');
-    assert.deepEqual(JSON.parse(requests[2].body ?? '{}'), { ref: 'staging' });
+    assert.equal(requests[3].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/monitored-production-promotion.yml/dispatches');
+    assert.deepEqual(JSON.parse(requests[3].body ?? '{}'), { ref: 'main', inputs: { pr_number: '999', expected_head_sha: 'a'.repeat(40) } });
+    assert.equal(requests[4].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/live-auth-staging.yml/dispatches');
+    assert.deepEqual(JSON.parse(requests[4].body ?? '{}'), { ref: 'staging' });
   } finally {
     globalThis.fetch = oldFetch;
     if (oldToken === undefined) delete process.env.GITHUB_BACKUP_TOOL_TOKEN;
@@ -48,14 +51,17 @@ test('an existing staging-to-main promotion PR is reused', async () => {
   const oldFetch = globalThis.fetch;
   process.env.GITHUB_BACKUP_TOOL_TOKEN = 'test-github-token';
   let requestCount = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (input) => {
     requestCount += 1;
+    const url = String(input);
+    if (url.endsWith('/pulls/998')) return new Response(JSON.stringify({ state: 'open', head: { ref: 'staging', sha: 'b'.repeat(40) }, base: { ref: 'main' } }), { status: 200 });
+    if (url.endsWith('/dispatches')) return new Response(null, { status: 204 });
     return new Response(JSON.stringify([{ head: { ref: 'staging', repo: { full_name: 'marceloATpixelsmith/idoc.club' } }, html_url: 'https://github.com/marceloATpixelsmith/idoc.club/pull/998' }]), { status: 200 });
   }) as typeof fetch;
   try {
     const result = await dispatchManualGithubOperation('production-promotion');
     assert.equal(result, 'https://github.com/marceloATpixelsmith/idoc.club/pull/998');
-    assert.equal(requestCount, 1);
+    assert.equal(requestCount, 3);
   } finally {
     globalThis.fetch = oldFetch;
     if (oldToken === undefined) delete process.env.GITHUB_BACKUP_TOOL_TOKEN;
@@ -67,7 +73,7 @@ test('recent runs expose only safe status and run-link fields', async () => {
   const oldToken = process.env.GITHUB_BACKUP_TOOL_TOKEN;
   const oldFetch = globalThis.fetch;
   process.env.GITHUB_BACKUP_TOOL_TOKEN = 'test-github-token';
-  globalThis.fetch = (async () => new Response(JSON.stringify({
+  globalThis.fetch = (async (input) => new Response(JSON.stringify(String(input).includes('/jobs?') ? { jobs: [{ steps: [{ name: 'Verify production health', status: 'completed', conclusion: 'success' }] }] } : {
     workflow_runs: [{
       id: 42,
       run_number: 7,
@@ -81,7 +87,8 @@ test('recent runs expose only safe status and run-link fields', async () => {
 
   try {
     const runs = await listManualGithubOperationRuns();
-    assert.equal(runs.length, 1);
+    assert.equal(runs.length, 2);
+    assert.equal(runs.find((run) => run.workflow === 'production-promotion')?.steps?.[0]?.conclusion, 'success');
     assert.equal(runs[0].status, 'failure');
     assert.equal(runs[0].event, 'workflow_dispatch');
     assert.equal(runs[0].runUrl, 'https://github.com/marceloATpixelsmith/idoc.club/actions/runs/42');
@@ -106,4 +113,24 @@ test('the Super Admin page authorizes, verifies, audits and protects manual disp
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(page, /Promote Staging to Production/);
   assert.doesNotMatch(page, /Apply Staging Migrations/);
+});
+
+
+test('promotion workflow reports CI, reviews, merge, Vercel and production health separately', () => {
+  const workflow = readFileSync('.github/workflows/monitored-production-promotion.yml', 'utf8');
+  const script = readFileSync('scripts/monitored-production-promotion.mjs', 'utf8');
+  const page = readFileSync('app/(dashboard)/admin/operations/github-operations/page.tsx', 'utf8');
+  assert.match(workflow, /environment: production-promotion/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /monitored-production-promotion\.mjs verify/);
+  assert.match(workflow, /monitored-production-promotion\.mjs merge/);
+  assert.match(workflow, /monitored-production-promotion\.mjs deploy/);
+  assert.match(workflow, /monitored-production-promotion\.mjs health/);
+  assert.match(script, /reviewThreads\(first:100\)/);
+  assert.match(script, /hold-merge/);
+  assert.match(script, /Fast PR verification/);
+  assert.match(script, /merge_method: 'merge'/);
+  assert.match(script, /\/commits\/\$\{sha\}\/statuses/);
+  assert.match(script, /PRODUCTION_HEALTH_URL/);
+  assert.match(page, /PromotionStatusRefresh/);
 });
