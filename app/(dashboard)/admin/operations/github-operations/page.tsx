@@ -10,6 +10,7 @@ import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authoriz
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
+import { formatTableDate } from '@/lib/format';
 import {
   dispatchManualGithubOperation,
   isManualGithubWorkflow,
@@ -70,11 +71,11 @@ async function runOperationAction(
       return { error: 'This operation was requested in the last two minutes. Refresh the page before trying again.' };
     }
 
-    const promotionUrl = await dispatchManualGithubOperation(value);
+    await dispatchManualGithubOperation(value);
     revalidatePath(PATH);
     return {
-      success: value === 'production-promotion' ? 'The staging-to-main promotion pull request is ready for review. Production has not been changed.' : 'The operation was dispatched to the staging branch.',
-      workflowUrl: promotionUrl ?? MANUAL_GITHUB_WORKFLOWS[value].url,
+      success: 'The operation was dispatched to the staging branch.',
+      workflowUrl: MANUAL_GITHUB_WORKFLOWS[value].url,
     };
   } catch (error) {
     if (error instanceof ManualGithubOperationsError || error instanceof AuthorizationError ||
@@ -122,7 +123,7 @@ export default async function ManualGithubOperationsPage() {
         <p className="eyebrow">Super Admin Operations</p>
         <h1 className="text-3xl font-semibold text-gold">Manual GitHub Operations</h1>
         <p className="max-w-3xl text-muted-foreground">
-          Start live authentication tests or prepare a staging-to-production code promotion. Production promotion uses a protected pull request and is not an immediate deployment. Each request requires fresh authenticator verification and is recorded in the audit log.
+          Start either operation against the staging branch. Each request requires fresh authenticator verification and is recorded in the audit log.
         </p>
       </header>
 
@@ -131,13 +132,13 @@ export default async function ManualGithubOperationsPage() {
           <div className="flex items-start gap-3">
             <GitBranch aria-hidden="true" className="mt-1 size-5 shrink-0 text-gold" />
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-foreground">Promote Staging to Production</h2>
+              <h2 className="text-lg font-semibold text-foreground">Apply Staging Migrations</h2>
               <p className="text-sm text-muted-foreground">
-                Opens or reuses a GitHub pull request to promote all code on <code>staging</code> to <code>main</code>. Production changes only after required checks, staging verification, approvals and the protected pull request merge. This does not run database migrations.
+                Applies every pending committed migration to the <code>idoc_staging</code> schema. The GitHub workflow uses the protected staging-maintenance environment and refuses to run from a different branch.
               </p>
             </div>
           </div>
-          <ManualGithubOperationForm action={runOperationAction} workflow="production-promotion" label="Prepare Production Promotion" />
+          <ManualGithubOperationForm action={runOperationAction} workflow="staging-migrations" label="Run Staging Migrations" />
         </article>
 
         <article className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
@@ -159,7 +160,7 @@ export default async function ManualGithubOperationsPage() {
       <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Recent GitHub Workflow Runs</h2>
+            <h2 className="text-lg font-semibold text-foreground">Recent Staging Runs</h2>
             <p className="text-sm text-muted-foreground">Select a workflow log for step-by-step output and artifacts.</p>
           </div>
           <a className="inline-flex items-center gap-2 text-sm text-gold underline" href="https://github.com/marceloATpixelsmith/idoc.club/actions" rel="noreferrer" target="_blank">
@@ -178,7 +179,7 @@ export default async function ManualGithubOperationsPage() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No recent live authentication workflow runs are available. Production promotion pull requests are listed in GitHub Pull Requests.</p>
+          <p className="text-sm text-muted-foreground">No recent runs are available. If the live-auth workflow is not on GitHub&rsquo;s default branch yet, its button will become available after that workflow is promoted to <code>main</code>.</p>
         )}
       </section>
     </main>

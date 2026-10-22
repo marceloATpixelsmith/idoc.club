@@ -254,7 +254,7 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 **One-person operation.** IDOC has a single operator, so no second approver is required. The controls are instead: Super Admin role, fresh privileged TOTP step-up for every action, an explicit confirmation, an immutable audit row, and the existing GitHub environment protections.
 
-**Credential boundary.** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with *Actions: read and write* and *Pull requests: read and write*, used to start the backup, restore-drill, staging-migration and live-auth workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
+**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the backup, restore-drill, staging-migration and live-auth workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
 
 **How a drill works.**
 1. The Super Admin presses *Run restore drill* (choose the latest backup or a listed one), passes TOTP, confirms. The app records an audit row and dispatches the `IDOC Restore Drill` workflow on `main`.
@@ -268,7 +268,7 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 **One-time setup.**
 1. Merge the pull request that adds the tool, then run **IDOC R2 Schema Backups** once from the Actions tab (on `main`) so a backup with a manifest exists. Older backups have no manifest and cannot be drilled.
-2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** and **Pull requests: Read and write** (Metadata read is added automatically; the repository is public so workflow annotations are readable), expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
+2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** only (Metadata read is added automatically; fine-grained tokens have no Checks permission, and the repository is public so workflow annotations are readable), expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
 3. In Vercel add `GITHUB_BACKUP_TOOL_TOKEN` (Sensitive, server-only) for **Production** and for **Preview scoped to the `staging` branch**; redeploy. Optional `GITHUB_BACKUP_TOOL_REPOSITORY` (default `marceloATpixelsmith/idoc.club`).
 4. Migration `0074_maintenance_mode` must be applied (staging applies itself; Production uses the reviewer-approved workflow).
 
@@ -281,14 +281,9 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 ## Super Admin Manual GitHub Operations
 
-The Super Admin **Manual GitHub Operations** page appears directly below **Backups & restore** and offers two actions:
+The Super Admin **Manual GitHub Operations** page is directly below **Backups & restore**. It can dispatch only `Auto-migrate Staging Schema` and `Live authentication staging suite`, always against `staging`. The action requires fresh TOTP, CSRF validation, server-side Super Admin authorization, an audit entry, and duplicate-run protection. It reuses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not create another token or expose it to client code. The token's repository scope and Actions read/write permission remain as specified above.
 
-- **Promote Staging to Production:** opens an ordinary, non-draft `staging` → `main` pull request, or links to the existing open promotion PR. This does **not** push to `main`, execute migrations, merge the PR, or deploy production automatically. The operator must verify staging readiness under `docs/07-administrator-and-operations-runbook.md`, and complete the main-branch CI/review gates before merging the promotion PR with a merge commit.
-- **Run Live Authentication Tests:** dispatches `live-auth-staging.yml` against `staging`. Recent run links appear on the page; artifacts are available in GitHub Actions.
-
-Both operations reuse Super Admin authorization, CSRF protection, fresh TOTP step-up, audit logging, and duplicate-request protection. The server uses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not expose this token to client code. The token must have **Actions: read/write** for the live-auth operation and **Pull requests: read/write** for promotion PR lookup/creation. Update the existing token's permissions in GitHub and its stored value in Vercel if the permissions are missing; no new environment-variable name is needed.
-
-GitHub accepts a `workflow_dispatch` call only once the target workflow exists on the default branch (`main`). The live-auth action uses `ref: staging` and tests `staging.idoc.club`. No migration workflow is exposed through this Super Admin page.
+GitHub accepts `workflow_dispatch` only after the workflow file is present on the repository's default branch (`main`). `auto-migrate-staging.yml` is already on `main`; `live-auth-staging.yml` must reach `main` through the normal reviewed staging promotion before the page can dispatch it. The `ref` passed to both workflows remains `staging`, so the migration target is `idoc_staging` and the live suite tests `staging.idoc.club`. Recent run links appear on the page; the live-auth matrix, screenshots, video and trace are in the run's `live-auth-staging-results` artifact.
 
 ## Known pre-existing blocker
 
