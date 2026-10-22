@@ -158,7 +158,7 @@ export function HeroSlider() {
                 aria-label={`Show slide ${i + 1}`}
                 aria-current={i === index}
                 onClick={() => go(i)}
-                className="group flex h-11 w-12 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+                className="group flex h-11 w-12 items-center justify-center rounded-sm bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
               >
                 <span
                   className={`block h-px bg-gold transition-all duration-500 ${
