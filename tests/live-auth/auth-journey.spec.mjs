@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { messages, waitForOtp } from "../../scripts/live-auth-mailbox.mjs";
+import { messageCount, waitForOtp } from "../../scripts/live-auth-mailbox.mjs";
 
 const email = process.env.LIVE_AUTH_EMAIL;
 const password = process.env.LIVE_AUTH_TEST_PASSWORD;
@@ -23,7 +23,7 @@ async function submitPassword(page, value) {
 test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, login, and logout", async ({ page, context }) => {
   test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
   const evidence = [];
-  const beforeSignup = (await messages(email)).length;
+  const beforeSignup = await messageCount(email);
   await page.goto("/sign-up");
   await page.getByLabel("Email Address").fill(email);
   const signupButton = page.getByRole("button", { name: "Sign up" });
@@ -53,7 +53,7 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   await startSignIn(page);
   await submitPassword(page, `${password}-wrong`);
   await expect(page.locator(".idoc-auth-error")).toBeVisible();
-  const beforeLogin = (await messages(email)).length;
+  const beforeLogin = await messageCount(email);
   await submitPassword(page, password);
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const loginCode = await waitForOtp(email, "sign-in code", beforeLogin);
@@ -67,7 +67,7 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   // Exercise the approved protected return destination without claiming the full
   // adversarial return-path matrix or administrator session-lifetime case.
   await startSignIn(page, "/dashboard/membership");
-  const beforeSecondLogin = (await messages(email)).length;
+  const beforeSecondLogin = await messageCount(email);
   await submitPassword(page, password);
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
