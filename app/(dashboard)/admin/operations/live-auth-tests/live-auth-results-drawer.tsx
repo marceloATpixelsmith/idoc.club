@@ -68,7 +68,7 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                 <p className="text-muted-foreground">This workflow executes one signup, OTP, login and logout journey. It is not a complete run of the 38-case authentication catalog.</p>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {([['pass','Passed'],['fail','Failed'],['blocked','Blocked / Untested'],['not-applicable','Not Applicable']] as const).map(([status,label]) => (
+                {([['pass','Fully Passed'],['partial','Partially Exercised'],['fail','Failed'],['blocked','Not Run'],['not-applicable','N/A']] as const).map(([status,label]) => (
                   <div className="rounded-lg border border-border p-3" key={status}><p className={`text-2xl font-bold ${statusColor(status)}`}>{counts[status]}</p><p className="text-xs text-muted-foreground">{label}</p></div>
                 ))}
               </div>
