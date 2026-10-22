@@ -26,7 +26,7 @@ export function LiveAuthRunHistory({ runs, cases }: { runs: Run[]; cases: Case[]
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <strong className={run.status === 'success' ? 'text-emerald-300' : run.status === 'failure' ? 'text-red-300' : run.status === 'queued' || run.status === 'in_progress' ? 'text-amber-200' : 'text-muted-foreground'}>{run.status.toUpperCase()}</strong>
             <span>Run #{run.runNumber}</span>
-            <span className="text-muted-foreground">{new Date(run.startedAt).toLocaleString()} · {run.event === 'workflow_dispatch' ? 'Manual' : 'Automatic'}</span>
+            <span className="text-muted-foreground">{new Date(run.startedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'} · {run.event === 'workflow_dispatch' ? 'Manual' : 'Automatic'}</span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <button className="rounded-md border border-dashed border-blue-400 px-3 py-1.5 font-semibold text-blue-200 hover:bg-blue-500/10" onClick={() => setSelected(run)} type="button">View Results</button>
