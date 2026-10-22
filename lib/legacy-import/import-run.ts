@@ -83,7 +83,7 @@ function listWithOverflow(lines: string[]): string {
   return lines.slice(0, LISTED_CLASHES).map((line) => `• ${line}`).join('\n') + (lines.length > LISTED_CLASHES ? `\n…and ${lines.length - LISTED_CLASHES} more` : '');
 }
 
-export async function runLegacyImport(input: { plan: LegacyImportPlan; report: DryRunReport; snapshot: StripeSnapshot; actorId: number; fileFingerprints: string[]; fileNames: string[] }): Promise<LegacyImportSummary> {
+export async function runLegacyImport(input: { plan: LegacyImportPlan; report: DryRunReport; snapshot: StripeSnapshot; actorId: number; fileFingerprints: string[]; fileNames?: string[] }): Promise<LegacyImportSummary> {
   assertImportAllowed(input.report);
   const schema = getDatabaseSchemaName();
   const candidates = input.plan.members.filter((member) => !member.exclusion && !member.held);
@@ -188,7 +188,7 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     };
     await tx.insert(auditLog).values({
       actorId: input.actorId, action: 'admin.legacy_import.import', entityType: 'legacy_import', entityId: input.fileFingerprints.map((value) => value.slice(0, 12)).join('+'),
-      afterJson: { ...summary, files: input.fileFingerprints, fileNames: input.fileNames }, reason: 'Temporary legacy member import',
+      afterJson: { ...summary, files: input.fileFingerprints, fileNames: input.fileNames ?? [] }, reason: 'Temporary legacy member import',
     });
     return summary;
   });
