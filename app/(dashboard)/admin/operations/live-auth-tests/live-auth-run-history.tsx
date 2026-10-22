@@ -6,7 +6,7 @@ import { ExternalLink } from 'lucide-react';
 import { LiveAuthResultsDrawer } from './live-auth-results-drawer';
 
 type Run = { id: number; runNumber: number; runUrl: string; status: string; startedAt: string; event: string };
-type Case = { id: string; title: string };
+type Case = { id: string; title: string; steps: string[]; passCriteria: string[] };
 
 export function LiveAuthRunHistory({ runs, cases }: { runs: Run[]; cases: Case[] }) {
   const [selected, setSelected] = useState<Run | null>(null);
