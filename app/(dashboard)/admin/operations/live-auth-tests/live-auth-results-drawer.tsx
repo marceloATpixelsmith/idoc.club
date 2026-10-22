@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import type { LiveAuthReport } from '@/lib/admin/live-auth-reports';
 
 type Run = { id: number; runNumber: number; runUrl: string; status: string; startedAt: string };
@@ -38,27 +39,19 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
     return () => controller.abort();
   }, [run]);
 
-  useEffect(() => {
-    if (!run) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [run, onClose]);
-
   if (!run) return null;
   const titles = new Map(cases.map(item => [item.id, item.title]));
   const results = report?.results ?? [];
   const counts = Object.fromEntries(['pass','fail','blocked','not-applicable'].map(status => [status, results.filter(item => item.status === status).length]));
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/65" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section aria-label={`Live Authentication Run #${run.runNumber} Results`} aria-modal="true" className="flex h-full w-full max-w-3xl flex-col overflow-hidden border-l border-border bg-background shadow-xl" role="dialog">
-        <header className="flex items-start justify-between gap-4 border-b border-border p-5">
+    <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
+      <SheetContent className="max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <SheetHeader className="border-b border-border p-5 pr-14">
           <div className="space-y-1">
-            <h2 className="text-xl font-bold text-gold">Live Authentication Run #{run.runNumber}</h2>
-            <p className="text-sm text-muted-foreground">Started {new Date(run.startedAt).toLocaleString()} · Workflow: {run.status}</p>
+            <SheetTitle className="text-xl font-bold text-gold">Live Authentication Run #{run.runNumber}</SheetTitle>
+            <SheetDescription>Started {new Date(run.startedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC · Workflow: {run.status}</SheetDescription>
           </div>
-          <button aria-label="Close Results" className="rounded-lg border border-border p-2" onClick={onClose} type="button"><X className="size-5" /></button>
-        </header>
+        </SheetHeader>
         <div className="space-y-5 overflow-y-auto p-5">
           {loading ? <p role="status">Loading the saved GitHub test results…</p> : null}
           {error ? <p className="rounded border border-red-500/40 p-3 text-red-300" role="alert">{error} <a className="underline" href={run.runUrl} rel="noreferrer" target="_blank">Inspect GitHub run</a></p> : null}
@@ -91,7 +84,7 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
           ) : null}
           <a className="inline-flex items-center gap-2 text-gold underline" href={run.runUrl} rel="noreferrer" target="_blank">View GitHub Logs And Evidence <ExternalLink className="size-4" /></a>
         </div>
-      </section>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
