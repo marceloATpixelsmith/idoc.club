@@ -64,6 +64,27 @@ async function promotionPullRequest() {
   if (pr.labels?.some((label) => label.name === 'hold-merge')) {
     throw new Error('Promotion PR has a hold-merge label.');
   }
+  // The repository also permits explicit holds in ordinary PR comments.
+  // Only the repository owner can clear a hold recorded there.
+  const comments = await api(`/issues/${prNumber}/comments?per_page=100`);
+  if (comments.length === 100) {
+    throw new Error('Promotion PR comment history is too long to verify safely.');
+  }
+  let activeHold = false;
+  const repositoryOwner = repository.split('/')[0].toLowerCase();
+  for (const comment of comments) {
+    const text = comment.body ?? '';
+    if (/(?:^|\s)(?:hold-merge|do not merge|hold promotion)(?:\s|$|[.,!:])/im.test(text)) {
+      activeHold = true;
+    }
+    if (/^\s*clear-hold-merge\s*$/i.test(text) &&
+      comment.user?.login?.toLowerCase() === repositoryOwner) {
+      activeHold = false;
+    }
+  }
+  if (activeHold) {
+    throw new Error('Promotion PR has an active hold recorded in comments.');
+  }
   return pr;
 }
 
@@ -95,29 +116,35 @@ async function reviewState() {
 }
 
 async function checkCi() {
-  const result = await api(`/actions/runs?head_sha=${expectedHead}&event=pull_request&per_page=100`);
-  if (result.total_count > 100) throw new Error('Too many workflow runs to evaluate safely.');
-  const runs = result.workflow_runs.filter((run) =>
-    run.pull_requests?.some((pr) => pr.number === prNumber));
+  // Promotion can affect production runtime, database and authorization; require
+  // ALL three risk-classified workflows on the exact current staging SHA.
+  // Include explicitly dispatched runs as well as ordinary PR-triggered runs.
+  const result = await api(`/actions/runs?head_sha=${expectedHead}&per_page=100`);
+  if (!Array.isArray(result.workflow_runs) || result.total_count >= 100) {
+    throw new Error('Unable to enumerate every required promotion workflow run safely.');
+  }
   const names = [
     'Fast PR verification',
     'Release 1 Verification',
     'Authentication security verification',
   ];
-  const fast = runs.filter((run) => run.name === names[0]).sort((a,b) => Date.parse(b.created_at)-Date.parse(a.created_at))[0];
-  if (!fast) return false;
-  if (fast.conclusion && fast.conclusion !== 'success') {
-    throw new Error('Fast PR verification failed or was cancelled.');
-  }
-  if (fast.status !== 'completed') return false;
-  for (const name of names.slice(1)) {
-    const run = runs.filter((item) => item.name === name).sort((a,b) => Date.parse(b.created_at)-Date.parse(a.created_at))[0];
-    if (run && run.conclusion && !['success', 'skipped'].includes(run.conclusion)) {
-      throw new Error(`${name} failed or was cancelled.`);
+  for (const name of names) {
+    const candidates = result.workflow_runs.filter((run) =>
+      run.name === name &&
+      run.head_sha === expectedHead &&
+      (run.event === 'workflow_dispatch' ||
+        (run.event === 'pull_request' && run.pull_requests?.some((pr) => pr.number === prNumber))));
+    const latest = candidates.sort((a, b) =>
+      Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+    if (!latest) {
+      console.log(`Required workflow ${name} has no run for the current staging commit.`);
+      return false;
     }
-    if (run && run.status !== 'completed') return false;
+    if (latest.status !== 'completed') return false;
+    if (latest.conclusion !== 'success') {
+      throw new Error(`Required workflow ${name} did not succeed: ${latest.conclusion ?? 'unknown'}.`);
+    }
   }
-  // THE BRANCH RULESET REMAINS THE FINAL AUTHORITY FOR REQUIRED CHECKS.
   return true;
 }
 

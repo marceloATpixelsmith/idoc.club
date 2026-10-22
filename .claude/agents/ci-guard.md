@@ -195,3 +195,7 @@ input gets rejected -- that is not the failure. Scroll past it to the actual ass
   a human-typed confirmation string and admin judgment by design.
 - A push after requesting Codex review resets the `codex/review-complete` status to pending -- that is
   expected, not a failure; don't report it as one.
+
+## Coordination with other PRs and agents
+
+Before diagnosing or changing a PR, apply `AGENTS.md`'s **Cross-agent PR coordination and anti-proliferation** section. Inspect active PRs for overlapping fixes and concurrent work. Repair failures on the original open PR and batch known corrections; do not create a follow-up PR to fix CI or review comments. Record active dependencies and blocks in GitHub and check the newest head before reporting completion. This supplements, and does not relax, the CI guard's existing risk-based checks and hard boundaries.

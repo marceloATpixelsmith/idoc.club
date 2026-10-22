@@ -62,19 +62,37 @@ function collectMessages(value, result = [], seen = new Set()) {
   return result;
 }
 
-export async function waitForOtp(email, kind, previousMessageCount = 0, timeoutMs = 90_000) {
+export function otpCodes(value, kind) {
+  const codes = [];
+  for (const message of collectMessages(value)) {
+    const subject = String(message.subject || "");
+    const content = [message.html, message.text, message.body].filter((item) => typeof item === "string").join("\n").replace(/<[^>]*>/g, " ");
+    if (kind && !new RegExp(kind, "i").test(subject + " " + content)) continue;
+    const match = />\s*(\d{6})\s*</.exec(String(message.html || "")) || /\b(\d{6})\b/.exec(content);
+    if (match) codes.push(match[1]);
+  }
+  return codes;
+}
+
+export async function otpSnapshot(email, kind) {
+  return otpCodes(await messages(email, 20), kind);
+}
+
+export function findOtp(value, kind, previousCodes = []) {
+  const previouslySeen = new Set(previousCodes);
+  for (const code of otpCodes(value, kind).reverse()) {
+    if (!previouslySeen.has(code)) return code;
+  }
+  return null;
+}
+
+export async function waitForOtp(email, kind, previousCodes = [], timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const data = await messages(email, 20);
-    const found = collectMessages(data);
-    for (const message of found.slice(previousMessageCount).reverse()) {
-      const subject = String(message.subject || "");
-      const content = [message.html, message.text, message.body].filter((item) => typeof item === "string").join("\n").replace(/<[^>]*>/g, " ");
-      if (kind && !new RegExp(kind, "i").test(subject + " " + content)) continue;
-      const match = />\s*(\d{6})\s*</.exec(String(message.html || "")) || /\b(\d{6})\b/.exec(content);
-      if (match) return match[1];
-    }
+    const code = findOtp(data, kind, previousCodes);
+    if (code) return code;
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
-  throw new Error(`Timed out waiting for the ${kind} email code.`);
+  throw new Error("Timed out waiting for the " + kind + " email code.");
 }

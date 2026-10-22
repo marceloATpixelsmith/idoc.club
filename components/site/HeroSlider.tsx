@@ -158,7 +158,7 @@ export function HeroSlider() {
                 aria-label={`Show slide ${i + 1}`}
                 aria-current={i === index}
                 onClick={() => go(i)}
-                className="group h-px w-12 bg-border"
+                className="group flex h-11 w-12 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
               >
                 <span
                   className={`block h-px bg-gold transition-all duration-500 ${
@@ -173,7 +173,7 @@ export function HeroSlider() {
               type="button"
               aria-label="Previous slide"
               onClick={() => go(index - 1)}
-              className="border border-border bg-transparent p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
+              className="flex size-11 items-center justify-center border border-border bg-transparent text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -181,7 +181,7 @@ export function HeroSlider() {
               type="button"
               aria-label="Next slide"
               onClick={() => go(index + 1)}
-              className="border border-border bg-transparent p-2 text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
+              className="flex size-11 items-center justify-center border border-border bg-transparent text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
             >
               <ChevronRight className="size-4" />
             </button>

@@ -46,7 +46,7 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
       select
         min(national_federation_country_code) federation,
         coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'judge' and status.value is not null and lower(trim(status.value)) <> 'other'), array[]::varchar[]) judge_official_statuses,
-        coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'steward' and status.value is not null), array[]::varchar[]) steward_official_statuses,
+        coalesce(array_agg(distinct status.value) filter (where pr.role_type = 'steward' and status.value is not null and lower(trim(status.value)) <> 'other'), array[]::varchar[]) steward_official_statuses,
         bool_or(coalesce(is_technical_delegate, false)) is_technical_delegate
       from professional_roles pr
       left join lateral unnest(pr.official_statuses) as status(value) on true
@@ -71,6 +71,6 @@ export async function listPublicBoardMembers(): Promise<PublicBoardMember[]> {
       ...(row.judgeOfficialStatuses ?? []),
       ...(row.stewardOfficialStatuses ?? []),
       ...(row.isTechnicalDelegate ? ['Technical Delegate'] : []),
-    ],
+    ].filter((detail) => detail.trim().toLowerCase() !== 'other'),
   }));
 }
