@@ -7,7 +7,7 @@ import type { LiveAuthReport } from '@/lib/admin/live-auth-reports';
 
 type Run = { id: number; runNumber: number; runUrl: string; status: string; startedAt: string };
 type Case = LiveAuthReport['results'][number];
-type MatrixCase = { id: string; title: string };
+type MatrixCase = { id: string; title: string; steps: string[]; passCriteria: string[] };
 
 function statusColor(status: string) {
   if (status === 'pass') return 'text-emerald-300';
@@ -40,7 +40,7 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
   }, [run]);
 
   if (!run) return null;
-  const titles = new Map(cases.map(item => [item.id, item.title]));
+  const matrixById = new Map(cases.map(item => [item.id, item]));
   const results = report?.results ?? [];
   const counts = Object.fromEntries(['pass','fail','blocked','not-applicable'].map(status => [status, results.filter(item => item.status === status).length]));
   return (
@@ -72,10 +72,16 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                 {results.map((item: Case) => (
                   <article className="space-y-1 rounded-lg border border-border p-3" key={item.id}>
                     <div className="flex flex-wrap justify-between gap-2">
-                      <strong className="text-sm">{item.id} — {titles.get(item.id) ?? 'Authentication test case'}</strong>
+                      <strong className="text-sm">{item.id} — {matrixById.get(item.id)?.title ?? 'Authentication test case'}</strong>
                       <span className={`text-xs font-semibold uppercase ${statusColor(item.status)}`}>{item.status === 'blocked' ? 'BLOCKED / NOT RUN' : item.status === 'not-applicable' ? 'NOT APPLICABLE' : item.status}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">{item.summary || 'No additional details provided in the JSON report.'}</p>
+                    <details className="pt-1 text-sm">
+                      <summary className="cursor-pointer font-medium text-gold">What This Case Tests</summary>
+                      <ol className="ml-5 mt-2 list-decimal space-y-1 text-muted-foreground">{(matrixById.get(item.id)?.steps ?? []).map((step, i) => <li key={i}>{step}</li>)}</ol>
+                      <p className="mt-2 font-medium">Pass Criteria</p>
+                      <ul className="ml-5 mt-1 list-disc space-y-1 text-muted-foreground">{(matrixById.get(item.id)?.passCriteria ?? []).map((criterion, i) => <li key={i}>{criterion}</li>)}</ul>
+                    </details>
                     {Array.isArray(item.evidence) && item.evidence.length > 0 ? <p className="text-xs text-muted-foreground">Evidence entries recorded: {item.evidence.length}. Open the GitHub artifact for supporting files.</p> : null}
                   </article>
                 ))}
