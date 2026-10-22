@@ -262,10 +262,11 @@ test('all seminar listing surfaces reuse a compact, uniformly constrained card w
   const cardBlock = memberPage.slice(cardStart, cardEnd);
   assert.ok(cardStart > -1 && cardEnd > cardStart);
   assert.match(cardBlock as string, /sm:grid-cols-\[minmax\(0,max-content\)_auto\]/);
-  assert.match(cardBlock as string, /<Link aria-label=\{`View \${seminar\.title}`\} className="absolute inset-0 z-10"/);
-  assert.match(cardBlock as string, /relative z-20[^"]*w-fit shrink-0/);
-  const navigationEnd = cardBlock.indexOf('/>', cardBlock.indexOf('<Link'));
-  assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the navigation link must self-close before the independent FEI anchor');
+  assert.match(cardBlock as string, /className="block min-w-0 rounded-sm focus-visible:outline/);
+  assert.doesNotMatch(cardBlock as string, /absolute inset-0 z-10/);
+  assert.match(cardBlock as string, /seminar\.is_fei \? <div className="w-fit shrink-0"><FeiBadge/);
+  const navigationEnd = cardBlock.indexOf('</Link>', cardBlock.indexOf('<Link'));
+  assert.ok(navigationEnd > -1 && navigationEnd < cardBlock.indexOf('<FeiBadge'), 'the seminar navigation link must close before the independent FEI anchor');
   assert.match(memberPage, /SEMINAR_LIST_CLASS = '-mx-4 w-\[calc\(100%\+2rem\)\] max-w-\[37rem\] divide-y/);
   const homePage = readFileSync('app/(marketing)/page.tsx', 'utf8');
   assert.match(homePage, /SeminarListingCard/);
