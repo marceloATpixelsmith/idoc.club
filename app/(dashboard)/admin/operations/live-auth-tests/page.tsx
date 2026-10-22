@@ -17,7 +17,7 @@ export default async function LiveAuthTestsPage() {
   try { runs = (await listManualGithubOperationRuns()).filter(run => run.workflow === 'live-auth'); }
   catch { error = 'Could not load GitHub live authentication runs.'; }
 
-  const cases = matrix.cases.map(item => ({ id: item.id, title: item.title }));
+  const cases = matrix.cases.map(item => ({ id: item.id, title: item.title, steps: item.live.steps, passCriteria: item.live.pass }));
   return <main className="space-y-6 px-5 py-8 lg:px-8">
     <header className="space-y-2">
       <p className="eyebrow">Super Admin Operations</p>
