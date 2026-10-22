@@ -60,7 +60,7 @@ async function legacyImportAction(_state: LegacyImportActionState, formData: For
     if (formData.get('backupConfirmed') !== 'on') return { error: 'Confirm that a recent verified backup exists before importing.' };
     if (String(formData.get('confirmPhrase') ?? '').trim() !== `IMPORT ${result.report.importable} MEMBERS`) return { error: 'The confirmation text does not match.' };
     if (!snapshot) return { error: 'The comparison with live Stripe did not run, so the import was not started.' };
-    const imported = await runLegacyImport({ plan, report: result.report, snapshot, actorId: actor.id, fileFingerprints: result.files.map((file) => file.sha256) });
+    const imported = await runLegacyImport({ plan, report: result.report, snapshot, actorId: actor.id, fileFingerprints: result.files.map((file) => file.sha256), fileNames: result.files.map((file) => file.name) });
     revalidatePath(PATH);
     return { imported };
   } catch (error) {
@@ -107,6 +107,7 @@ export default async function LegacyImportPage() {
                 ? entry.details as Record<string, unknown> : {};
               const amount = (key: string) => typeof data[key] === 'number' ? (data[key] as number).toLocaleString('en-GB') : '—';
               const fingerprints = Array.isArray(data.files) ? data.files.filter((value): value is string => typeof value === 'string') : [];
+              const fileNames = Array.isArray(data.fileNames) ? data.fileNames.filter((value): value is string => typeof value === 'string') : [];
               return <li className="rounded-md border border-border p-4" key={entry.id}>
                 <details className="group">
                   <summary className="cursor-pointer text-sm font-medium text-foreground">
@@ -116,6 +117,7 @@ export default async function LegacyImportPage() {
                     <p>Run #{entry.id} · Performed by {entry.actorEmail ?? 'Administrator account no longer available'} · Schema: {typeof data.schema === 'string' ? data.schema : 'Unknown'}</p>
                     <p>Payments: {amount('payments')} · Refunds: {amount('refunds')} · Subscriptions: {amount('subscriptions')} · Billing accounts: {amount('billingAccounts')}</p>
                     <p>Zero-amount payments skipped: {amount('skippedZeroAmountPayments')} · Members without storable subscriptions: {amount('membersWithoutStorableSubscription')}</p>
+                    {fileNames.length > 0 ? <p>Files: {fileNames.join(', ')}</p> : null}
                     {fingerprints.length > 0 ? <p className="break-all">Source file SHA-256 fingerprints: {fingerprints.join(', ')}</p> : null}
                   </div>
                 </details>
