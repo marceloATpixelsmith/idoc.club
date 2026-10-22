@@ -75,5 +75,7 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   const secondLoginCode = await waitForOtp(email, "sign-in code", beforeSecondLogin);
   await page.locator('input[name="code"]').fill(secondLoginCode);
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page).toHaveURL(/\/dashboard\/membership(?:\?|$)/);
+  // Fresh signups have not completed onboarding. Their mandatory onboarding gate
+  // takes precedence over the saved return URL and must not be bypassed.
+  await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
 });
