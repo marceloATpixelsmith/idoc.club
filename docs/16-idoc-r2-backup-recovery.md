@@ -279,9 +279,9 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 **Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.
 
 
-## Super Admin Manual GitHub Operations
+## Super Admin Production Promotion And Live Authentication Tests
 
-The Super Admin **Manual GitHub Operations** page appears below **Backups & restore**. It provides **Promote Staging to Production** and **Run Live Authentication Tests**. Both use Super Admin authorization, CSRF, fresh TOTP, an audit record and duplicate-request protection, backed by the server-only `GITHUB_BACKUP_TOOL_TOKEN`.
+The Super Admin navigation has two separate destinations immediately below **Backups & restore**: **Promote To Production** for the monitored staging-to-main promotion workflow and **Live Authentication Tests** for manually launching staging authentication testing and inspecting recent runs. The old combined URL redirects to Live Authentication Tests. Both use Super Admin authorization, CSRF, fresh TOTP, an audit record and duplicate-request protection, backed by the server-only `GITHUB_BACKUP_TOOL_TOKEN`. The Live Authentication Tests screen shows a results drawer for each run, sourced from the exact matching GitHub artifact with case-level pass, fail, blocked/untested, and not-applicable states. A green workflow does not imply all cataloged cases were executed.
 
 ### Monitored production promotion
 

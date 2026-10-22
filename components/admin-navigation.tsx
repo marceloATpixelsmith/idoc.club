@@ -8,6 +8,7 @@ import {
   ClipboardList,
   FileDown,
   GitBranch,
+  TestTube2,
   GraduationCap,
   Headphones,
   LayoutDashboard,
@@ -39,7 +40,8 @@ const SHARED_ITEMS = [
 const SUPER_ADMIN_ITEMS = [
   { href: '/admin/operations/data-promotion', icon: ArrowUpFromLine, label: 'Data promotion' },
   { href: '/admin/operations/backups', icon: DatabaseBackup, label: 'Backups & restore' },
-  { href: '/admin/operations/github-operations', icon: GitBranch, label: 'Manual GitHub Operations' },
+  { href: '/admin/operations/production-promotion', icon: GitBranch, label: 'Promote To Production' },
+  { href: '/admin/operations/live-auth-tests', icon: TestTube2, label: 'Live Authentication Tests' },
   { href: '/admin/operations/switchover', icon: ShieldCheck, label: 'Production switchover' },
   { href: '/admin/operations/event-replay', icon: WalletCards, label: 'Replay Stripe events' },
   { href: '/admin/operations/legacy-import', icon: FileDown, label: 'Legacy import (temporary)' },
