@@ -1,10 +1,12 @@
 import { notFound } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { desc, eq } from 'drizzle-orm';
 
 import { DryRunForm, type LegacyImportActionState } from './legacy-import-forms';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
-import { auditLog } from '@/lib/db/schema';
+import { auditLog, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authorization';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -59,6 +61,7 @@ async function legacyImportAction(_state: LegacyImportActionState, formData: For
     if (String(formData.get('confirmPhrase') ?? '').trim() !== `IMPORT ${result.report.importable} MEMBERS`) return { error: 'The confirmation text does not match.' };
     if (!snapshot) return { error: 'The comparison with live Stripe did not run, so the import was not started.' };
     const imported = await runLegacyImport({ plan, report: result.report, snapshot, actorId: actor.id, fileFingerprints: result.files.map((file) => file.sha256) });
+    revalidatePath(PATH);
     return { imported };
   } catch (error) {
     if (error instanceof LegacyImportInputError || error instanceof LegacyImportBlockedError || error instanceof AuthorizationError || (error instanceof Error && error.name === 'CsrfError')) return { error: error.message };
@@ -70,6 +73,10 @@ export default async function LegacyImportPage() {
   const actor = await requireAccountAccess('administration');
   try { requireSuperAdmin(actor); } catch (error) { if (error instanceof AuthorizationError) notFound(); throw error; }
   const enabled = legacyImportEnabled();
+  const history = await db.select({ id: auditLog.id, completedAt: auditLog.createdAt, actorEmail: users.email, details: auditLog.afterJson })
+    .from(auditLog).leftJoin(users, eq(users.id, auditLog.actorId))
+    .where(eq(auditLog.action, 'admin.legacy_import.import'))
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id)).limit(100);
   return (
     <main className="space-y-8 px-5 py-8 lg:px-8">
       <header className="space-y-2">
@@ -90,6 +97,33 @@ export default async function LegacyImportPage() {
           The legacy import is switched off in this environment. It is turned on only while a migration run is being prepared (server setting <code>LEGACY_IMPORT_ENABLED=true</code>).
         </section>
       )}
+      <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5" aria-labelledby="successful-legacy-imports-heading">
+        <h2 className="text-xl font-semibold text-foreground" id="successful-legacy-imports-heading">Successful Imports</h2>
+        <p className="text-sm text-muted-foreground">Completed imports recorded in this environment, newest first. Failed or rolled-back attempts are not shown. Records remain available after refreshing this page.</p>
+        {history.length === 0 ? <p className="text-sm text-muted-foreground">No successful imports have been recorded yet.</p> : (
+          <ul className="space-y-3">
+            {history.map((entry) => {
+              const data = entry.details && typeof entry.details === 'object' && !Array.isArray(entry.details)
+                ? entry.details as Record<string, unknown> : {};
+              const amount = (key: string) => typeof data[key] === 'number' ? (data[key] as number).toLocaleString('en-GB') : '—';
+              const fingerprints = Array.isArray(data.files) ? data.files.filter((value): value is string => typeof value === 'string') : [];
+              return <li className="rounded-md border border-border p-4" key={entry.id}>
+                <details className="group">
+                  <summary className="cursor-pointer text-sm font-medium text-foreground">
+                    <span className="text-emerald-300">Successful</span> · {entry.completedAt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC · {amount('imported')} imported · {amount('alreadyImported')} previously imported
+                  </summary>
+                  <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    <p>Run #{entry.id} · Performed by {entry.actorEmail ?? 'Administrator account no longer available'} · Schema: {typeof data.schema === 'string' ? data.schema : 'Unknown'}</p>
+                    <p>Payments: {amount('payments')} · Refunds: {amount('refunds')} · Subscriptions: {amount('subscriptions')} · Billing accounts: {amount('billingAccounts')}</p>
+                    <p>Zero-amount payments skipped: {amount('skippedZeroAmountPayments')} · Members without storable subscriptions: {amount('membersWithoutStorableSubscription')}</p>
+                    {fingerprints.length > 0 ? <p className="break-all">Source file SHA-256 fingerprints: {fingerprints.join(', ')}</p> : null}
+                  </div>
+                </details>
+              </li>;
+            })}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }
