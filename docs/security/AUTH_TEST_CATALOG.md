@@ -13,12 +13,13 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-IDENTITY-003, AUTH-EMAIL-001
-- **CI coverage:** mapped — `tests/email-identity-normalization.integration.ts`, `tests/auth-email-resend-safety.integration.ts`, `tests/security-e2e/member-signup.spec.ts`, `tests/security-e2e/member-lifecycle.spec.ts`
+- **CI coverage:** mapped — `tests/auth-email-resend-safety.integration.ts`, `tests/email-identity-normalization.integration.ts`, `tests/member-launch-hold.integration.ts`, `tests/member-launch-hold.test.ts`, `tests/security-e2e/member-lifecycle.spec.ts`, `tests/security-e2e/member-signup.spec.ts`
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
 - Use only disposable test identities and test data.
+- Staging keeps DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true; only authentication OTP to this run's disposable @pixelsmith.space mailbox may be delivered.
 
 ### Steps
 1. Reuse the run's disposable mailbox/account when it is in a clean state; create a mailbox and account only if the run does not already have one suitable for this signup journey.
@@ -1119,12 +1120,13 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-SESSION-004, AUTH-SESSION-010
-- **CI coverage:** mapped — `tests/return-to-path.test.ts`, `tests/general-navigation.test.ts`, `tests/canonical-session-lifecycle.test.ts` — Unit tests cover the return-to path allow-list (protected same-origin paths only, no absolute or protocol-relative URLs) and the keep-alive wiring; the end-to-end return needs a real expired session and is exercised live.
+- **CI coverage:** mapped — `tests/canonical-session-lifecycle.test.ts`, `tests/general-navigation.test.ts`, `tests/member-launch-hold.integration.ts`, `tests/member-launch-hold.test.ts`, `tests/return-to-path.test.ts` — Unit tests cover the return-to path allow-list (protected same-origin paths only, no absolute or protocol-relative URLs) and the keep-alive wiring; the end-to-end return needs a real expired session and is exercised live.
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
 - Use only disposable test identities and test data.
+- Staging keeps DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true; only authentication OTP to this run's disposable @pixelsmith.space mailbox may be delivered.
 - Use a disposable member account; an administrator account is optional for the idle-limit check.
 
 ### Steps
