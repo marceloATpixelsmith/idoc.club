@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
-export type StepUpActionState = { error?: string; stepUpRequired?: boolean; success?: string; [key: string]: unknown };
+export type StepUpActionState = { error?: string; stepUpRequired?: boolean; success?: string; retryAfterSeconds?: number; [key: string]: unknown };
 type Action<T extends StepUpActionState = StepUpActionState> = (state: T, formData: FormData) => Promise<T>;
 
 /** Runs a protected Server Action, retaining its FormData only in this component's memory. After
@@ -51,6 +51,15 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   onResult: (state: StepUpActionState) => void; open: boolean;
 }) {
   const [code, setCode] = useState('');
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  useEffect(() => {
+    setRetrySeconds(Math.max(0, Math.ceil(state.retryAfterSeconds ?? 0)));
+  }, [state.retryAfterSeconds]);
+  useEffect(() => {
+    if (retrySeconds === 0) return;
+    const interval = window.setInterval(() => setRetrySeconds((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(interval);
+  }, [retrySeconds]);
   const [state, verify, verifying] = useActionState<StepUpActionState, FormData>(verifyStepUpTotp, {});
   const [cancelState, cancel, cancelling] = useActionState<StepUpActionState, FormData>(cancelStepUp, {});
   const [resuming, startResume] = useTransition();
@@ -98,14 +107,14 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
       </DialogHeader>
       <form action={verify} className="space-y-4">
         <CsrfField />
-        <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" disabled={busy} maxLength={6}
+        <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" disabled={busy || retrySeconds > 0} maxLength={6}
           name="code" onChange={setCode} pattern={REGEXP_ONLY_DIGITS} required value={code}>
           <InputOTPGroup className="grid w-full grid-cols-6 gap-2">
             {[0, 1, 2, 3, 4, 5].map((index) => <InputOTPSlot index={index} key={index} />)}
           </InputOTPGroup>
         </InputOTP>
-        {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
-        <Button className="w-full" disabled={busy} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
+        {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}{retrySeconds > 0 ? ` Retry available in ${Math.floor(retrySeconds / 60)}:${String(retrySeconds % 60).padStart(2, '0')}.` : null}</p> : null}
+        <Button className="w-full" disabled={busy || retrySeconds > 0} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
       </form>
       <form action={cancel} ref={cancelForm}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
     </DialogContent>
