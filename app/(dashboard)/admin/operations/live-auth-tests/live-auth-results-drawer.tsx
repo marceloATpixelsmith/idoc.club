@@ -11,6 +11,7 @@ type MatrixCase = { id: string; title: string; steps: string[]; passCriteria: st
 
 function statusColor(status: string) {
   if (status === 'pass') return 'text-emerald-300';
+  if (status === 'partial') return 'text-amber-200';
   if (status === 'fail') return 'text-red-300';
   if (status === 'blocked') return 'text-amber-200';
   return 'text-muted-foreground';
@@ -42,7 +43,10 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
   if (!run) return null;
   const matrixById = new Map(cases.map(item => [item.id, item]));
   const results = report?.results ?? [];
-  const counts = Object.fromEntries(['pass','fail','blocked','not-applicable'].map(status => [status, results.filter(item => item.status === status).length]));
+  const counts = Object.fromEntries(['pass','partial','fail','blocked','not-applicable'].map(status => [status, results.filter(item => item.status === status).length]));
+  const executed = results.filter(item => item.status === 'pass' || item.status === 'partial' || item.status === 'fail');
+  const unexecuted = results.filter(item => item.status === 'blocked' || item.status === 'not-applicable');
+  const incomplete = (counts.partial ?? 0) + (counts.blocked ?? 0) > 0;
   return (
     <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
       <SheetContent className="max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
@@ -60,20 +64,21 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
               <div className="space-y-1 text-sm">
                 <p><strong>Target:</strong> {report.target.hostname}</p>
                 <p><strong>Tested commit:</strong> <code className="break-all">{report.target.revision}</code></p>
-                <p className="text-muted-foreground">An overall green workflow does not mean blocked or unimplemented cases were tested.</p>
+                <p className="font-semibold text-amber-200">{run.status === 'success' && incomplete ? 'Browser journey passed; full authentication coverage is INCOMPLETE.' : run.status === 'success' ? 'GitHub browser journey completed successfully.' : 'The GitHub browser workflow did not complete successfully.'}</p>
+                <p className="text-muted-foreground">This workflow executes one signup, OTP, login and logout journey. It is not a complete run of the 38-case authentication catalog.</p>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {([['pass','Passed'],['fail','Failed'],['blocked','Blocked / Untested'],['not-applicable','Not Applicable']] as const).map(([status,label]) => (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {([['pass','Fully Passed'],['partial','Partially Exercised'],['fail','Failed'],['blocked','Not Run'],['not-applicable','N/A']] as const).map(([status,label]) => (
                   <div className="rounded-lg border border-border p-3" key={status}><p className={`text-2xl font-bold ${statusColor(status)}`}>{counts[status]}</p><p className="text-xs text-muted-foreground">{label}</p></div>
                 ))}
               </div>
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold">Case-by-case results</h3>
-                {results.map((item: Case) => (
+                <h3 className="text-lg font-semibold">Cases Exercised By This Run ({executed.length})</h3>
+                {executed.map((item: Case) => (
                   <article className="space-y-1 rounded-lg border border-border p-3" key={item.id}>
                     <div className="flex flex-wrap justify-between gap-2">
                       <strong className="text-sm">{item.id} — {matrixById.get(item.id)?.title ?? 'Authentication test case'}</strong>
-                      <span className={`text-xs font-semibold uppercase ${statusColor(item.status)}`}>{item.status === 'blocked' ? 'BLOCKED / NOT RUN' : item.status === 'not-applicable' ? 'NOT APPLICABLE' : item.status}</span>
+                      <span className={`text-xs font-semibold uppercase ${statusColor(item.status)}`}>{item.status === 'partial' ? 'PARTIALLY EXERCISED' : item.status === 'blocked' ? 'NOT RUN' : item.status === 'not-applicable' ? 'NOT APPLICABLE' : item.status}</span>
                     </div>
                     <p className="text-sm text-muted-foreground">{item.summary || 'No additional details provided in the JSON report.'}</p>
                     <details className="pt-1 text-sm">
@@ -86,6 +91,17 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                   </article>
                 ))}
               </div>
+              <details className="rounded-lg border border-border p-3">
+                <summary className="cursor-pointer font-semibold text-amber-200">Not Executed By This Run ({unexecuted.length}) — Expand Coverage Gaps</summary>
+                <p className="mt-2 text-sm text-muted-foreground">These are catalog requirements, not failed browser assertions. No claim of a pass is made for them.</p>
+                <div className="mt-3 space-y-2">
+                  {unexecuted.map(item => <article className="rounded-md border border-border p-3 text-sm" key={item.id}>
+                    <p className="font-semibold">{item.id} — {matrixById.get(item.id)?.title ?? 'Authentication test case'}</p>
+                    <p className="mt-1 text-amber-200">{item.status === 'not-applicable' ? 'Not applicable' : 'Not implemented / not run'}</p>
+                    <p className="mt-1 text-muted-foreground">{item.summary}</p>
+                  </article>)}
+                </div>
+              </details>
             </>
           ) : null}
           <a className="inline-flex items-center gap-2 text-gold underline" href={run.runUrl} rel="noreferrer" target="_blank">View GitHub Logs And Evidence <ExternalLink className="size-4" /></a>
