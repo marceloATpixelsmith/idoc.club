@@ -281,14 +281,33 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 ## Super Admin Manual GitHub Operations
 
-The Super Admin **Manual GitHub Operations** page appears directly below **Backups & restore** and offers two actions:
+The Super Admin **Manual GitHub Operations** page appears below **Backups & restore**. It provides **Promote Staging to Production** and **Run Live Authentication Tests**. Both use Super Admin authorization, CSRF, fresh TOTP, an audit record and duplicate-request protection, backed by the server-only `GITHUB_BACKUP_TOOL_TOKEN`.
 
-- **Promote Staging to Production:** opens an ordinary, non-draft `staging` → `main` pull request, or links to the existing open promotion PR. This does **not** push to `main`, execute migrations, merge the PR, or deploy production automatically. The operator must verify staging readiness under `docs/07-administrator-and-operations-runbook.md`, and complete the main-branch CI/review gates before merging the promotion PR with a merge commit.
-- **Run Live Authentication Tests:** dispatches `live-auth-staging.yml` against `staging`. Recent run links appear on the page; artifacts are available in GitHub Actions.
+### Monitored production promotion
 
-Both operations reuse Super Admin authorization, CSRF protection, fresh TOTP step-up, audit logging, and duplicate-request protection. The server uses the existing `GITHUB_BACKUP_TOOL_TOKEN`; do not expose this token to client code. The token must have **Actions: read/write** for the live-auth operation and **Pull requests: read/write** for promotion PR lookup/creation. Update the existing token's permissions in GitHub and its stored value in Vercel if the permissions are missing; no new environment-variable name is needed.
+The Super Admin must complete the required staging acceptance and migration rehearsal in `docs/07-administrator-and-operations-runbook.md` before initiating this operation. The button provides explicit authorization to begin that promotion; it is **not** authorization to bypass code review, protected environments or CI checks.
 
-GitHub accepts a `workflow_dispatch` call only once the target workflow exists on the default branch (`main`). The live-auth action uses `ref: staging` and tests `staging.idoc.club`. No migration workflow is exposed through this Super Admin page.
+1. Press **Start Monitored Promotion**. The app creates or reuses an ordinary `staging` → `main` PR and dispatches `.github/workflows/monitored-production-promotion.yml` with its PR number and exact staging SHA.
+2. GitHub Actions uses the protected `production-promotion` environment. Configure environment reviewers/protection if a separate human authorization gate is required. The workflow waits for required PR checks and review resolution; an outdated, conflicting, changed or held PR fails closed.
+3. Once GitHub reports the PR clean and the workflow checks are successful, the workflow makes a **merge commit** into `main`; branch rulesets continue to apply. The workflow never pushes directly to `main`.
+4. The workflow waits for GitHub's Vercel status on the exact merged commit, checks that it points to the expected IDOC Vercel project, and then calls the configured production health endpoint. Success requires all four phases; a failed stage remains visible in GitHub Actions and on the Super Admin page.
+5. The Super Admin page displays the recent workflow run and each stage's state and provides direct log links. It refreshes every 15 seconds while promotion is active, and the run continues in GitHub after the browser closes.
+
+**Bootstrap requirement:** GitHub can dispatch a workflow only once its YAML file exists on the repository's default branch, `main`. First merge this feature into `staging`, verify it there, then make a one-time *manual*, reviewed promotion into `main` using the existing GitHub PR process. Only afterward can the new monitored-promotion button initiate the workflow. That bootstrap promotion must follow the existing `docs/07` gates.
+
+**GitHub configuration:**
+
+- Ensure the existing `GITHUB_BACKUP_TOOL_TOKEN` in Vercel has Actions read/write and Pull requests read/write permissions for `marceloATpixelsmith/idoc.club`. No new Vercel environment-variable name is needed.
+- In GitHub repository **Settings → Secrets and variables → Actions → Variables**, add `PRODUCTION_HEALTH_URL` with `https://redesign.idoc.club/api/health` while redesign is the Production domain, or `https://idoc.club/api/health` after the public cutover. This is a repository **variable**, not a secret.
+- In GitHub repository **Settings → Environments**, review `production-promotion`. Set appropriate required reviewers and any other protective restrictions. The workflow's `GITHUB_TOKEN` must be permitted by the repository ruleset to merge a clean promotion PR; it must not receive a ruleset bypass.
+- The workflow validates GitHub's Vercel commit status and performs an HTTPS health check; no extra Vercel API token is needed. Success confirms deployment and a responding health endpoint, **not** the absence of all potential runtime errors throughout the site. Review Sentry and New Relic separately for post-deploy incident detection.
+
+If PR verification fails, no merge occurs. If deployment or health verification fails **after merging**, production may already have changed; investigate the specific failed stage and use the documented rollback process. Do not assume a failed post-merge check automatically rolls back Production. Staging deployment acceptance remains a separate prerequisite.
+
+### Live authentication tests
+
+**Run Live Authentication Tests** dispatches `live-auth-staging.yml` on `staging`. The resulting matrix, browser screenshots and traces remain in GitHub Actions artifacts. The workflow must be on the default branch before it can be manually dispatched.
+
 
 ## Known pre-existing blocker
 

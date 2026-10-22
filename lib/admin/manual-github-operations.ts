@@ -2,9 +2,9 @@ import 'server-only';
 
 export const MANUAL_GITHUB_WORKFLOWS = {
   'production-promotion': {
-    file: null,
+    file: 'monitored-production-promotion.yml',
     label: 'Promote Staging to Production',
-    url: 'https://github.com/marceloATpixelsmith/idoc.club/pulls?q=is%3Apr+base%3Amain',
+    url: 'https://github.com/marceloATpixelsmith/idoc.club/actions/workflows/monitored-production-promotion.yml',
   },
   'live-auth': {
     file: 'live-auth-staging.yml',
@@ -22,6 +22,7 @@ export type ManualGithubRun = {
   event: string;
   startedAt: string;
   runUrl: string;
+  steps?: Array<{ name: string; status: string; conclusion: string | null }>;
 };
 
 export class ManualGithubOperationsError extends Error {
@@ -86,12 +87,19 @@ function runStatus(status: string, conclusion: string | null): ManualGithubRun['
   return 'other';
 }
 
+async function loadPromotionSteps(runId: number): Promise<NonNullable<ManualGithubRun['steps']>> {
+  const response = await github(`/actions/runs/${runId}/jobs?per_page=10`);
+  const body = await response.json() as { jobs?: Array<{ steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
+  return (body.jobs ?? []).flatMap((job) => job.steps ?? []).filter((step) =>
+    /Check PR, reviews|Merge verified promotion|Verify Vercel production|Verify production health/i.test(step.name));
+}
+
 export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]> {
-  const entries = await Promise.all(Object.entries(MANUAL_GITHUB_WORKFLOWS).filter(([, config]) => config.file !== null).map(async ([workflow, config]) => {
+  const entries = await Promise.all(Object.entries(MANUAL_GITHUB_WORKFLOWS).map(async ([workflow, config]) => {
     try {
-      const response = await github(`/actions/workflows/${config.file}/runs?branch=staging&per_page=5`);
+      const response = await github(`/actions/workflows/${config.file}/runs?branch=${workflow === 'production-promotion' ? 'main' : 'staging'}&per_page=5`);
       const body = await response.json() as { workflow_runs?: Array<{ id: number; run_number: number; status: string; conclusion: string | null; event: string; created_at: string; html_url: string }> };
-      return (body.workflow_runs ?? []).map((run) => ({
+      return Promise.all((body.workflow_runs ?? []).map(async (run) => ({
         id: run.id,
         workflow: workflow as ManualGithubWorkflow,
         runNumber: run.run_number,
@@ -99,7 +107,8 @@ export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]
         event: run.event,
         startedAt: run.created_at,
         runUrl: run.html_url,
-      }));
+        ...(workflow === 'production-promotion' ? { steps: await loadPromotionSteps(run.id) } : {}),
+      })));
     } catch (error) {
       // A workflow is not dispatchable until its definition reaches the default branch.
       if (error instanceof ManualGithubOperationsError && error.status === 404) return [];
@@ -116,25 +125,41 @@ export async function dispatchManualGithubOperation(workflow: ManualGithubWorkfl
     const existing = await github('/pulls?state=open&base=main&per_page=100');
     const payload = await existing.json() as Array<{ head?: { ref?: string; repo?: { full_name?: string } }; html_url?: string }>;
     const pending = payload.find((pr) => pr.head?.ref === 'staging' && pr.head.repo?.full_name === 'marceloATpixelsmith/idoc.club');
-    if (pending?.html_url) return pending.html_url;
-
-    const response = await github('/pulls', {
+    let url = pending?.html_url;
+    if (!url) {
+      const response = await github('/pulls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Promote staging to production (main)',
+          head: 'staging',
+          base: 'main',
+          body: 'Super Admin authorized staging promotion. The monitored workflow will verify required CI/reviews, merge using branch protections, verify Vercel and check production health. Staging acceptance requirements in docs/07 must be completed before initiation.',
+          draft: false,
+        }),
+      });
+      const created = await response.json() as { html_url?: string };
+      url = created.html_url;
+    }
+    if (!url || !/^https:\/\/github\.com\/marceloATpixelsmith\/idoc\.club\/pull\/\d+$/.test(url)) {
+      throw new ManualGithubOperationsError('GitHub did not return a valid production promotion pull request URL.');
+    }
+    const number = Number(url.split('/').pop());
+    const detailsResponse = await github(`/pulls/${number}`);
+    const details = await detailsResponse.json() as { head?: { sha?: string; ref?: string }; base?: { ref?: string }; state?: string };
+    if (details.state !== 'open' || details.head?.ref !== 'staging' || details.base?.ref !== 'main' ||
+      !/^[a-f0-9]{40}$/i.test(details.head?.sha ?? '')) {
+      throw new ManualGithubOperationsError('Promotion PR is not an open staging-to-main request with a valid commit.');
+    }
+    await github('/actions/workflows/monitored-production-promotion.yml/dispatches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: 'Promote staging to production (main)',
-        head: 'staging',
-        base: 'main',
-        body: 'Manual promotion initiated by a verified IDOC Super Admin. Review staging verification, required checks and rollout gates in docs/07 before merging. Do not bypass branch protection. Merge commit required; no squash.',
-        draft: false,
-        maintainer_can_modify: true,
+        ref: 'main',
+        inputs: { pr_number: String(number), expected_head_sha: details.head.sha },
       }),
     });
-    const created = await response.json() as { html_url?: string };
-    if (!created.html_url?.startsWith('https://github.com/marceloATpixelsmith/idoc.club/pull/')) {
-      throw new ManualGithubOperationsError('GitHub did not return a valid promotion pull request URL.');
-    }
-    return created.html_url;
+    return url;
   }
   const config = MANUAL_GITHUB_WORKFLOWS[workflow];
   await github(`/actions/workflows/${config.file}/dispatches`, {
