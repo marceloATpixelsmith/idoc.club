@@ -10,7 +10,6 @@ import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
 import { dispatchManualGithubOperation, isManualGithubWorkflow, listManualGithubOperationRuns, MANUAL_GITHUB_WORKFLOWS, ManualGithubOperationsError, type ManualGithubWorkflow } from '@/lib/admin/manual-github-operations';
 import type { ManualGithubOperationActionState } from './manual-github-operation-form';
-const PATH = '/admin/operations/github-operations';
 async function authorize(formData: FormData) {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   const actor = await requireAccountAccess('administration');
@@ -48,7 +47,8 @@ export async function runOperationAction(
     const actor = await authorize(formData);
     const value = formData.get('workflow');
     if (!isManualGithubWorkflow(value)) return { error: 'Choose one of the available GitHub operations.' };
-    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', PATH);
+    const returnTo = value === 'production-promotion' ? '/admin/operations/production-promotion' : '/admin/operations/live-auth-tests';
+    const stepUp = await requireFreshStepUp(actor, 'change-security-settings', returnTo);
     if (stepUp.required) return { stepUpRequired: true };
 
     const active = (await listManualGithubOperationRuns()).some((run) =>
