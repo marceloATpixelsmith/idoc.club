@@ -30,23 +30,22 @@ export const SEMINAR_ROW_CLASS = 'outline outline-1 outline-transparent transiti
 export const SEMINAR_LIST_CLASS = '-mx-4 w-[calc(100%+2rem)] max-w-[37rem] divide-y divide-border border-y border-border';
 
 /** Shared compact seminar card for the homepage and every public/member seminar listing. The
- * overlay link keeps the card navigable without nesting the independently clickable FEI link. */
+ * main content link and independent FEI link avoid overlapping touch targets. */
 export function SeminarListingCard({ children, href, seminar }: {
   children?: React.ReactNode; href: string;
   seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string };
 }) {
   return (
     <article className="relative grid max-w-full gap-5 px-4 py-6 sm:grid-cols-[minmax(0,max-content)_auto] sm:items-center sm:gap-10">
-      <Link aria-label={`View ${seminar.title}`} className="absolute inset-0 z-10" href={href} />
-      <div className="min-w-0">
+      <Link aria-label={`View ${seminar.title}`} className="block min-w-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold" href={href}>
         <h3 className="text-xl">{seminar.title}</h3>
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-2"><MapPin aria-hidden className="size-3.5 shrink-0 text-gold" /><span className="break-words">{seminar.location}</span></span>
           <span className="inline-flex items-center gap-2"><CalendarDays aria-hidden className="size-3.5 shrink-0 text-gold" />{formatSchedule(seminar)}</span>
         </div>
         {children ? <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">{children}</div> : null}
-      </div>
-      {seminar.is_fei ? <div className="relative z-20 w-fit shrink-0"><FeiBadge className="h-4" /></div> : null}
+      </Link>
+      {seminar.is_fei ? <div className="w-fit shrink-0"><FeiBadge className="h-4" /></div> : null}
     </article>
   );
 }
