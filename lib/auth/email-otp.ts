@@ -81,7 +81,7 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
     purpose, userId: options.userId ?? null,
   });
   try {
-    await sendTransactionalEmail({ html: renderEmailOtpHtml(code, purpose), subject: EMAIL_OTP_SUBJECTS[purpose], to: email }, { allowLiveAuthE2eOtp: true });
+    await sendTransactionalEmail({ html: renderEmailOtpHtml(code, purpose), subject: EMAIL_OTP_SUBJECTS[purpose], to: email });
   } catch (error) {
     const reason = deliveryFailureCategory(error);
     if (options.userId) await logError('email_otp_delivery_failed', { purpose, reason, subjectId: options.userId });

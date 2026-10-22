@@ -123,5 +123,5 @@ test('the alert is routed through the existing documented operations-recipient v
 });
 
 test('the optional delivery-timeout signal on sendTransactionalEmail defaults to unbounded, so no existing caller (e.g. the breached-password alert) changes behavior', () => {
-  assert.match(brevoModule, /export async function sendTransactionalEmail\(message: TransactionalEmail, options: \{ allowLiveAuthE2eOtp\?: boolean; signal\?: AbortSignal \} = \{\}\)/);
+  assert.match(brevoModule, /export async function sendTransactionalEmail\(message: TransactionalEmail, options: \{ signal\?: AbortSignal \} = \{\}\)/);
 });

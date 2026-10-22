@@ -23,22 +23,11 @@ export function logMemberLaunchHold(action: string) {
   console.warn('[member_launch_hold]', { action });
 }
 
-export function liveAuthE2eOtpMayBypassCommunicationsHold(recipient: string, environment: Environment = process.env): boolean {
-  if (!memberCommunicationsDisabled(environment)
-    || environment.VERCEL_ENV !== 'preview'
-    || environment.VERCEL_GIT_COMMIT_REF !== 'staging') return false;
-  return /^[^@\s]+@pixelsmith\.space$/i.test(recipient);
-}
-
-export function assertTransactionalEmailAllowed(action: string, recipient: string, liveAuthE2eOtp = false) {
-  if (!memberCommunicationsDisabled()) return;
-  if (liveAuthE2eOtp && liveAuthE2eOtpMayBypassCommunicationsHold(recipient)) return;
-  logMemberLaunchHold(action);
-  throw new MemberLaunchHoldError();
-}
-
 export function assertMemberCommunicationsAllowed(action: string) {
-  assertTransactionalEmailAllowed(action, '');
+  if (memberCommunicationsDisabled()) {
+    logMemberLaunchHold(action);
+    throw new MemberLaunchHoldError();
+  }
 }
 
 /** A verified test key permits sandbox billing only. Live event evidence always takes priority. */

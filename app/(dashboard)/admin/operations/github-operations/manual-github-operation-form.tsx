@@ -42,7 +42,7 @@ export function ManualGithubOperationForm({
       {state.success ? (
         <p className="mt-3 text-sm text-emerald-300" role="status">
           {state.success}{' '}
-          {state.workflowUrl ? <a className="inline-flex items-center gap-1 underline" href={state.workflowUrl} rel="noreferrer" target="_blank">Open workflow runs <ExternalLink aria-hidden="true" className="size-3" /></a> : null}
+          {state.workflowUrl ? <a className="inline-flex items-center gap-1 underline" href={state.workflowUrl} rel="noreferrer" target="_blank">{workflow === 'production-promotion' ? 'Open promotion pull request' : 'Open workflow runs'} <ExternalLink aria-hidden="true" className="size-3" /></a> : null}
         </p>
       ) : null}
       {challenge}
