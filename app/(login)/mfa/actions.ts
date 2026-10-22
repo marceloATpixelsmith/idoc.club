@@ -38,7 +38,7 @@ export const cancelStepUp = validatedAction(z.object({}), async () => {
 export const verifyStepUpTotp = validatedAction(codeSchema, async ({ code }) => {
   const context = await getPendingStepUp();
   if (!context) return { error: 'Your verification session expired. Try the action again.' };
-  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many verification attempts. Please try again when the countdown ends.', retryAfterSeconds: rateLimitRetryAfterSeconds() };
+  if (!(await allowed(context.user.id, 'mfa_step_up_verify'))) return { error: 'Too many verification attempts. Please try again when the countdown ends.', retryAfterSeconds: rateLimitRetryAfterSeconds('mfa_step_up_verify') };
   const config = mfaConfiguration();
   let result;
   try {
