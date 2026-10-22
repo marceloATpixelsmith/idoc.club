@@ -1,0 +1,73 @@
+name: Monitored staging to production promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing staging-to-main promotion pull request
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact staging commit approved by the Super Admin
+        required: true
+        type: string
+
+concurrency:
+  group: monitored-production-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+  statuses: read
+  deployments: read
+
+jobs:
+  promote:
+    name: Verify, merge, deploy and health-check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production-promotion
+    steps:
+      - name: Check out protected main workflow code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check PR, reviews, staging and all required CI gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_PR_NUMBER: ${{ inputs.pr_number }}
+          PROMOTION_EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+        run: node scripts/monitored-production-promotion.mjs verify
+      - name: Merge verified promotion PR into main
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_PR_NUMBER: ${{ inputs.pr_number }}
+          PROMOTION_EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+        run: node scripts/monitored-production-promotion.mjs merge
+      - name: Verify Vercel production deployment of exact merge commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+        run: node scripts/monitored-production-promotion.mjs deploy
+      - name: Verify production health
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+        run: node scripts/monitored-production-promotion.mjs health
+      - name: Write final result
+        if: always()
+        env:
+          PROMOTION_PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          echo "Promotion PR: https://github.com/${GITHUB_REPOSITORY}/pull/${PROMOTION_PR_NUMBER}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review the individual verification, merge, deployment and health-check steps above. A failed step means the promotion was NOT confirmed successful." >> "$GITHUB_STEP_SUMMARY"

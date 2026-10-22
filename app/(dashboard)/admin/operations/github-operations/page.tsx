@@ -10,7 +10,6 @@ import { AuthorizationError, requireSuperAdmin } from '@/lib/membership/authoriz
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { db } from '@/lib/db/drizzle';
 import { auditLog } from '@/lib/db/schema';
-import { formatTableDate } from '@/lib/format';
 import {
   dispatchManualGithubOperation,
   isManualGithubWorkflow,
@@ -20,6 +19,7 @@ import {
   type ManualGithubWorkflow,
 } from '@/lib/admin/manual-github-operations';
 import { ManualGithubOperationForm, type ManualGithubOperationActionState } from './manual-github-operation-form';
+import { PromotionStatusRefresh } from './promotion-status-refresh';
 
 const PATH = '/admin/operations/github-operations';
 
@@ -71,11 +71,11 @@ async function runOperationAction(
       return { error: 'This operation was requested in the last two minutes. Refresh the page before trying again.' };
     }
 
-    await dispatchManualGithubOperation(value);
+    const promotionUrl = await dispatchManualGithubOperation(value);
     revalidatePath(PATH);
     return {
-      success: 'The operation was dispatched to the staging branch.',
-      workflowUrl: MANUAL_GITHUB_WORKFLOWS[value].url,
+      success: value === 'production-promotion' ? 'Promotion monitoring requested. The GitHub workflow will verify CI/reviews, merge and check Vercel deployment and production health. Follow its status below.' : 'The operation was dispatched to the staging branch.',
+      workflowUrl: promotionUrl ?? MANUAL_GITHUB_WORKFLOWS[value].url,
     };
   } catch (error) {
     if (error instanceof ManualGithubOperationsError || error instanceof AuthorizationError ||
@@ -123,7 +123,7 @@ export default async function ManualGithubOperationsPage() {
         <p className="eyebrow">Super Admin Operations</p>
         <h1 className="text-3xl font-semibold text-gold">Manual GitHub Operations</h1>
         <p className="max-w-3xl text-muted-foreground">
-          Start either operation against the staging branch. Each request requires fresh authenticator verification and is recorded in the audit log.
+          Start live authentication tests or initiate a monitored staging-to-production promotion. The protected promotion workflow checks CI, reviews, merge, Vercel deployment and production health; failures stop the process and remain visible below. Fresh authenticator verification is required and every request is audited.
         </p>
       </header>
 
@@ -132,13 +132,13 @@ export default async function ManualGithubOperationsPage() {
           <div className="flex items-start gap-3">
             <GitBranch aria-hidden="true" className="mt-1 size-5 shrink-0 text-gold" />
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-foreground">Apply Staging Migrations</h2>
+              <h2 className="text-lg font-semibold text-foreground">Promote Staging to Production</h2>
               <p className="text-sm text-muted-foreground">
-                Applies every pending committed migration to the <code>idoc_staging</code> schema. The GitHub workflow uses the protected staging-maintenance environment and refuses to run from a different branch.
+                Initiates a monitored promotion of all code on <code>staging</code> to <code>main</code>. Required PR checks and reviews must pass before merging. The workflow then verifies Vercel production deployment and the production health endpoint. Start only after completing staging acceptance checks.
               </p>
             </div>
           </div>
-          <ManualGithubOperationForm action={runOperationAction} workflow="staging-migrations" label="Run Staging Migrations" />
+          <ManualGithubOperationForm action={runOperationAction} workflow="production-promotion" label="Start Monitored Promotion" />
         </article>
 
         <article className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
@@ -155,13 +155,15 @@ export default async function ManualGithubOperationsPage() {
         </article>
       </section>
 
+      <PromotionStatusRefresh active={runs.some((run) => run.workflow === 'production-promotion' && (run.status === 'queued' || run.status === 'in_progress'))} />
+
       {runsError ? <section className="rounded-lg border border-red-400/40 bg-red-950/20 p-4 text-sm text-red-200" role="alert">{runsError}</section> : null}
 
       <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Recent Staging Runs</h2>
-            <p className="text-sm text-muted-foreground">Select a workflow log for step-by-step output and artifacts.</p>
+            <h2 className="text-lg font-semibold text-foreground">Recent GitHub Operations</h2>
+            <p className="text-sm text-muted-foreground">View the actual status of each operation, individual promotion stages, failures and GitHub logs.</p>
           </div>
           <a className="inline-flex items-center gap-2 text-sm text-gold underline" href="https://github.com/marceloATpixelsmith/idoc.club/actions" rel="noreferrer" target="_blank">
             All GitHub Actions <ExternalLink aria-hidden="true" className="size-4" />
@@ -175,11 +177,24 @@ export default async function ManualGithubOperationsPage() {
                 <span>{MANUAL_GITHUB_WORKFLOWS[run.workflow].label}</span>
                 <span className="text-muted-foreground">#{run.runNumber} · {run.event === 'workflow_dispatch' ? 'Manually started' : 'Automatic'} · {new Date(run.startedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</span>
                 <a className="inline-flex items-center gap-1 text-gold underline" href={run.runUrl} rel="noreferrer" target="_blank">View run <ExternalLink aria-hidden="true" className="size-3" /></a>
+                {run.workflow === 'production-promotion' ? (
+                  <ul className="w-full space-y-1 border-t border-border pt-2 text-sm">
+                    {(run.steps ?? []).map((step) => (
+                      <li className="flex flex-wrap items-center justify-between gap-2" key={step.name}>
+                        <span>{step.name}</span>
+                        <span className={runStatusClass(step.conclusion === 'success' ? 'success' : step.conclusion === 'failure' ? 'failure' : step.status)}>
+                          {step.conclusion === 'success' ? 'PASSED' : step.conclusion === 'failure' ? 'FAILED' : step.status === 'in_progress' ? 'RUNNING' : step.status === 'completed' ? 'FINISHED' : 'WAITING'}
+                        </span>
+                      </li>
+                    ))}
+                    {run.status === 'failure' ? <li className="text-red-300">This promotion was not verified successful. Open its GitHub run to see the exact failing step.</li> : null}
+                  </ul>
+                ) : null}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No recent runs are available. If the live-auth workflow is not on GitHub&rsquo;s default branch yet, its button will become available after that workflow is promoted to <code>main</code>.</p>
+          <p className="text-sm text-muted-foreground">No operation runs are available yet. Initiated promotions appear here after GitHub accepts their workflow dispatch.</p>
         )}
       </section>
     </main>
