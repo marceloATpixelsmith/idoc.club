@@ -23,7 +23,8 @@ export default async function AdminPage() {
   const [support, reconciliation, revenue] = await Promise.all([
     listAssignedOpenConversationsForDashboard(5),
     listReconciliationFindings(),
-    getRevenueReport(),
+    // A one-minute per-instance cache: this overview aggregates every payment on each dashboard load. The Revenue page stays live.
+    getRevenueReport({}, { cacheSeconds: 60 }),
   ]);
   const latestReconciliation = [...reconciliation].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
 

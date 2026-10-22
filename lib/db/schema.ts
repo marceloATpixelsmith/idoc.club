@@ -55,6 +55,8 @@ export const users = idocSchema.table('users', {
   check('users_legacy_password_format_check', sql`${table.legacyPasswordFormat} is null or ${table.legacyPasswordFormat} in ('phpass', 'wp_bcrypt')`),
   check('users_legacy_password_pair_check', sql`(${table.legacyPasswordHash} is null) = (${table.legacyPasswordFormat} is null)`),
   check('users_account_state_check', sql`${table.accountState} in ('unverified', 'onboarding', 'active', 'suspended', 'migrated_pending', 'deleted')`),
+  // Trigram index for the member directory's opt-in email search (see the profiles indexes).
+  index('users_display_email_trgm_idx').using('gin', sql`coalesce(${table.emailDisplay}, ${table.email}) gin_trgm_ops`),
 ]);
 
 export const authSessions = idocSchema.table('auth_sessions', {
@@ -240,7 +242,16 @@ export const profiles = idocSchema.table('profiles', {
   directoryEmailOptIn: boolean('directory_email_opt_in').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  // Trigram indexes for the member directory's free-text search (`ilike '%term%'`), which a btree
+  // cannot serve. Migration 0081 creates them only when the pg_trgm extension is available.
+  index('profiles_first_name_trgm_idx').using('gin', sql`${table.firstName} gin_trgm_ops`),
+  index('profiles_last_name_trgm_idx').using('gin', sql`${table.lastName} gin_trgm_ops`),
+  index('profiles_full_name_trgm_idx').using('gin', sql`(${table.firstName} || ' ' || ${table.lastName}) gin_trgm_ops`),
+  // Serves the administrator Members roster's default Name sort (last name, first name, then id), so the
+  // first page is read straight off the index instead of sorting every matching member. Migration 0082.
+  index('profiles_name_sort_idx').on(table.lastName, table.firstName, table.id),
+]);
 
 /** Singleton, server-owned public organization identity. Private settings must use separate tables. */
 export const organizationSettings = idocSchema.table('organization_settings', {
@@ -303,6 +314,11 @@ export const onboardingConsents = idocSchema.table('onboarding_consents', {
   termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }).notNull(),
   privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }).notNull(),
   keepUpdatedOptIn: boolean('keep_updated_opt_in').notNull(),
+  // docs/19: when/why the marketing choice last changed after onboarding, and whether an opt-in
+  // is waiting on the member to click Mailchimp's confirmation email (opt-in stays false until then).
+  keepUpdatedChangedAt: timestamp('keep_updated_changed_at', { withTimezone: true }),
+  keepUpdatedPendingAt: timestamp('keep_updated_pending_at', { withTimezone: true }),
+  keepUpdatedSource: varchar('keep_updated_source', { length: 40 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -318,7 +334,11 @@ export const professionalRoles = idocSchema.table('professional_roles', {
   effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
   effectiveTo: timestamp('effective_to', { withTimezone: true }),
   verifiedBy: integer('verified_by').references(() => users.id),
-}, (table) => [check('professional_roles_type_check', sql`${table.roleType} in ('judge', 'steward', 'veterinarian')`)]);
+}, (table) => [
+  check('professional_roles_type_check', sql`${table.roleType} in ('judge', 'steward', 'veterinarian')`),
+  // Every roster, directory and onboarding read selects a profile's current roles: without this each lateral lookup scans the table.
+  index('professional_roles_current_profile_idx').on(table.profileId).where(sql`${table.effectiveTo} is null`),
+]);
 
 export const memberships = idocSchema.table('memberships', {
   id: serial('id').primaryKey(),
@@ -335,6 +355,9 @@ export const memberships = idocSchema.table('memberships', {
 }, (table) => [
   check('memberships_status_check', sql`${table.status} in ('active', 'grace', 'expired', 'canceled', 'suspended', 'complimentary', 'review_required')`),
   check('memberships_dates_check', sql`${table.validUntil} >= ${table.startsOn}`),
+  // The latest membership of a profile (newest valid_until first) is read on every signed-in request by middleware, the account
+  // gate, authorization and the header, and per member by the roster and directory.
+  index('memberships_profile_latest_idx').on(table.profileId, table.validUntil.desc().nullsFirst(), table.id.desc().nullsFirst()),
 ]);
 
 export const profileChangeHistory = idocSchema.table('profile_change_history', {
@@ -810,6 +833,9 @@ export const payments = idocSchema.table('payments', {
     sql`(${table.source} in ('stripe_recurring', 'stripe_one_time') and ${table.externalPaymentId} is not null)
       or (${table.source} in ('stripe_manual', 'bank_transfer', 'cash', 'complimentary', 'legacy_import') and ${table.administratorId} is not null)`,
   ),
+  // A member's payment history and last payment (roster), and the revenue report's date-range filters.
+  index('payments_profile_paid_at_idx').on(table.profileId, table.paidAt),
+  index('payments_paid_at_idx').on(table.paidAt),
 ]);
 
 

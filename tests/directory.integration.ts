@@ -4,6 +4,7 @@ import { AuthorizationError } from '../lib/membership/authorization.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { DIRECTORY_MAX_PAGE, DIRECTORY_PAGE_SIZE, DirectoryRateLimitedError, listMemberDirectory } from '../lib/directory/member-directory.ts';
+import { useTestDailyCache } from '../lib/cache/daily-cache.ts';
 import { DIRECTORY_MIN_AGGREGATION_THRESHOLD, getPublicMemberConcentration } from '../lib/directory/aggregate.ts';
 import {
   adminUser, closeHarness, createMembership, createUser, judgeRole, resetIdoc, sql, stewardRole, veterinarianRole,
@@ -50,11 +51,12 @@ async function entitledMemberIn(countryCode: string, roles: RoleFixture[] = [jud
 beforeEach(resetIdoc);
 after(closeHarness);
 
-test('public map: an area below the documented minimum threshold is never rendered', async () => {
-  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD - 1; index += 1) await entitledMemberIn('FR');
+test('public map: a country with a single entitled member is rendered with a count of 1', async () => {
+  // No professional role, so there is no National Federation and the address country is used.
+  await entitledMemberIn('FR', []);
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
-  assert.equal(result.areas.some((area) => area.countryCode === 'FR'), false);
+  assert.equal(result.areas.find((area) => area.countryCode === 'FR')?.memberCount, 1);
 });
 
 test('public map: an area reaching the documented minimum threshold is rendered with its exact count', async () => {
@@ -66,14 +68,32 @@ test('public map: an area reaching the documented minimum threshold is rendered 
   assert.equal(germany.memberCount, DIRECTORY_MIN_AGGREGATION_THRESHOLD);
 });
 
-test('public map: a below-threshold area is fully absent, not merged into any other area or a visible total', async () => {
-  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) await entitledMemberIn('DE');
-  await entitledMemberIn('LI'); // one Liechtenstein member -- below threshold, must vanish entirely
+test('public map: blank or non-ISO country values are never rendered even above the threshold', async () => {
+  for (let index = 0; index < DIRECTORY_MIN_AGGREGATION_THRESHOLD; index += 1) {
+    await entitledMemberIn('', []);
+    await entitledMemberIn('XX', []);
+    await entitledMemberIn('DE', []);
+  }
   const result = await getPublicMemberConcentration();
   assert.ok(result.ok);
-  assert.equal(result.areas.length, 1);
-  assert.equal(result.areas[0].countryCode, 'DE');
-  assert.equal(result.areas[0].memberCount, DIRECTORY_MIN_AGGREGATION_THRESHOLD);
+  assert.deepEqual(result.areas.map((area) => area.countryCode), ['DE']);
+});
+
+test('public map: small countries sit alongside large ones and no merged bucket or total is returned', async () => {
+  for (let index = 0; index < 3; index += 1) await entitledMemberIn('DE', []);
+  await entitledMemberIn('LI', []);
+  const result = await getPublicMemberConcentration();
+  assert.ok(result.ok);
+  assert.deepEqual(result.areas, [{ countryCode: 'DE', memberCount: 3 }, { countryCode: 'LI', memberCount: 1 }]);
+  assert.equal('total' in result, false);
+});
+
+test('public map: members are placed by National Federation country, falling back to the address country', async () => {
+  await entitledMemberIn('DE', [{ ...judgeRole, nationalFederationCountryCode: 'NL' } as RoleFixture]);
+  await entitledMemberIn('DE', []);
+  const result = await getPublicMemberConcentration();
+  assert.ok(result.ok);
+  assert.deepEqual(result.areas.map((area) => `${area.countryCode}:${area.memberCount}`).sort(), ['DE:1', 'NL:1']);
 });
 
 test('public map: only currently-entitled members are counted, matching every other member surface\'s access rule', async () => {
@@ -133,6 +153,22 @@ test('paid directory: returns member email for contact while excluding addresses
   assert.deepEqual(Object.keys(listing.rows[0]).sort(), ['email', 'federation', 'firstName', 'lastName', 'membershipType', 'region', 'roles'].sort());
 });
 
+test('paid directory: text search matches first name, last name, the full name, is case-insensitive, and treats % and _ literally', async () => {
+  await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('DE', [judgeRole], { firstName: 'Grace', lastName: 'Hopper' });
+  await entitledMemberIn('DE', [judgeRole], { firstName: '100%', lastName: 'Under_score' });
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Zed', lastName: 'Searcher' });
+  const names = async (q: string) => (await asMember(searcher.id, () => listMemberDirectory({ q }))).rows.map((row) => `${row.firstName} ${row.lastName}`);
+  assert.deepEqual(await names('ada'), ['Ada Lovelace']);
+  assert.deepEqual(await names('LOVELACE'), ['Ada Lovelace']);
+  assert.deepEqual(await names('Ada Lovelace'), ['Ada Lovelace'], 'a search spanning first and last name must match the full name');
+  assert.deepEqual(await names('a l'), ['Ada Lovelace']);
+  assert.deepEqual(await names('Grace'), ['Grace Hopper']);
+  assert.deepEqual(await names('%'), ['100% Under_score'], 'a percent sign is a literal, not a wildcard');
+  assert.deepEqual(await names('r_s'), ['100% Under_score'], 'an underscore is a literal, not a single-character wildcard');
+  assert.deepEqual(await names('nobody-by-this-name'), []);
+});
+
 test('paid directory: only active, non-admin member accounts appear in directory results', async () => {
   const archived = await entitledMemberIn('DE', [judgeRole], { firstName: 'Archived', lastName: 'Member' });
   const suspended = await entitledMemberIn('ES', [veterinarianRole], { firstName: 'Suspended', lastName: 'Member' });
@@ -149,6 +185,16 @@ test('paid directory: only active, non-admin member accounts appear in directory
   const listing = await asMember(searcher.id, () => listMemberDirectory());
   assert.equal(listing.total, 1);
   assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`), ['Grace Hopper']);
+});
+
+test('paid directory: an imported member who has not activated their account is listed, with email and contact hidden unless they opted in', async () => {
+  const { user: imported } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Imported', lastName: 'Member' });
+  await sql`update idoc.users set account_state='migrated_pending' where id=${imported.id}`;
+  const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
+  const listing = await asMember(searcher.id, () => listMemberDirectory({ q: 'Imported' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].firstName, 'Imported');
+  assert.equal(listing.rows[0].email, null);
 });
 
 test('paid directory: entitled members can search by another member email without exposing unrelated private fields', async () => {
@@ -226,13 +272,24 @@ test('paid directory: a page beyond the documented maximum is clamped, bounding 
   assert.equal(listing.filters.page, DIRECTORY_MAX_PAGE);
 });
 
-test('paid directory: sustained searching from one origin is rate-limited using the existing repository rate-limit facility', async () => {
+test('paid directory: ordinary browsing is not blocked, and one account is limited at its own 60-search allowance', async () => {
   const { user } = await entitledMemberIn('DE');
   const origin = '198.51.100.9';
-  for (let index = 0; index < 10; index += 1) {
+  // Well past the generic 10-per-IP login allowance: filtering/sorting/paging is many searches.
+  for (let index = 0; index < 60; index += 1) {
     await asMember(user.id, () => listMemberDirectory(), origin);
   }
   await assert.rejects(() => asMember(user.id, () => listMemberDirectory(), origin), DirectoryRateLimitedError);
+});
+
+test('paid directory: sustained searching from one origin across several accounts is rate-limited at 180', async () => {
+  const origin = '198.51.100.10';
+  const members: { id: number }[] = [];
+  for (let index = 0; index < 4; index += 1) members.push((await entitledMemberIn('DE')).user);
+  for (const member of members) {
+    for (let index = 0; index < 45; index += 1) await asMember(member.id, () => listMemberDirectory(), origin);
+  }
+  await assert.rejects(() => asMember(members[0].id, () => listMemberDirectory(), origin), DirectoryRateLimitedError);
 });
 
 test('paid directory: an array-valued (repeated-key) query parameter is treated as absent instead of crashing -- a real Next.js searchParams shape', async () => {
@@ -250,4 +307,91 @@ test('paid directory: an array-valued (repeated-key) query parameter is treated 
   assert.equal(listing.filters.membershipType.length, 2);
   assert.equal(listing.filters.q, undefined);
   assert.deepEqual(listing.rows.map((row) => row.lastName).sort(), ['One', 'Two']);
+});
+
+test('paid directory: every sortable column, ascending and descending, loads without error', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('NL', [stewardRole], { firstName: 'Bea', lastName: 'Jansen' });
+  for (const id of ['name', 'firstName', 'lastName', 'email', 'type', 'region', 'federation']) {
+    for (const desc of [false, true]) {
+      const listing = await asMember(user.id, () => listMemberDirectory({ sort: JSON.stringify([{ id, desc }]) }), `203.0.113.${desc ? 9 : 8}`);
+      assert.ok(listing.rows.length >= 2, `sort by ${id} ${desc ? 'desc' : 'asc'}`);
+    }
+  }
+});
+
+test('paid directory: a view saved by the table (cookie round trip) loads, including a region sort', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Cookie', lastName: 'Trip' });
+  const { parseDirectoryView, serializeDirectoryView } = await import('../lib/directory/member-directory-view.ts');
+  for (const id of ['region', 'type', 'federation', 'email', 'firstName', 'lastName']) {
+    const saved = serializeDirectoryView({ page: 1, pageSize: 25, sort: JSON.stringify([{ id, desc: false }]) }, user.id);
+    const listing = await asMember(user.id, () => listMemberDirectory(parseDirectoryView(saved, user.id)), `198.51.100.${id.length}`);
+    assert.ok(listing.rows.length >= 1, `cookie view sorted by ${id}`);
+  }
+});
+
+test('paid directory: multi-column sorts built by the Sort button load without error', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Ada', lastName: 'Lovelace' });
+  await entitledMemberIn('NL', [stewardRole], { firstName: 'Bea', lastName: 'Jansen' });
+  const ids = ['lastName', 'firstName', 'type', 'region', 'federation', 'email'];
+  let origin = 0;
+  for (const first of ids) {
+    for (const second of ids.filter((id) => id !== first)) {
+      const sort = JSON.stringify([{ id: first, desc: false }, { id: second, desc: true }]);
+      const listing = await asMember(user.id, () => listMemberDirectory({ sort }), `192.0.2.${(origin += 1)}`);
+      assert.ok(listing.rows.length >= 2, `sort ${first} then ${second}`);
+    }
+  }
+});
+
+test('paid directory: a member with no recorded federation is listed under their address country, matching the map', async () => {
+  const { user } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Fallback', lastName: 'Federation' });
+  const noFederation = await sql<{ id: number }[]>`select p.id from idoc.profiles p where p.user_id = ${user.id}`;
+  await sql`update idoc.professional_roles set national_federation_country_code = null where profile_id = ${noFederation[0].id}`;
+  const listing = await asMember(user.id, () => listMemberDirectory({ federation: 'DE', q: 'Fallback' }));
+  assert.equal(listing.total, 1);
+  assert.equal(listing.rows[0].federation, 'DE');
+  const none = await asMember(user.id, () => listMemberDirectory({ federation: 'FR', q: 'Fallback' }), '203.0.113.77');
+  assert.equal(none.total, 0);
+});
+
+
+test('paid directory: a cached page never serves a withdrawn email opt-in, and drops members who stop being listed', async () => {
+  useTestDailyCache(true);
+  try {
+    const searcher = (await entitledMemberIn('DE', [stewardRole], { firstName: 'Cache', lastName: 'Searcher' })).user;
+    const shared = await entitledMemberIn('DE', [judgeRole], { firstName: 'Opted', lastName: 'Inner' }, { directoryEmailOptIn: true });
+    const suspended = await entitledMemberIn('DE', [judgeRole], { firstName: 'Soon', lastName: 'Gone' });
+    const filters = { federation: 'DE', pageSize: 50 };
+    const before = await asMember(searcher.id, () => listMemberDirectory(filters), '192.0.2.201');
+    assert.equal(before.rows.find((row) => row.lastName === 'Inner')?.email, shared.user.email);
+    assert.ok(before.rows.some((row) => row.lastName === 'Gone'));
+
+    // Withdraw the email opt-in, soft-delete one member and make another an administrator: the cached
+    // page structure is still valid for the same filters, but none of this may be served stale.
+    await sql`update idoc.profiles set directory_email_opt_in = false where user_id = ${shared.user.id}`;
+    await sql`update idoc.users set deleted_at = now() where id = ${suspended.user.id}`;
+    const after = await asMember(searcher.id, () => listMemberDirectory(filters), '192.0.2.202');
+    assert.equal(after.rows.find((row) => row.lastName === 'Inner')?.email, null);
+    assert.ok(!after.rows.some((row) => row.lastName === 'Gone'));
+    assert.ok(!JSON.stringify(after.rows).includes(shared.user.email));
+    assert.ok(after.rows.every((row) => !('profileId' in row)));
+  } finally {
+    useTestDailyCache(false);
+  }
+});
+
+test('paid directory: a text search for an email is never answered from the cache after the owner opts out', async () => {
+  useTestDailyCache(true);
+  try {
+    const searcher = (await entitledMemberIn('FR', [stewardRole], { firstName: 'Mail', lastName: 'Searcher' })).user;
+    const owner = await entitledMemberIn('FR', [judgeRole], { firstName: 'Mail', lastName: 'Owner' }, { directoryEmailOptIn: true });
+    const found = await asMember(searcher.id, () => listMemberDirectory({ q: owner.user.email }), '192.0.2.203');
+    assert.equal(found.rows.length, 1);
+    await sql`update idoc.profiles set directory_email_opt_in = false where user_id = ${owner.user.id}`;
+    const gone = await asMember(searcher.id, () => listMemberDirectory({ q: owner.user.email }), '192.0.2.204');
+    assert.equal(gone.rows.length, 0);
+  } finally {
+    useTestDailyCache(false);
+  }
 });

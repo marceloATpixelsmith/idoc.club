@@ -18,11 +18,13 @@ import { closeHarness, createProfile, createUser, grantRole, resetIdoc, sql } fr
 
 const originalFetch = globalThis.fetch;
 const originalHold = process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING;
+const originalGitRef = process.env.VERCEL_GIT_COMMIT_REF;
 let providerCalls = 0;
 beforeEach(async () => {
   process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
   (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
   process.env.VERCEL_ENV = 'development';
+  delete process.env.VERCEL_GIT_COMMIT_REF;
   process.env.STRIPE_SECRET_KEY = `sk_test_${'a'.repeat(24)}`;
   process.env.BREVO_API_KEY = 'test-only-provider-key';
   process.env.BREVO_FROM_EMAIL = 'accounts@example.test';
@@ -34,6 +36,7 @@ after(async () => {
   globalThis.fetch = originalFetch;
   if (originalHold === undefined) delete process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING;
   else process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = originalHold;
+  if (originalGitRef === undefined) delete process.env.VERCEL_GIT_COMMIT_REF; else process.env.VERCEL_GIT_COMMIT_REF = originalGitRef;
   await closeHarness();
 });
 
@@ -46,6 +49,30 @@ for (const value of ['true', undefined, '', 'invalid', 'false']) {
     else { await assert.rejects(send, MemberLaunchHoldError); assert.equal(providerCalls, 0); }
   });
 }
+
+test('only explicit live-auth OTP sends to the disposable staging mailbox bypass the hold', async () => {
+  process.env.VERCEL_ENV = 'preview';
+  process.env.VERCEL_GIT_COMMIT_REF = 'staging';
+  await sendTransactionalEmail(
+    { html: '<p>synthetic OTP</p>', subject: 'Synthetic OTP', to: 'runner@pixelsmith.space' },
+    { allowLiveAuthE2eOtp: true },
+  );
+  assert.equal(providerCalls, 1);
+  await assert.rejects(
+    sendTransactionalEmail(
+      { html: '<p>synthetic</p>', subject: 'Synthetic', to: 'member@example.com' },
+      { allowLiveAuthE2eOtp: true },
+    ),
+    MemberLaunchHoldError,
+  );
+  await assert.rejects(
+    sendTransactionalEmail(
+      { html: '<p>synthetic</p>', subject: 'Synthetic', to: 'runner@pixelsmith.space' },
+    ),
+    MemberLaunchHoldError,
+  );
+  assert.equal(providerCalls, 1);
+});
 
 test('renewal scan suppresses communications while entitlement transitions continue', async () => {
   const user = await createUser();

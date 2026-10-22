@@ -20,9 +20,9 @@ export const metadata: Metadata = {
 export default async function SeminarsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
   const { tab, view } = await searchParams;
   const user = await getPublicUser();
-  // Available Seminars (the full published catalog) is always the landing view, whether or not a
-  // visitor is signed in. "My Seminars" is an explicit second tab, reachable only by a logged-in
-  // member -- a signed-out visitor sees no tabs at all, just the catalog.
+  // Available Seminars is the default view; Past Seminars is a published archive for all
+  // visitors, while My Seminars remains a member-only registration history.
+  const showPastSeminars = view === 'past';
   const showMySeminars = Boolean(user) && view === 'my';
 
   return (
@@ -43,17 +43,23 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
         intro="Education is at the heart of IDOC. Members receive priority information and registration details for every listed course."
       />
       <div className="mx-auto max-w-7xl px-5 pb-8 lg:px-8">
-        {user ? (
-          //ALIGN THE SECONDARY LEVEL WITH THE LEFT EDGE OF THE SEMINARS CONTENT AREA.
-          <div className="mt-10 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-9">
-            <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-2 sm:grid-cols-subgrid">
-              <Link
-                aria-current={!showMySeminars ? 'page' : undefined}
-                href="/seminars"
-                className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showMySeminars ? 'border-transparent text-muted-foreground hover:text-foreground' : 'border-gold text-foreground'}`}
-              >
-                Available Seminars/Courses
-              </Link>
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-[repeat(3,max-content)] sm:gap-x-9">
+          <nav aria-label="Seminars/Courses view" className="grid grid-cols-1 gap-x-9 border-b border-border sm:col-span-3 sm:grid-cols-subgrid">
+            <Link
+              aria-current={!showMySeminars && !showPastSeminars ? 'page' : undefined}
+              href="/seminars"
+              className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${!showMySeminars && !showPastSeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            >
+              Available Seminars/Courses
+            </Link>
+            <Link
+              aria-current={showPastSeminars ? 'page' : undefined}
+              href="/seminars?view=past"
+              className={`w-fit border-b-[3px] pb-4 pt-1 text-sm font-semibold uppercase tracking-[0.11em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold ${showPastSeminars ? 'border-gold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            >
+              Past Seminars/Courses
+            </Link>
+            {user ? (
               <Link
                 aria-current={showMySeminars ? 'page' : undefined}
                 href="/seminars?view=my"
@@ -61,9 +67,11 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
               >
                 My Seminars/Courses
               </Link>
-            </nav>
-            {showMySeminars ? (
-              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-2">
+            ) : null}
+          </nav>
+        </div>
+        {showMySeminars ? (
+              <nav aria-label="Registration history" className="bg-surface/45 pb-3 pt-4 sm:col-span-3">
                 <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
                   <Link
                     aria-current={tab !== 'past' ? 'page' : undefined}
@@ -78,10 +86,12 @@ export default async function SeminarsPage({ searchParams }: { searchParams: Pro
                 </div>
               </nav>
             ) : null}
-          </div>
-        ) : null}
-        {user ? (
-          <MemberRegistrations tab={tab} view={showMySeminars ? 'my' : 'available'} />
+        {showMySeminars ? (
+          <MemberRegistrations tab={tab} view="my" />
+        ) : showPastSeminars ? (
+          <MemberRegistrations view="past" />
+        ) : user ? (
+          <MemberRegistrations view="available" />
         ) : (
           <PublicSeminarsCatalog />
         )}

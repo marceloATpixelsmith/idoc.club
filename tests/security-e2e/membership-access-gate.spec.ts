@@ -45,7 +45,7 @@ test('a signed-in member who has not paid sees only the payment page, and signin
   expect(post.status()).toBe(403);
 
   await page.getByRole('button', { name: /menu/i }).first().click();
-  await page.getByText('Sign out').click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect.poll(() => hasSession(page), { timeout: 15_000 }).toBe(false);
   await page.goto('/seminars');
   await expect(page).toHaveURL(/\/seminars$/);

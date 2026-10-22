@@ -64,6 +64,7 @@ export function buildMemberRows(
   member: PlannedMember,
   stripe: StripeSnapshot,
   forms: { normalizeEmail: (email: string) => string; emailDisplayForm: (email: string) => string },
+  today: string = new Date().toISOString().slice(0, 10),
 ): ImportMemberRows {
   const membership = member.membership;
   const supportedHash = member.hashFormat === 'phpass' || member.hashFormat === 'wp_bcrypt';
@@ -73,7 +74,13 @@ export function buildMemberRows(
   const recurringNow = storable !== null && ['active', 'trialing', 'past_due'].includes(storable.status);
   const cancelPending = recurringNow && storable.cancelAtPeriodEnd;
   const startsOn = membership.firstPaidOn ?? membership.lastPaidOn ?? member.registeredAt.slice(0, 10);
-  const validUntil = membership.paidThrough ?? membership.lastPaidOn ?? startsOn;
+  const legacyValidUntil = membership.paidThrough ?? membership.lastPaidOn ?? startsOn;
+  // Stripe is the newer record: a subscription that is live and paid (active or trialing) with a period ending later than the legacy
+  // paid-through date means the member is paid up to that date, however stale the legacy payment rows are (docs/03 section 12).
+  const paidFromStripe = storable !== null && ['active', 'trialing'].includes(storable.status) && storable.currentPeriodEnd >= today && storable.currentPeriodEnd > legacyValidUntil
+    && membership.status !== 'unknown';
+  const validUntil = paidFromStripe ? storable.currentPeriodEnd : legacyValidUntil;
+  const status = paidFromStripe && (membership.status === 'expired' || membership.status === 'grace') ? 'active' : membership.status === 'unknown' ? 'review_required' : membership.status;
   return {
     legacyUserId: member.legacyUserId,
     user: {
@@ -101,12 +108,13 @@ export function buildMemberRows(
       isTechnicalDelegate: role.isTechnicalDelegate ?? null,
     })),
     membership: {
-      status: membership.status === 'unknown' ? 'review_required' : membership.status,
+      status,
       startsOn, validUntil: validUntil < startsOn ? startsOn : validUntil,
-      graceEndsOn: membership.status === 'grace' && membership.paidThrough ? addDays(membership.paidThrough, GRACE_DAYS) : null,
+      graceEndsOn: status === 'grace' && membership.paidThrough ? addDays(membership.paidThrough, GRACE_DAYS) : null,
       // 'migration' is the source the account-activation foundation recognises (lib/membership/account-recovery.ts).
       membershipType: 'standard', source: 'migration',
-      notes: membership.status === 'unknown' ? 'Legacy import: a completed payment has no expiry date; confirm the paid-through date.' : null,
+      notes: membership.status === 'unknown' ? 'Legacy import: a completed payment has no expiry date; confirm the paid-through date.'
+        : paidFromStripe ? `Legacy import: paid-through taken from the live Stripe subscription (legacy payments ended ${legacyValidUntil}).` : null,
     },
     billingCustomerId: orNull(member.stripe.customerId),
     subscription: storable ? { externalSubscriptionId: storable.id, priceId: storable.priceId, status: storable.status, currentPeriodEnd: storable.currentPeriodEnd, cancelAtPeriodEnd: storable.cancelAtPeriodEnd } : null,

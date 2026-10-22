@@ -17,6 +17,18 @@ function AvailabilityTag({ availability }: { availability: keyof typeof AVAILABI
   return <span className="inline-block rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{AVAILABILITY_LABELS[availability]}</span>;
 }
 
+/** Hover/focus treatment for one seminar row, applied to its `<li>` so it spans the full row from
+ * horizontal rule to horizontal rule (including a row's cancel button area). It is the same effect the
+ * homepage news cards have (`card-midnight`): a gold border at 45% opacity and a 2px lift, eased over
+ * 0.3s, only while the row's card is hovered (or keyboard-focused, which gets the border without the
+ * lift) -- so the row reads as clickable. */
+export const SEMINAR_ROW_CLASS = 'outline outline-1 outline-transparent transition-[outline-color,translate] duration-300 ease-out has-[article:hover]:-translate-y-0.5 has-[article:hover]:outline-gold/45 has-[a:focus-visible]:outline-gold/45';
+/** The row lists extend 1rem past the content column on each side so the card's 1rem padding keeps the
+ * text aligned with the page while the hover band (and the rules) get a little breathing room. The list
+ * is exactly the compact column the homepage shows (37rem including that overhang, never the full page width), so a
+ * row lays its title, location, dates and FEI badge out exactly as it does there. */
+export const SEMINAR_LIST_CLASS = '-mx-4 w-[calc(100%+2rem)] max-w-[37rem] divide-y divide-border border-y border-border';
+
 /** Shared compact seminar card for the homepage and every public/member seminar listing. The
  * overlay link keeps the card navigable without nesting the independently clickable FEI link. */
 export function SeminarListingCard({ children, href, seminar }: {
@@ -24,7 +36,7 @@ export function SeminarListingCard({ children, href, seminar }: {
   seminar: { end_date: string; is_fei: boolean; location: string; start_date: string; title: string };
 }) {
   return (
-    <article className="relative inline-grid max-w-full gap-5 py-6 sm:grid-cols-[minmax(0,max-content)_auto] sm:items-center sm:gap-10">
+    <article className="relative grid max-w-full gap-5 px-4 py-6 sm:grid-cols-[minmax(0,max-content)_auto] sm:items-center sm:gap-10">
       <Link aria-label={`View ${seminar.title}`} className="absolute inset-0 z-10" href={href} />
       <div className="min-w-0">
         <h3 className="text-xl">{seminar.title}</h3>
@@ -47,11 +59,11 @@ export function SeminarListingCard({ children, href, seminar }: {
  * registration form lives -- the listing itself is just a scannable summary, not a form.
  */
 async function AvailableSeminars({ profileId }: { profileId: number }) {
-  const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(profileId), listPastPublishedSeminars()]);
+  const seminars = await listCurrentSeminarsForMember(profileId);
   //SHOW THE COMPLETE CATALOG; REGISTRATION STATUS CONTROLS ONLY THE REGISTER CTA ON DETAIL PAGES.
   const priceLine = (seminar: (typeof seminars)[number]) => money(seminar.member_price_cents);
   const row = (seminar: (typeof seminars)[number]) => (
-    <li key={seminar.id}>
+    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
         <p className="font-medium">{priceLine(seminar)}</p>
         <AvailabilityTag availability={seminar.availability} />
@@ -61,13 +73,23 @@ async function AvailableSeminars({ profileId }: { profileId: number }) {
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="section-label" id="available-seminars-heading">Available seminars/courses</h2>
-    {seminars.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
-    {pastSeminars.length ? (
-      <div className="mt-12">
-        <h3 className="section-label">Past seminars/courses</h3>
-        <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
-      </div>
-    ) : null}
+    {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
+  </section>;
+}
+
+async function PastSeminars() {
+  const seminars = await listPastPublishedSeminars();
+  const row = (seminar: { id: number; end_date: string; is_fei: boolean; location: string; start_date: string; title: string; member_price_cents: number }) => (
+    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
+      <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
+        <p className="font-medium">{money(seminar.member_price_cents)}</p>
+      </SeminarListingCard>
+    </li>
+  );
+
+  return <section className="mt-10" aria-labelledby="past-seminars-heading">
+    <h2 className="section-label" id="past-seminars-heading">Past seminars/courses</h2>
+    {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no past seminars/courses.</p>}
   </section>;
 }
 
@@ -84,31 +106,31 @@ async function MySeminars({ profileId, tab }: { profileId: number; tab?: string 
     const paymentStatus = (seminar.payment_status ?? 'unpaid') as PaymentStatus;
     const approvalStatus = (seminar.approval_status ?? 'confirmed') as ApprovalStatus;
     return (
-    <li key={seminar.id}>
+    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
         <p className="font-medium">{money(seminar.expected_amount_cents ?? seminar.member_price_cents)}</p>
         <p>Status: <strong>{registrationStatus === 'canceled' ? 'Canceled' : `${APPROVAL_STATUS_LABELS[approvalStatus]} / ${PAYMENT_STATUS_LABELS[paymentStatus]}`}</strong></p>
       </SeminarListingCard>
-      {!past && seminar.registration_status === 'registered' ? <div className="pb-6"><SeminarForm action={cancelSeminarRegistrationAction} buttonClassName="h-8 rounded-md border-dashed px-3 font-normal" buttonTableControl pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
+      {!past && seminar.registration_status === 'registered' ? <div className="px-4 pb-6"><SeminarForm action={cancelSeminarRegistrationAction} buttonClassName="h-8 rounded-md border-dashed px-3 font-normal" buttonTableControl pendingLabel="Canceling" submitLabel="Cancel registration"><input name="seminarId" type="hidden" value={seminar.id} /></SeminarForm></div> : null}
     </li>
     );
   };
 
   return <section aria-labelledby="my-registrations-heading">
     <div className="mt-8">
-      {registered.length ? <ul className="w-fit max-w-full divide-y divide-border border-y border-border">{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar/course registrations.' : 'You have no upcoming seminar/course registrations.'}</p>}
+      {registered.length ? <ul className={SEMINAR_LIST_CLASS}>{registered.map(row)}</ul> : <p className="text-muted-foreground">{past ? 'You have no past seminar/course registrations.' : 'You have no upcoming seminar/course registrations.'}</p>}
     </div>
   </section>;
 }
 
-/** The public seminar/course catalog for a signed-out visitor (or a signed-in account with no profile):
- * the same real, published data as AvailableSeminars, plus the "Past" archive. Each row links to the
+/** The public seminar/course catalog for a signed-out visitor (or a signed-in account with no profile).
+ * Past seminars are available through the separate Past Seminars/Courses tab. Each row links to the
  * detail page, which shows full details but offers no registration -- registering requires signing in
  * as an active member. */
 export async function PublicSeminarsCatalog() {
-  const [seminars, pastSeminars] = await Promise.all([listCurrentSeminarsForMember(null), listPastPublishedSeminars()]);
+  const seminars = await listCurrentSeminarsForMember(null);
   const row = (seminar: (typeof seminars)[number]) => (
-    <li key={seminar.id}>
+    <li className={SEMINAR_ROW_CLASS} key={seminar.id}>
       <SeminarListingCard href={`/seminars/${seminar.id}`} seminar={seminar}>
         <p className="font-medium">{money(seminar.member_price_cents)}</p>
         <AvailabilityTag availability={seminar.availability} />
@@ -118,17 +140,12 @@ export async function PublicSeminarsCatalog() {
 
   return <section className="mt-10" aria-labelledby="available-seminars-heading">
     <h2 className="section-label" id="available-seminars-heading">Available seminars/courses</h2>
-    {seminars.length ? <ul className="mt-6 w-fit max-w-full divide-y divide-border border-y border-border">{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
-    {pastSeminars.length ? (
-      <div className="mt-12">
-        <h3 className="section-label">Past seminars/courses</h3>
-        <ul className="mt-4 w-fit max-w-full divide-y divide-border border-y border-border">{pastSeminars.map(row)}</ul>
-      </div>
-    ) : null}
+    {seminars.length ? <ul className={`mt-6 ${SEMINAR_LIST_CLASS}`}>{seminars.map(row)}</ul> : <p className="mt-6 text-muted-foreground">There are no seminars/courses scheduled at this time.</p>}
   </section>;
 }
 
 export async function MemberRegistrations({ tab, view }: { tab?: string; view?: string }) {
+  if (view === 'past') return <PastSeminars />;
   const user = await getUser();
   if (!user) return null;
 

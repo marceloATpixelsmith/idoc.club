@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 73, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0078, still apply once');
+    assert.equal(count, 77, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0082, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -356,7 +356,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0078_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0082_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
@@ -376,6 +376,12 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.reconciliation_ignores'] = currentSnapshot.tables['idoc.reconciliation_ignores'];
   // Migration 0077 removed the unused missing_refund reconciliation type from the kind constraint.
   expectedSchema['idoc.reconciliation_findings'] = currentSnapshot.tables['idoc.reconciliation_findings'];
+  // Migration 0079 added the marketing-preference sync columns to the onboarding consent record.
+  expectedSchema['idoc.onboarding_consents'] = currentSnapshot.tables['idoc.onboarding_consents'];
+  // Migration 0080 added the performance indexes to payments, memberships and professional_roles (payments is already substituted above).
+  expectedSchema['idoc.memberships'] = currentSnapshot.tables['idoc.memberships'];
+  expectedSchema['idoc.professional_roles'] = currentSnapshot.tables['idoc.professional_roles'];
+  // Migration 0081 added the member directory's trigram search indexes to profiles and users (both already substituted above).
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
@@ -402,6 +408,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     order by ordinal_position`;
   assert.deepEqual(consentColumns.map(({ column_name }) => column_name), [
     'profile_id', 'terms_accepted_at', 'privacy_accepted_at', 'keep_updated_opt_in', 'created_at',
+    'keep_updated_changed_at', 'keep_updated_pending_at', 'keep_updated_source',
   ]);
 
   for (const [qualifiedName, expectedTable] of Object.entries<any>(expectedSchema)) {
@@ -471,7 +478,8 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     const indexes = await sql<any[]>`
       select i.relname as name, x.indisunique as unique, x.indisprimary as primary,
         pg_get_expr(x.indpred,x.indrelid) as predicate,
-        array(select pg_get_indexdef(x.indexrelid,k,true) from generate_series(1,x.indnkeyatts) k) as expressions
+        array(select pg_get_indexdef(x.indexrelid,k,true) from generate_series(1,x.indnkeyatts) k) as expressions,
+        array(select o.opcname::text from generate_series(0,x.indnkeyatts-1) k join pg_opclass o on o.oid=x.indclass[k]) as opclasses
       from pg_index x join pg_class t on t.oid=x.indrelid join pg_namespace n on n.oid=t.relnamespace join pg_class i on i.oid=x.indexrelid
       where n.nspname='idoc' and t.relname=${tableName} order by i.relname`;
     const expectedIndexNames = new Set([
@@ -485,7 +493,13 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
       const actual = indexes.find(({ name }) => name === expected.name);
       assert.equal(actual.unique, expected.isUnique, `${qualifiedName}.${expected.name} uniqueness`);
       assert.equal(normalizeSql(actual.predicate), normalizeSql(expected.where ?? null), `${qualifiedName}.${expected.name} predicate`);
-      assert.deepEqual(actual.expressions.map(normalizeSql), expected.columns.map(({ expression }: any) => normalizeSql(expression)), `${qualifiedName}.${expected.name} keys/expressions`);
+      // The catalog reports a key's operator class separately from its expression, so the snapshot's
+      // trailing `gin_trgm_ops` is compared against the index's actual operator class instead.
+      const trigramSuffix = /\s+gin_trgm_ops$/;
+      assert.deepEqual(actual.expressions.map(normalizeSql), expected.columns.map(({ expression }: any) => normalizeSql(String(expression).replace(trigramSuffix, ''))), `${qualifiedName}.${expected.name} keys/expressions`);
+      expected.columns.forEach(({ expression }: any, position: number) => {
+        if (trigramSuffix.test(String(expression))) assert.equal(actual.opclasses[position], 'gin_trgm_ops', `${qualifiedName}.${expected.name} operator class`);
+      });
     }
   }
 

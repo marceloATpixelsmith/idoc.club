@@ -2,6 +2,7 @@
 
 import { updateAccount } from '@/app/(login)/actions';
 import { getOwnPrivateMember, updateMemberProfile } from '@/lib/membership/data-access';
+import { changeMarketingPreference, type ChangeMarketingPreferenceResult } from '@/lib/membership/marketing-preference';
 import { memberProfileSchema, parseMemberProfileFormData } from '@/lib/membership/validation';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
@@ -25,6 +26,33 @@ async function saveOwnMemberProfile(input: unknown) {
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') return { error: 'Review the highlighted profile fields.' };
     return { error: 'The profile could not be updated safely.' };
+  }
+}
+
+function marketingNotice(result: ChangeMarketingPreferenceResult): string {
+  switch (result.status) {
+    case 'pending': return ' Check your email and click the confirmation link to start receiving IDOC updates.';
+    case 'cleaned': return ' Email updates could not be turned on because messages to your address have permanently failed; update your email address or contact support.';
+    case 'blocked': case 'failed': case 'unavailable': return ' Email updates could not be turned on right now; please try again later.';
+    case 'opted_out': return result.synced ? '' : ' Email updates are off, but our email provider could not be reached yet; you can also use the unsubscribe link in any update email.';
+    default: return '';
+  }
+}
+
+/** Applies the "Keep me updated by email" toggle after the profile itself has saved. Isolated from the
+ * profile save: a Mailchimp problem never fails or rolls back the profile/account update, it only
+ * adds a notice. Transactional email never depends on this choice (docs/19). */
+async function saveOwnMarketingChoice(formData: FormData, member: NonNullable<Awaited<ReturnType<typeof getOwnPrivateMember>>>): Promise<string> {
+  if (formData.get('keepUpdatedPresent') !== '1' || !member.marketing) return '';
+  try {
+    return marketingNotice(await changeMarketingPreference({
+      actorId: member.profile.userId,
+      desired: formData.get('keepUpdated') === '1',
+      profileId: member.profile.id,
+      source: 'member',
+    }));
+  } catch {
+    return ' Email updates could not be changed right now; please try again later.';
   }
 }
 
@@ -55,7 +83,8 @@ export async function saveOwnAccountAndProfileForm(_state: StepUpActionState, fo
   if (profileResult.error) return profileResult;
   // The login email itself does not change until the member follows that link -- never replace
   // this instruction with a generic "updated" message that could read as already complete.
+  const marketingNote = await saveOwnMarketingChoice(formData, member);
   return accountResult.success === EMAIL_VERIFICATION_PENDING_MESSAGE
-    ? { success: 'Your profile was updated. Check your new email address to verify the change.' }
-    : { success: 'Your account and profile were updated.' };
+    ? { success: `Your profile was updated. Check your new email address to verify the change.${marketingNote}` }
+    : { success: `Your account and profile were updated.${marketingNote}` };
 }

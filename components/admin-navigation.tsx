@@ -7,6 +7,7 @@ import {
   Building2,
   ClipboardList,
   FileDown,
+  GitBranch,
   GraduationCap,
   Headphones,
   LayoutDashboard,
@@ -38,6 +39,7 @@ const SHARED_ITEMS = [
 const SUPER_ADMIN_ITEMS = [
   { href: '/admin/operations/data-promotion', icon: ArrowUpFromLine, label: 'Data promotion' },
   { href: '/admin/operations/backups', icon: DatabaseBackup, label: 'Backups & restore' },
+  { href: '/admin/operations/github-operations', icon: GitBranch, label: 'Manual GitHub Operations' },
   { href: '/admin/operations/switchover', icon: ShieldCheck, label: 'Production switchover' },
   { href: '/admin/operations/event-replay', icon: WalletCards, label: 'Replay Stripe events' },
   { href: '/admin/operations/legacy-import', icon: FileDown, label: 'Legacy import (temporary)' },

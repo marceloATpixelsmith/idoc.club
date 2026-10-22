@@ -41,7 +41,7 @@ const newsAccessFilter = multiToken(NEWS_AUDIENCES, 200).refine((value) => {
 const schemas = {
   memberships: z.object({
     columns: columns(['name', 'email', 'type', 'officialStatus', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions']),
-    country: multiToken(ISO_COUNTRY_CODES, 1000), direction, expiresFrom: date, expiresTo: date, federation: multiToken(ISO_COUNTRY_CODES, 1000), filters: text(4000),
+    direction, expiresFrom: date, expiresTo: date, federation: multiToken(ISO_COUNTRY_CODES, 1000), filters: text(4000),
     // 'membershipType' is a legacy key accepted for preferences saved before the membership-type
     // filter was keyed by column id; current code always writes 'type' (see members-table.tsx).
     membershipType: multiToken(MEMBERSHIP_TYPE_OPTIONS, 100),
@@ -89,8 +89,21 @@ function normalizeLegacyNewsPreferences(value: Record<string, unknown>): Record<
   };
 }
 
+function normalizeLegacyMembershipPreferences(value: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...value };
+  delete normalized.country;
+  if (typeof normalized.filters === 'string') {
+    try {
+      const filters: unknown = JSON.parse(normalized.filters);
+      if (Array.isArray(filters)) normalized.filters = JSON.stringify(filters.filter((filter) => !filter || typeof filter !== 'object' || filter.id !== 'country'));
+    } catch { /* Invalid legacy filters remain ignored by the member-list query. */ }
+  }
+  return normalized;
+}
 export function validateTablePreferences(table: AdminTableIdentifier, value: unknown): TablePreferenceState | null {
-  const parsed = schemas[table].safeParse(value);
+  const candidate = table === 'memberships' && value && typeof value === 'object' && !Array.isArray(value)
+    ? normalizeLegacyMembershipPreferences(value as Record<string, unknown>) : value;
+  const parsed = schemas[table].safeParse(candidate);
   if (!parsed.success) return null;
   const parsedData = parsed.data as Record<string, unknown>;
   const normalized = table === 'news' ? normalizeLegacyNewsPreferences(parsedData) : parsedData;

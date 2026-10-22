@@ -250,11 +250,11 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 ## Super Admin backup and restore-drill tool
 
-**Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) runs a **restore drill**, and (3) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
+**Scope of the first release.** A Super Admin page at `/admin/operations/backups` that (1) shows backup history and health, (2) starts an **on-demand backup** (the same workflow as the nightly run, dispatched on `main`; audited, step-up protected, refused while one is queued or running), (3) runs a **restore drill**, and (4) provides a **maintenance-mode switch**. Replacing a live schema from the web app is **not** in this release; it stays the operator procedure in Part 9 until the drill has been proven repeatedly.
 
 **One-person operation.** IDOC has a single operator, so no second approver is required. The controls are instead: Super Admin role, fresh privileged TOTP step-up for every action, an explicit confirmation, an immutable audit row, and the existing GitHub environment protections.
 
-**Credential boundary (unchanged).** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with only *Actions: read and write*, used to start the drill workflow and read its result. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
+**Credential boundary.** The web app never holds R2 keys, the backup passphrase, a database owner login or a restore login. It holds one new server-only secret, `GITHUB_BACKUP_TOOL_TOKEN`: a fine-grained GitHub token limited to this repository with *Actions: read and write* and *Pull requests: read and write*, used to start the backup, restore-drill, staging-migration and live-auth workflows and read their results. Set it only on the deployments that show the page, never `NEXT_PUBLIC_`, and rotate it before its expiry.
 
 **How a drill works.**
 1. The Super Admin presses *Run restore drill* (choose the latest backup or a listed one), passes TOTP, confirms. The app records an audit row and dispatches the `IDOC Restore Drill` workflow on `main`.
@@ -268,13 +268,46 @@ In the scratch window: `"$PGBIN/pg_ctl" -D scratch-data stop`, then close the wi
 
 **One-time setup.**
 1. Merge the pull request that adds the tool, then run **IDOC R2 Schema Backups** once from the Actions tab (on `main`) so a backup with a manifest exists. Older backups have no manifest and cannot be drilled.
-2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** only (Metadata read is added automatically; fine-grained tokens have no Checks permission, and the repository is public so workflow annotations are readable), expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
+2. Create a GitHub fine-grained personal access token: resource owner = the repository owner, repository access = **only** `idoc.club`, permissions = **Actions: Read and write** and **Pull requests: Read and write** (Metadata read is added automatically; the repository is public so workflow annotations are readable), expiry = at most 1 year (put the expiry in your calendar). Store it only in Vercel.
 3. In Vercel add `GITHUB_BACKUP_TOOL_TOKEN` (Sensitive, server-only) for **Production** and for **Preview scoped to the `staging` branch**; redeploy. Optional `GITHUB_BACKUP_TOOL_REPOSITORY` (default `marceloATpixelsmith/idoc.club`).
 4. Migration `0074_maintenance_mode` must be applied (staging applies itself; Production uses the reviewer-approved workflow).
+
+**Caching.** To keep the page fast, the application keeps GitHub's run lists for 30 seconds per server instance (starting a backup or a restore drill clears them at once) and keeps a finished run's manifest or result for the life of the instance. A run that has just finished can therefore take up to 30 seconds to appear; reload the page after that.
 
 **Reading a result.** The Backups page shows **PASS** only when the workflow finished, the downloaded file's SHA-256 matched the manifest, every manifest table was restored, and every table's restored row count equalled the count recorded in the same snapshot as the dump. Anything else is **FAIL** with the reason, and the "workflow log" link opens the GitHub run. The same result is the `idoc-restore-result` annotation on the run, and each request is recorded in the audit log (`admin.restore_drill.requested`).
 
 **Not in this release:** live schema restore from the web app, backup deletion, and any R2 access from the application.
+
+
+## Super Admin Manual GitHub Operations
+
+The Super Admin **Manual GitHub Operations** page appears below **Backups & restore**. It provides **Promote Staging to Production** and **Run Live Authentication Tests**. Both use Super Admin authorization, CSRF, fresh TOTP, an audit record and duplicate-request protection, backed by the server-only `GITHUB_BACKUP_TOOL_TOKEN`.
+
+### Monitored production promotion
+
+The Super Admin must complete the required staging acceptance and migration rehearsal in `docs/07-administrator-and-operations-runbook.md` before initiating this operation. The button provides explicit authorization to begin that promotion; it is **not** authorization to bypass code review, protected environments or CI checks.
+
+1. Press **Start Monitored Promotion**. The app creates or reuses an ordinary `staging` → `main` PR and dispatches `.github/workflows/monitored-production-promotion.yml` with its PR number and exact staging SHA.
+2. GitHub Actions uses the protected `production-promotion` environment. Configure environment reviewers/protection if a separate human authorization gate is required. The workflow waits for required PR checks and review resolution; an outdated, conflicting, changed or held PR fails closed.
+3. Once GitHub reports the PR clean and the workflow checks are successful, the workflow makes a **merge commit** into `main`; branch rulesets continue to apply. The workflow never pushes directly to `main`.
+4. The workflow waits for GitHub's Vercel status on the exact merged commit, checks that it points to the expected IDOC Vercel project, and then calls the configured production health endpoint. Success requires all four phases; a failed stage remains visible in GitHub Actions and on the Super Admin page.
+5. The Super Admin page displays the recent workflow run and each stage's state and provides direct log links. It refreshes every 15 seconds while promotion is active, and the run continues in GitHub after the browser closes.
+
+**Bootstrap requirement:** GitHub can dispatch a workflow only once its YAML file exists on the repository's default branch, `main`. First merge this feature into `staging`, verify it there, then make a one-time *manual*, reviewed promotion into `main` using the existing GitHub PR process. Only afterward can the new monitored-promotion button initiate the workflow. That bootstrap promotion must follow the existing `docs/07` gates.
+
+**GitHub configuration:**
+
+- Ensure the existing `GITHUB_BACKUP_TOOL_TOKEN` in Vercel has Actions read/write and Pull requests read/write permissions for `marceloATpixelsmith/idoc.club`. No new Vercel environment-variable name is needed.
+- In GitHub repository **Settings → Secrets and variables → Actions → Variables**, add `PRODUCTION_HEALTH_URL` with `https://redesign.idoc.club/api/health` while redesign is the Production domain, or `https://idoc.club/api/health` after the public cutover. This is a repository **variable**, not a secret.
+- In GitHub repository **Settings → Environments**, review `production-promotion`. Set appropriate required reviewers and any other protective restrictions. The workflow's `GITHUB_TOKEN` must be permitted by the repository ruleset to merge a clean promotion PR; it must not receive a ruleset bypass.
+- The workflow validates GitHub's Vercel commit status and performs an HTTPS health check; no extra Vercel API token is needed. Success confirms deployment and a responding health endpoint, **not** the absence of all potential runtime errors throughout the site. Review Sentry and New Relic separately for post-deploy incident detection.
+
+If PR verification fails, no merge occurs. If deployment or health verification fails **after merging**, production may already have changed; investigate the specific failed stage and use the documented rollback process. Do not assume a failed post-merge check automatically rolls back Production. Staging deployment acceptance remains a separate prerequisite.
+
+### Live authentication tests
+
+**Run Live Authentication Tests** dispatches `live-auth-staging.yml` on `staging`. The resulting matrix, browser screenshots and traces remain in GitHub Actions artifacts. The workflow must be on the default branch before it can be manually dispatched.
+
 
 ## Known pre-existing blocker
 

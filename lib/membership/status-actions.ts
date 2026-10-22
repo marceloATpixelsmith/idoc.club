@@ -2,8 +2,8 @@ import 'server-only';
 
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { auditLog, memberships, profiles, users } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { auditLog, memberships, notificationOutbox, profiles, users } from '@/lib/db/schema';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { requireAccountAccess } from './data-access';
 import { requireAdministrator } from './authorization';
 import { lockLatestMembership } from './locking';
@@ -16,6 +16,12 @@ const REINSTATABLE_STATUSES = ['active', 'grace', 'complimentary'] as const;
 // has a Stripe-cancellation safety net this generic correction tool doesn't. Letting 'suspended'
 // through here would split the audit taxonomy across two action names for the same transition.
 const CORRECTABLE_STATUSES = ['active', 'grace', 'expired', 'canceled', 'complimentary', 'review_required'] as const;
+
+/** Renewal, expiry and grace notices describe a lapse that a reactivation has just undone; any not yet sent are retired, never delivered. */
+const LAPSE_NOTICE_KINDS = [
+  'membership.renewal_reminder', 'membership.expiration_reminder', 'membership.payment_failed', 'membership.grace_reminder', 'membership.grace_expired',
+];
+export const SUPERSEDED_NOTICE_CODE = 'superseded_by_reactivation';
 
 const reasonSchema = z.string().trim().min(1, 'A reason is required').max(1000);
 
@@ -139,7 +145,9 @@ const extendExpirationSchema = z.object({
 });
 
 /** Extends an entitlement without touching payment or Stripe records. An equal date is a safe,
- * idempotent retry; a shorter date must use the broader correction workflow. */
+ * idempotent retry; a shorter date must use the broader correction workflow. A lapsed membership (stored status expired or grace)
+ * whose new date is today or later becomes active again, as a payment would make it; suspended, canceled and review-required
+ * memberships keep their status. */
 export async function extendMembershipExpiration(profileId: number, untrustedInput: unknown) {
   const input = extendExpirationSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
@@ -148,12 +156,21 @@ export async function extendMembershipExpiration(profileId: number, untrustedInp
     const current = await lockLatestMembership(tx, profileId);
     if (!current) throw new Error('Member has no membership on file to extend.');
     if (input.validUntil < current.validUntil) throw new Error('An expiration extension cannot shorten the current paid-through date.');
-    if (input.validUntil === current.validUntil) return { membership: current, unchanged: true };
-    const [updated] = await tx.update(memberships).set({ updatedAt: new Date(), validUntil: input.validUntil })
-      .where(eq(memberships.id, current.id)).returning();
+    const today = new Date().toISOString().slice(0, 10);
+    const reactivate = (current.status === 'expired' || current.status === 'grace') && input.validUntil >= today;
+    if (input.validUntil === current.validUntil && !reactivate) return { membership: current, unchanged: true };
+    const [updated] = await tx.update(memberships).set({
+      updatedAt: new Date(), validUntil: input.validUntil, ...(reactivate ? { status: 'active', graceEndsOn: null } : {}),
+    }).where(eq(memberships.id, current.id)).returning();
+    if (reactivate) {
+      // The same transaction retires the member's unsent lapse notices (dead-lettered with a distinct code, as the launch hold does),
+      // so a notice queued before this extension can never tell a reactivated member that their grace is ending or they have expired.
+      await tx.update(notificationOutbox).set({ deadLetteredAt: new Date(), lastErrorCode: SUPERSEDED_NOTICE_CODE })
+        .where(and(eq(notificationOutbox.profileId, profileId), inArray(notificationOutbox.kind, LAPSE_NOTICE_KINDS), isNull(notificationOutbox.sentAt), isNull(notificationOutbox.deadLetteredAt)));
+    }
     await tx.insert(auditLog).values({
       action: 'admin.membership.expiration_extended', actorId: actor.id,
-      afterJson: { validUntil: updated.validUntil }, beforeJson: { validUntil: current.validUntil },
+      afterJson: { validUntil: updated.validUntil, status: updated.status }, beforeJson: { validUntil: current.validUntil, status: current.status },
       entityId: String(profileId), entityType: 'profile', reason: input.reason,
     });
     return { membership: updated, unchanged: false };

@@ -1,13 +1,5 @@
-/** Fail-closed guard for operator scripts that intentionally target the real staging database.
- *
- * This is deliberately separate from validateTestDatabaseUrl (lib/db/test-database-url.ts), which
- * exists for the opposite case -- an ephemeral, throwaway CI database -- and explicitly REJECTS any
- * URL naming a Render host. Staging is a real, persistent Render Postgres instance, and it
- * deliberately shares the same database as production (docs/07-administrator-and-operations-runbook.md
- * "Branch, environment, and deployment workflow"), so STAGING_POSTGRES_URL and POSTGRES_URL are
- * expected to be identical -- that is not a mistake to guard against. The reliable boundary here is
- * the operator's own explicit confirmation, plus requiring a well-formed, explicitly-supplied URL.
- */
+/** Fail-closed guard for live-auth tooling. The Render database instance is shared, but staging
+ * and production are isolated by schema and application role. */
 export function validateStagingDatabaseUrl(value: string | undefined, confirmed: boolean): URL {
   if (!confirmed) {
     throw new Error(
@@ -26,6 +18,30 @@ export function validateStagingDatabaseUrl(value: string | undefined, confirmed:
   }
   if (!['postgres:', 'postgresql:'].includes(candidate.protocol) || !candidate.hostname || !candidate.username) {
     throw new Error('STAGING_POSTGRES_URL must be a complete PostgreSQL URL.');
+  }
+  if (candidate.username !== 'idoc_staging_app' || candidate.pathname !== '/ayni_space') {
+    throw new Error('STAGING_POSTGRES_URL must use the idoc_staging_app role and ayni_space database.');
+  }
+  const optionValues = candidate.searchParams.getAll('options');
+  const options = optionValues.join(' ');
+  const searchPath = /(?:^|\s)-c\s*search_path=([^\s]+)/.exec(options)?.[1];
+  if (searchPath && searchPath !== 'idoc_staging') {
+    throw new Error('STAGING_POSTGRES_URL must not override the idoc_staging search path.');
+  }
+  if (!searchPath) {
+    // Vercel's staging URL is scoped to idoc_staging_app; add the schema path explicitly for CI.
+    candidate.searchParams.delete('options');
+    candidate.searchParams.set('options', [options, '-c search_path=idoc_staging'].filter(Boolean).join(' '));
+  }
+
+  const sslModes = candidate.searchParams.getAll('sslmode').map((mode) => mode.toLowerCase());
+  const secureSslModes = new Set(['require', 'verify-ca', 'verify-full']);
+  if (sslModes.some((mode) => !secureSslModes.has(mode)) || new Set(sslModes).size > 1) {
+    throw new Error('STAGING_POSTGRES_URL must use a secure and unambiguous sslmode.');
+  }
+  if (sslModes.length === 0) {
+    // Render requires TLS; postgres.js does not inherit the application's separate connection helper.
+    candidate.searchParams.set('sslmode', 'require');
   }
 
   return candidate;

@@ -16,7 +16,9 @@ function makeCatalog() {
     if (c.ci.tests.length) s += " — " + c.ci.tests.map((x) => "`" + x + "`").join(", ");
     if (c.ci.rationale) s += " — " + c.ci.rationale;
     s += "\n";
-    s += "- **Live:** " + (c.live.enabled ? "required" : "not applicable") + "; email=" + (c.live.requiresEmail ? "yes" : "no") + "; admin=" + (c.live.requiresAdmin ? "yes" : "no") + "; destructive=" + (c.live.destructive ? "yes" : "no") + "\n\n";
+    s += "- **Live:** " + (c.live.enabled ? "required" : "not applicable") + "; email=" + (c.live.requiresEmail ? "yes" : "no") + "; admin=" + (c.live.requiresAdmin ? "yes" : "no") + "; destructive=" + (c.live.destructive ? "yes" : "no") + "\n";
+    if (c.live.automation) s += "- **Automation:** " + c.live.automation.mode + " — " + c.live.automation.reason + "\n";
+    s += "\n";
     if (c.live.preconditions.length) s += "### Preconditions\n" + c.live.preconditions.map((x) => "- " + x).join("\n") + "\n\n";
     if (c.live.steps.length) s += "### Steps\n" + c.live.steps.map((x, i) => String(i + 1) + ". " + x).join("\n") + "\n\n";
     s += "### PASS\n" + c.live.pass.map((x) => "- " + x).join("\n") + "\n\n";
@@ -28,7 +30,7 @@ function makeCatalog() {
 }
 
 function makeCoverage() {
-  const rows = manifest.cases.map((c) => "| " + c.id + " | " + c.title.replaceAll("|", "/") + " | " + c.ci.coverage + " | " + (c.live.enabled ? "required" : "N/A") + " | " + c.canonicalControls.join(", ") + " |");
+  const rows = manifest.cases.map((c) => "| " + c.id + " | " + c.title.replaceAll("|", "/") + " | " + c.ci.coverage + " | " + (c.live.enabled ? (c.live.automation?.mode === "manual-only" ? "manual only" : "required") : "N/A") + " | " + c.canonicalControls.join(", ") + " |");
   const mapped = manifest.cases.filter((c) => c.ci.coverage === "mapped").length;
   const gaps = manifest.cases.filter((c) => c.ci.coverage === "gap").length;
   const na = manifest.cases.filter((c) => c.ci.coverage === "na").length;

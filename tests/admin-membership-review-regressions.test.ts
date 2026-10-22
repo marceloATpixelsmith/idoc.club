@@ -50,9 +50,9 @@ test('a scalar filter (page, q, sort, expiresFrom/To) resolves an array-valued (
   }
 });
 
-test('a multi-select filter (country, federation, region, membershipType, status) collapses both a repeated-key array and a comma-joined single value into a deduped token list, matching any of them', () => {
+test('the remaining multi-select membership filters collapse repeated-key arrays and comma-joined values into deduped token lists', () => {
   assert.match(memberQueries, /function allValues\(value: RawFilterValue\): string\[\] \{/);
-  for (const field of ['country', 'federation', 'membershipType', 'region', 'status', 'type']) {
+  for (const field of ['federation', 'membershipType', 'region', 'status', 'type']) {
     assert.match(memberQueries, new RegExp(`allValues\\(input\\.${field}\\)`));
   }
 });

@@ -1,17 +1,16 @@
 'use client';
 
 import type { ColumnDef, ColumnFiltersState, HeaderContext } from '@tanstack/react-table';
-import { Mail } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CountryFlag } from '@/components/ui/country-flag';
+import { readCsrfTokenFromDocumentCookie } from '@/lib/security/csrf-client';
 import { useDataTable, type DataTableLiveState } from '@/hooks/use-data-table';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { countryNameForCode, COUNTRY_OPTIONS } from '@/lib/membership/countries';
@@ -54,25 +53,48 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   rows: DirectoryMemberRow[];
   total: number;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [search, setSearch] = useState(Array.isArray(filters.q) ? '' : filters.q ?? '');
   const searchRef = useRef(search);
   const [isPending, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState(false);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const lastRequestedView = useRef<string | null>(null);
 
+  // Saves the view to a cookie and refetches via a same-URL router.refresh() -- deliberately never
+  // writes search, filters, sort or page to the URL.
   function navigate(state: DataTableLiveState, query = searchRef.current) {
-    const params = new URLSearchParams({ tab: 'directory' });
-    if (query.trim()) params.set('q', query.trim());
-    const membershipType = filterToken(state.columnFilters, 'type');
-    const federation = filterToken(state.columnFilters, 'federation');
-    const region = filterToken(state.columnFilters, 'region');
-    if (membershipType) params.set('membershipType', membershipType);
-    if (federation) params.set('federation', federation);
-    if (region) params.set('region', region);
-    if (state.pagination.pageIndex > 0) params.set('page', String(state.pagination.pageIndex + 1));
-    if (state.pagination.pageSize !== 25) params.set('pageSize', String(state.pagination.pageSize));
-    if (state.sorting.length) params.set('sort', JSON.stringify(state.sorting));
-    startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
+    const view = {
+      federation: filterToken(state.columnFilters, 'federation'),
+      membershipType: filterToken(state.columnFilters, 'type'),
+      page: state.pagination.pageIndex + 1,
+      pageSize: state.pagination.pageSize,
+      q: query.trim() || undefined,
+      region: filterToken(state.columnFilters, 'region'),
+      sort: state.sorting.length ? JSON.stringify(state.sorting) : undefined,
+    };
+    // The table can report one user action more than once (e.g. React re-running a state updater).
+    // Every save ends in a directory search, which is rate-limited per account, so an identical
+    // repeat of the last requested view is dropped rather than saved and refetched again.
+    const body = JSON.stringify(view);
+    if (body === lastRequestedView.current) return;
+    lastRequestedView.current = body;
+    // Saves are chained so an older request can never land after (and overwrite) a newer one. The
+    // table refreshes only after a successful save; a failure keeps the member's current controls.
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        const response = await fetch('/api/directory/view', {
+          body, credentials: 'same-origin', method: 'PUT',
+          headers: { 'content-type': 'application/json', 'x-idoc-csrf': readCsrfTokenFromDocumentCookie() },
+        });
+        if (!response.ok) throw new Error('save failed');
+        setSaveError(false);
+        startTransition(() => router.refresh());
+      } catch {
+        lastRequestedView.current = null;
+        setSaveError(true);
+      }
+    });
   }
 
   const { table } = useDataTable({
@@ -109,19 +131,12 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
       },
       {
         id: 'email', accessorKey: 'email', header: header('Email'), meta: { label: 'Email' },
-        cell: ({ row }) => row.original.email ? <a className="underline underline-offset-4" href={`mailto:${row.original.email}`}>{row.original.email}</a> : '—',
-      },
-      {
-        id: 'actions', enableHiding: false, enableSorting: false, size: 80,
-        header: () => <span>CONTACT</span>,
-        cell: ({ row }) => row.original.email ? <Button asChild aria-label={`Email ${row.original.firstName} ${row.original.lastName}`} title="Email member" variant="ghost" size="icon" className="size-8">
-          <a href={`mailto:${row.original.email}`}><Mail aria-hidden="true" /></a>
-        </Button> : null,
+        cell: ({ row }) => row.original.email ? <a className="font-bold no-underline transition-colors hover:text-gold focus-visible:text-gold" href={`mailto:${row.original.email}`}>{row.original.email}</a> : '—',
       },
     ], []),
     data: rows,
     initialState: {
-      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email', 'actions'],
+      columnOrder: ['firstName', 'lastName', 'type', 'region', 'federation', 'email'],
       columnFilters: initialFilterState(filters),
       pagination: { pageIndex: filters.page - 1, pageSize },
       sorting: filters.sort as { id: keyof DirectoryMemberRow; desc: boolean }[],
@@ -168,6 +183,7 @@ export function MemberDirectoryTable({ filters, pageSize, rows, total }: {
   const hasFilters = table.getState().columnFilters.length > 0;
   const hasSearch = Boolean(search.trim());
   return <>
+    {saveError ? <p className="mt-5 text-sm text-destructive" role="alert">Your search could not be saved. Please try again.</p> : null}
     <DataTableToolbar
       className="mt-5 rounded-xl border bg-background p-3"
       table={table}
