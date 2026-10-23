@@ -46,7 +46,13 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
   const counts = Object.fromEntries(['pass','partial','fail','blocked','not-applicable'].map(status => [status, results.filter(item => item.status === status).length]));
   const executed = results.filter(item => item.status === 'pass' || item.status === 'partial' || item.status === 'fail');
   const unexecuted = results.filter(item => item.status === 'blocked' || item.status === 'not-applicable');
-  const incomplete = (counts.partial ?? 0) + (counts.blocked ?? 0) > 0;
+  const applicable = results.filter(item => item.status !== 'not-applicable').length;
+  const fullyPassed = counts.pass ?? 0;
+  const failed = counts.fail ?? 0;
+  const missing = (counts.partial ?? 0) + (counts.blocked ?? 0);
+  const verified = run.status === 'success' && applicable > 0 && failed === 0 && missing === 0 && fullyPassed === applicable;
+  const verdict = verified ? 'AUTHENTICATION VERIFIED' : failed > 0 || run.status === 'failure'
+    ? 'AUTHENTICATION CHECKS FAILED' : 'AUTHENTICATION NOT FULLY VERIFIED';
   return (
     <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
       <SheetContent className="max-w-3xl gap-0 overflow-hidden p-0 sm:max-w-3xl">
@@ -64,8 +70,12 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
               <div className="space-y-1 text-sm">
                 <p><strong>Target:</strong> {report.target.hostname}</p>
                 <p><strong>Tested commit:</strong> <code className="break-all">{report.target.revision}</code></p>
-                <p className="font-semibold text-amber-200">{run.status === 'success' && incomplete ? 'Browser journey passed; full authentication coverage is INCOMPLETE.' : run.status === 'success' ? 'GitHub browser journey completed successfully.' : 'The GitHub browser workflow did not complete successfully.'}</p>
-                <p className="text-muted-foreground">This workflow executes one signup, OTP, login and logout journey. It is not a complete run of the 38-case authentication catalog.</p>
+                <div className="space-y-2 rounded-lg border border-border p-4" role="status">
+                  <p className={`text-lg font-bold ${verified ? 'text-emerald-300' : failed > 0 || run.status === 'failure' ? 'text-red-300' : 'text-amber-200'}`}>{verdict}</p>
+                  <p>{fullyPassed} of {applicable} applicable authentication cases fully verified by this run.</p>
+                  <p className="text-muted-foreground">{failed > 0 ? `${failed} case(s) failed. ` : ''}{missing > 0 ? `${missing} case(s) have incomplete or no live evidence. ` : ''}The GitHub workflow status ({run.status}) describes execution of the automated tests; it is not an authentication certification.</p>
+                  <p className="text-muted-foreground">The currently automated smoke test verifies a real staging signup, email OTP, password login, logout and selected access checks. It does not establish that password reset, all MFA variants, legacy first-login or the remaining catalog requirements work end to end.</p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {([['pass','Fully Passed'],['partial','Partially Exercised'],['fail','Failed'],['blocked','Not Run'],['not-applicable','N/A']] as const).map(([status,label]) => (
@@ -73,7 +83,7 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                 ))}
               </div>
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold">Cases Exercised By This Run ({executed.length})</h3>
+                <h3 className="text-lg font-semibold">Real-Life Checks Exercised ({executed.length})</h3>
                 {executed.map((item: Case) => (
                   <article className="space-y-1 rounded-lg border border-border p-3" key={item.id}>
                     <div className="flex flex-wrap justify-between gap-2">
@@ -92,7 +102,7 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                 ))}
               </div>
               <details className="rounded-lg border border-border p-3">
-                <summary className="cursor-pointer font-semibold text-amber-200">Not Executed By This Run ({unexecuted.length}) — Expand Coverage Gaps</summary>
+                <summary className="cursor-pointer font-semibold text-amber-200">Not Tested / Not Applicable ({unexecuted.length}) — See What Is Still Unverified</summary>
                 <p className="mt-2 text-sm text-muted-foreground">These are catalog requirements, not failed browser assertions. No claim of a pass is made for them.</p>
                 <div className="mt-3 space-y-2">
                   {unexecuted.map(item => <article className="rounded-md border border-border p-3 text-sm" key={item.id}>
