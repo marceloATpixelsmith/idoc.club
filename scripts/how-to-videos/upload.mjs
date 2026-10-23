@@ -33,12 +33,13 @@ for (const id of SECTION_IDS) {
     continue;
   }
   const timestamp = Math.floor(Date.now() / 1000);
-  const signed = `overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
+  const signed = `invalidate=true&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
   const form = new FormData();
   form.set('file', new Blob([readFileSync(file)], { type: 'video/mp4' }), `${id}.mp4`);
   form.set('api_key', apiKey);
   form.set('timestamp', String(timestamp));
   form.set('public_id', publicId);
+  form.set('invalidate', 'true'); // purge the CDN copy so the unversioned URL serves the new take
   form.set('overwrite', 'true');
   form.set('signature', createHash('sha1').update(signed + apiSecret).digest('hex'));
   const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { body: form, method: 'POST' });
