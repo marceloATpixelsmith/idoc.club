@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
-import { guardStripeMutations, liveAuthE2eOtpMayBypassCommunicationsHold, liveBillingDisabled, memberCommunicationsDisabled, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
+import { guardStripeMutations, stagingAuthEmailsAllowed, liveAuthE2eOtpMayBypassCommunicationsHold, liveBillingDisabled, memberCommunicationsDisabled, MemberLaunchHoldError } from '../lib/runtime/member-launch-hold.ts';
 
 const original = { hold: process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING, key: process.env.STRIPE_SECRET_KEY, node: process.env.NODE_ENV };
 afterEach(() => {
@@ -28,6 +28,14 @@ test('the live auth OTP hold exception is limited to staging preview and the dis
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_ENV: 'production' }), false);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, VERCEL_GIT_COMMIT_REF: 'feature' }), false);
   assert.equal(liveAuthE2eOtpMayBypassCommunicationsHold('runner@pixelsmith.space', { ...staging, DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING: 'false' }), false);
+});
+
+test('auth email override requires the staging preview and exact opt-in', () => {
+  const staging = { ENABLE_AUTH_EMAILS_WHEN_COMMUNICATIONS_DISABLED: 'true', VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'staging' };
+  assert.equal(stagingAuthEmailsAllowed(staging), true);
+  assert.equal(stagingAuthEmailsAllowed({ ...staging, ENABLE_AUTH_EMAILS_WHEN_COMMUNICATIONS_DISABLED: 'false' }), false);
+  assert.equal(stagingAuthEmailsAllowed({ ...staging, VERCEL_ENV: 'production' }), false);
+  assert.equal(stagingAuthEmailsAllowed({ ...staging, VERCEL_GIT_COMMIT_REF: 'feature' }), false);
 });
 
 test('live billing fails closed, but a validated sandbox key remains usable', () => {
