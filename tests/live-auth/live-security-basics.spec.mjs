@@ -9,19 +9,25 @@ test("LIVE-AUTH-030: live browser uses the exact deployed staging revision", asy
   expect(response?.ok()).toBe(true);
   expect(new URL(page.url()).hostname).toBe("staging.idoc.club");
   expect(new URL(page.url()).protocol).toBe("https:");
-  expect(process.env.LIVE_AUTH_EMAIL).toMatch(/^[^@\s]+@pixelsmith\.space$/i);
+  expect(process.env.LIVE_AUTH_EMAIL).toMatch(/^[^@\\s]+@pixelsmith\\.space$/i);
 });
 
 test("LIVE-AUTH-006: anonymous users cannot access protected member/admin routes and mutations", async ({ page, request }) => {
   test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-006" });
   await page.goto("/dashboard/membership");
-  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  await expect(page).toHaveURL(/\\/sign-in(?:\\?|$)/);
   await page.goto("/admin/operations/live-auth-tests");
-  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  await expect(page).toHaveURL(/\\/sign-in(?:\\?|$)/);
   const userResponse = await request.get("/api/user");
   expect(userResponse.status()).toBe(200);
   expect(await userResponse.json()).toBeNull();
-  const mutation = await request.delete("/api/admin/table-preferences/members");
+
+  // Use the valid anonymous double-submit token so this reaches the route's authorization check.
+  const csrfCookie = (await request.storageState()).cookies.find((cookie) => cookie.name === "__Host-idoc-csrf");
+  expect(csrfCookie).toBeTruthy();
+  const mutation = await request.delete("/api/admin/table-preferences/members", {
+    headers: { "x-idoc-csrf": csrfCookie.value },
+  });
   expect(mutation.status()).toBe(403);
 });
 
