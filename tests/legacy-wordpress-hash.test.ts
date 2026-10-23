@@ -49,12 +49,12 @@ test('verified legacy credentials failing the current site policy require passwo
     'LONGPASSWORD1!',
     'LongPassword!!',
     'LongPassword11',
-    'Aa1!12345',
+    'Aa1!123456',
   ];
   for (const password of credentials) {
     const prehash = createHmac('sha384', 'wp-sha384').update(password, 'utf8').digest('base64');
     const stored = `$wp${await hashBcrypt(prehash, 4)}`;
     assert.equal(await verifyLegacyPassword(password, stored, 'wp_bcrypt'), true);
-    assert.equal(passwordSchema.safeParse(password).success, password === 'Aa1!12345');
+    assert.equal(passwordSchema.safeParse(password).success, password === 'Aa1!123456');
   }
 });
