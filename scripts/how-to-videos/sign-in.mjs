@@ -44,7 +44,14 @@ export async function signInDemoMember({ baseUrl, email, password, storageStateP
     if (outcome !== 'password') await fail(6, `Sign-in stopped at an unexpected step (${page.url()}).`);
     await password_.fill(password);
     await page.getByRole('button', { name: 'Sign In' }).click();
-    await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 }).catch(() => undefined);
+    // After the password the app either leaves /sign-in (signed in, or /mfa), re-renders /sign-in with the emailed-code
+    // step, or shows an error. Wait for whichever comes first so each one is classified correctly.
+    const afterPassword = await Promise.race([
+      page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 }).then(() => 'left'),
+      page.getByText(/6-digit|Verify your email/i).first().waitFor({ timeout: 30_000 }).then(() => 'otp'),
+      page.getByRole('alert').first().waitFor({ timeout: 30_000 }).then(() => 'error'),
+    ]).catch(() => 'unknown');
+    if (afterPassword === 'otp') await fail(4, 'The sign-in sent an emailed code. Provide it to a person-assisted run; not continuing.');
     if (new URL(page.url()).pathname.startsWith('/mfa')) await fail(5, 'An MFA challenge was requested. Not bypassing it.');
     if (new URL(page.url()).pathname.startsWith('/sign-in')) {
       const alert = await page.getByRole('alert').first().textContent().catch(() => '');
