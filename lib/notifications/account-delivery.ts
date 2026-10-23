@@ -1,5 +1,5 @@
 import 'server-only';
-import { outboxDeliveryHeld } from '@/lib/runtime/member-launch-hold';
+import { outboxDeliveryHeld, stagingAuthEmailsAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
@@ -77,7 +77,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
 }
 
 export async function deliverNextAccountLink(owner: string = randomUUID(), testDependencies?: Partial<DeliveryDependencies>) {
-  if (outboxDeliveryHeld()) return { status: 'blocked' as const };
+  if (outboxDeliveryHeld() && !stagingAuthEmailsAllowed()) return { status: 'blocked' as const };
   const dependencies = dependenciesForTest(testDependencies);
   const claimed = await claimAccountDelivery(owner, dependencies.now());
   if (!claimed) return { status: 'empty' as const };
@@ -112,7 +112,7 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
         footerNote: 'If you did not request this, you can safely ignore this email.',
         heading: activation ? 'Activate your account' : 'Reset your password',
       });
-      await dependencies.send({ html, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email });
+      await dependencies.send({ html, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email }, { authenticationEmail: true });
       await dependencies.beforeFinalize?.(record);
       const completedAt = dependencies.now();
       const [done] = await tx.update(accountDeliveryOutbox).set({ attemptCount: sql`${accountDeliveryOutbox.attemptCount} + 1`, lastAttemptAt: completedAt, lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: completedAt }).where(and(eq(accountDeliveryOutbox.id, record.id), eq(accountDeliveryOutbox.leaseOwner, owner), isNull(accountDeliveryOutbox.sentAt))).returning();
