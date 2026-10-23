@@ -106,6 +106,16 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
         existingByEmail.set(row.email.toLowerCase(), `existing account #${row.id}: ${name || 'no profile name'}, ${row.email}, ${row.state}`);
       }
     }
+    // Skip accounts that are already present before checking shared billing references.
+    // A pre-existing member's Stripe IDs must not block importing unrelated members.
+    const skippedExistingAccountDetails = rows.filter((row) => existingByEmail.has(row.user.email)).map((row) => ({
+      legacyUserId: row.legacyUserId,
+      email: row.user.email,
+      existingAccount: existingByEmail.get(row.user.email)!,
+    }));
+    const skippedExistingAccounts = skippedExistingAccountDetails.length;
+    rows = rows.filter((row) => !existingByEmail.has(row.user.email));
+
     // Stripe IDs are unique in the database. A clash (inside the files, or with data already here) would otherwise be dropped
     // silently, leaving a member imported without their billing link or history, so it stops the whole run instead.
     const duplicates = (values: string[]) => values.filter((value, index) => values.indexOf(value) !== index);
@@ -126,10 +136,6 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
         .some((id) => id && insideFiles.has(id))).map((row) => row.legacyUserId);
       throw new LegacyImportBlockedError(`${clashing.length} member(s) share Stripe references inside the uploaded files. Resolve those ambiguous owners before importing.\n${listWithOverflow(clashing.map((id) => describeLegacyMember(input.plan, id))) }`);
     }
-    // Never modify a member account already present in this environment.
-    const skippedExistingAccounts = rows.filter((row) => existingByEmail.has(row.user.email)).length;
-    rows = rows.filter((row) => !existingByEmail.has(row.user.email));
-
     const skippedExistingBillingReferences = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
       .some((id) => id && existingIds.has(id))).length;
     rows = rows.filter((row) => ![row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
@@ -196,7 +202,7 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     };
     await tx.insert(auditLog).values({
       actorId: input.actorId, action: 'admin.legacy_import.import', entityType: 'legacy_import', entityId: input.fileFingerprints.map((value) => value.slice(0, 12)).join('+'),
-      afterJson: { ...summary, files: input.fileFingerprints }, reason: 'Temporary legacy member import',
+      afterJson: { ...summary, skippedExistingAccountDetails, files: input.fileFingerprints }, reason: 'Temporary legacy member import',
     });
     return summary;
   });
