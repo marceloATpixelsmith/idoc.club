@@ -24,6 +24,8 @@ const codeFile = resolve(process.env.HOW_TO_SIGN_IN_CODE_FILE ?? `${outFile}.cod
 mkdirSync(dirname(outFile), { recursive: true });
 rmSync(codeFile, { force: true });
 
+// Signed in means past the sign-in page and not parked on the MFA challenge, which is a blocked sign-in.
+const leftSignIn = (url) => !url.pathname.startsWith('/sign-in') && !url.pathname.startsWith('/mfa');
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 async function waitForCode() {
   const deadline = Date.now() + 10 * 60 * 1000;
@@ -57,7 +59,8 @@ try {
   await page.getByRole('button', { name: /sign in|log in|continue/i }).last().click();
 
   const outcome = await Promise.race([
-    page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 45_000 }).then(() => 'signed-in'),
+    page.waitForURL(leftSignIn, { timeout: 45_000 }).then(() => 'signed-in'),
+    page.waitForURL((url) => url.pathname.startsWith('/mfa'), { timeout: 45_000 }).then(() => 'mfa'),
     page.getByText(/6-digit code/i).waitFor({ timeout: 45_000 }).then(() => 'code'),
     page.getByText(/authenticator|recovery code/i).waitFor({ timeout: 45_000 }).then(() => 'mfa'),
   ]).catch(() => 'unknown');
@@ -79,7 +82,7 @@ try {
     const verify = page.getByRole('button', { name: /verify|continue|submit/i }).first();
     if (await verify.isEnabled().catch(() => false)) await verify.click();
     try {
-      await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 45_000 });
+      await page.waitForURL(leftSignIn, { timeout: 45_000 });
     } catch {
       const message = await page.getByRole('alert').first().textContent().catch(() => '');
       console.error(`Code was not accepted${message ? `: ${message.trim()}` : ''} (still at ${new URL(page.url()).pathname}).`);

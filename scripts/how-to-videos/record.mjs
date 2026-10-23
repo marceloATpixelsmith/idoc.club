@@ -124,24 +124,27 @@ async function warmSeminarPage(browser) {
 }
 
 const browser = await chromium.launch({ executablePath: process.env.HOW_TO_CHROMIUM_PATH || undefined });
-for (const [id, scene] of Object.entries(scenes)) {
-  if (id === 'seminars') await warmSeminarPage(browser);
-  const raw = join(outDir, `.raw-${id}`);
-  rmSync(raw, { force: true, recursive: true });
-  const context = await browser.newContext({
-    recordVideo: { dir: raw, size: { height: 720, width: 1280 } },
-    storageState,
-    viewport: { height: 720, width: 1280 },
-  });
-  await context.addInitScript(privacyInitScript);
-  const page = await context.newPage();
-  await scene(page);
-  await context.close(); // flushes the recording
-  const webm = join(raw, readdirSync(raw).find((name) => name.endsWith('.webm')));
-  const mp4 = join(outDir, `${id}.mp4`);
-  execFileSync('ffmpeg', ['-y', '-ss', '1.5', '-i', webm, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: 'ignore' });
-  rmSync(raw, { force: true, recursive: true });
-  console.log(`rendered ${mp4}`);
+try {
+  for (const [id, scene] of Object.entries(scenes)) {
+    if (id === 'seminars') await warmSeminarPage(browser);
+    const raw = join(outDir, `.raw-${id}`);
+    rmSync(raw, { force: true, recursive: true });
+    const context = await browser.newContext({
+      recordVideo: { dir: raw, size: { height: 720, width: 1280 } },
+      storageState,
+      viewport: { height: 720, width: 1280 },
+    });
+    await context.addInitScript(privacyInitScript);
+    const page = await context.newPage();
+    await scene(page);
+    await context.close(); // flushes the recording
+    const webm = join(raw, readdirSync(raw).find((name) => name.endsWith('.webm')));
+    const mp4 = join(outDir, `${id}.mp4`);
+    execFileSync('ffmpeg', ['-y', '-ss', '1.5', '-i', webm, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: 'ignore' });
+    rmSync(raw, { force: true, recursive: true });
+    console.log(`rendered ${mp4}`);
+  }
+} finally {
+  await browser.close();
+  if (signInDir) rmSync(signInDir, { force: true, recursive: true }); // never leave the demo session on disk
 }
-await browser.close();
-if (signInDir) rmSync(signInDir, { force: true, recursive: true });
