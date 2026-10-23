@@ -55,6 +55,7 @@
           "status": {
             "enum": [
               "pass",
+              "partial",
               "fail",
               "blocked",
               "not-applicable"
@@ -75,6 +76,51 @@
               "type": "string"
             }
           }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "description": "Machine-readable coverage verdict, independent of the GitHub Actions workflow conclusion. 'verified' requires a full pass of every applicable catalog case; 'incomplete' does not mean the unexecuted cases succeeded.",
+      "required": [
+        "status",
+        "fullyVerified",
+        "applicable",
+        "partiallyExercised",
+        "failed",
+        "notRun",
+        "explanation"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "verified",
+            "failed",
+            "incomplete"
+          ]
+        },
+        "fullyVerified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partiallyExercised": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notRun": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "explanation": {
+          "type": "string"
         }
       }
     }
