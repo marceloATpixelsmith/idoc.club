@@ -51,3 +51,25 @@ jobs:
       - name: Remove restore input
         if: always()
         run: rm -rf "${{ runner.temp }}/idoc-restore-input"
+
+  # Alert that does not depend on anyone's personal Actions notification setting: GitHub emails only whoever last edited the cron line, and a
+  # failing nightly run went unnoticed for days. An open issue notifies everyone watching the repository. No environment and no secrets.
+  notify-failure:
+    if: github.ref == 'refs/heads/main' && failure()
+    name: Open an issue when the nightly backup fails
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='IDOC nightly backup is failing'
+          body="The IDOC R2 Schema Backups run failed: $RUN_URL. Open the run, fix the cause, then re-run the workflow from the Actions tab. Close this issue once a run passes."
+          existing="$(gh issue list --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "Failed again: $RUN_URL"; else gh issue create --title "$title" --body "$body"; fi

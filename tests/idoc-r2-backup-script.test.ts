@@ -86,6 +86,18 @@ test('the nightly restore check runs in a separate step with no credentials and 
   assert.match(readFileSync('docs/16-idoc-r2-backup-recovery.md', 'utf8'), /Automated restore check/);
 });
 
+test('the restore check installs pg_trgm before restoring, and a failed nightly run opens an issue without secrets', () => {
+  const restore = readFileSync('scripts/restore-check-idoc.sh', 'utf8');
+  const extension = restore.indexOf('CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public');
+  assert.ok(extension > 0 && extension < restore.indexOf('pg_restore" --no-owner'));
+  const nightly = readFileSync('.github/workflows/idoc-r2-backups.yml', 'utf8');
+  const notify = nightly.split('notify-failure:')[1] ?? '';
+  assert.match(notify, /needs: backup/);
+  assert.match(notify, /failure\(\)/);
+  assert.match(notify, /issues: write/);
+  assert.doesNotMatch(notify, /secrets\.|environment:|IDOC_/);
+});
+
 test('the backup records row counts from the same snapshot as the dump and writes an encrypted manifest', () => {
   const dumper = readFileSync('scripts/dump-idoc-with-counts.sh', 'utf8');
   assert.match(dumper, /BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY/);
