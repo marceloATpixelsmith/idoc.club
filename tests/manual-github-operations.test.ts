@@ -119,8 +119,8 @@ test('dedicated Super Admin pages share protected launch actions and show live-a
   assert.match(promotionPage, /PromotionStatusRefresh/);
   assert.match(history, /LiveAuthResultsDrawer/);
   assert.match(drawer, /PARTIALLY EXERCISED/);
-  assert.match(drawer, /Not Executed By This Run/);
-  assert.match(history, /COVERAGE INCOMPLETE/);
+  assert.match(drawer, /Not Tested \/ Not Applicable/);
+  assert.match(history, /AUTH NOT FULLY VERIFIED/);
   assert.match(api, /requireSuperAdmin/);
   assert.match(api, /auth-live-results\.json/);
   assert.match(workflow, /workflow_dispatch:/);
