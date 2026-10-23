@@ -18,7 +18,7 @@ There are two explicit auth-only exceptions: the existing live-auth test OTP to 
 
 | Boundary | Held behavior |
 |---|---|
-| Brevo transactional sender | Throws `MemberLaunchHoldError`, code `member_launch_hold`, before provider access except explicitly opted-in live-auth test OTPs and staging-only authentication OTPs/account links described above. Membership, renewal, payment, security notifications, seminar confirmations/refunds, admin previews, contact forms and operational alerts remain blocked. |
+| Brevo transactional sender | Throws `MemberLaunchHoldError`, code `member_launch_hold`, before provider access except explicitly opted-in live-auth test OTPs and staging-only authentication OTPs/account links described above. Membership, renewal, payment, security notifications, the one-time legacy welcome email, seminar confirmations/refunds, admin previews, contact forms and operational alerts remain blocked. |
 | Mailchimp audience subscribe/unsubscribe | Returns `{ status: 'blocked' }` before HTTP, leaving the committed profile/entitlement operation intact. Audience automation can itself send mail, so it is held too. |
 
 The inbound side of the marketing preference (the Mailchimp webhook and the `marketing-preference-sync` reconciliation) only reads from Mailchimp and writes `onboarding_consents`; it sends nothing and is therefore not held. The member-facing toggle's opt-in and opt-out calls to Mailchimp are held like the other audience calls; opting out is still saved locally, and opting in is refused with a try-again-later notice (docs/19).

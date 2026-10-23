@@ -139,6 +139,16 @@ test('activation moves a complete profile to active and an incomplete one to onb
   assert.deepEqual(states.map((row) => row.account_state), ['active', 'onboarding']);
 });
 
+test('activation queues exactly one legacy welcome email and a repeat activation queues no second', async () => {
+  const user = await importedMember(true, 13);
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(user.id)).status, 'success');
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(user.id)).status, 'invalid');
+  const rows = await sql`select kind, recipient_email, dedupe_key from idoc.auth_security_notification_outbox where user_id = ${user.id} and kind = 'legacy_welcome'`;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].recipient_email, user.email);
+  assert.equal(rows[0].dedupe_key, `legacy-welcome:${user.id}`);
+});
+
 test('onboarding completes the imported profile in place and keeps what the import already knew', async () => {
   const user = await importedMember(false, 21);
   await finalizeMigratedAccountAfterVerifiedPassword(user.id);

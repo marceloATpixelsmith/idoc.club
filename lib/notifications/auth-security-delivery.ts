@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { client } from '@/lib/db/drizzle';
 import { sendTransactionalEmail } from './brevo-transactional';
 import { renderTransactionalEmail } from './email-template';
+import { LEGACY_WELCOME_SUBJECT, renderLegacyWelcomeEmail } from './legacy-welcome-email';
 import type { AuthSecurityKind } from './auth-security-events';
 import { formatDateTime } from '@/lib/format';
 
@@ -23,6 +24,7 @@ export const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; 
   authority_force_revoked: { heading: 'Account access was reset by an administrator', subject: 'Your IDOC sessions, devices, and authenticator were reset' },
   google_identity_linked: { heading: 'Google account connected', subject: 'Google account connected to IDOC' },
   google_identity_unlinked: { heading: 'Google account disconnected', subject: 'Google account disconnected from IDOC' },
+  legacy_welcome: { heading: 'Welcome to the new idoc.club', subject: LEGACY_WELCOME_SUBJECT },
   mfa_replay_detected: { heading: 'A repeated authenticator code or passkey response was blocked', subject: 'IDOC blocked a repeated sign-in attempt on your account' },
   new_sign_in: { heading: 'New sign-in to your account', subject: 'New sign-in to your IDOC account' },
   other_sessions_revoked: { heading: 'Other sessions logged out', subject: 'IDOC sessions were logged out' },
@@ -36,6 +38,11 @@ export const AUTH_SECURITY_CONTENT: Record<AuthSecurityKind, { heading: string; 
   role_revoked: { heading: 'Administrator access removed', subject: 'Your IDOC access changed' },
   verified_email_changed: { heading: 'Login email changed', subject: 'Your IDOC login email changed' },
 };
+
+async function profileFirstName(userId: number): Promise<string | null> {
+  const rows = await client<{ first_name: string | null }[]>`select first_name from profiles where user_id=${userId} limit 1`;
+  return rows[0]?.first_name ?? null;
+}
 
 export async function deliverNextAuthSecurityNotification(owner: string = randomUUID()) {
   if (outboxDeliveryHeld()) return { status: 'blocked' as const };
@@ -74,7 +81,9 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
   try {
     const message = (AUTH_SECURITY_CONTENT as Record<string, { heading: string; subject: string } | undefined>)[record.kind];
     if (!message) throw new Error('Unsupported security notification kind.');
-    const html = renderTransactionalEmail({
+    // The one-time legacy welcome is a product tour, not a security notice, so it uses its own body.
+    const welcome = record.kind === 'legacy_welcome' ? renderLegacyWelcomeEmail({ firstName: await profileFirstName(record.user_id) }) : null;
+    const html = welcome?.html ?? renderTransactionalEmail({
       heading: message.heading,
       bodyHtml: `<p>${message.heading} on ${formatDateTime(record.created_at)}. If you did not make or authorize this change, contact IDOC immediately.</p>`,
       footerNote: 'This is a security notification for your IDOC account.',
@@ -82,7 +91,7 @@ export async function deliverNextAuthSecurityNotification(owner: string = random
     await sendTransactionalEmail({
       html,
       messageId: `auth-security-${record.id}`,
-      subject: message.subject,
+      subject: welcome?.subject ?? message.subject,
       to: record.recipient_email,
     });
     const done = await client`

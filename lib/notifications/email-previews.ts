@@ -5,6 +5,7 @@ import { AUTH_SECURITY_CONTENT } from '@/lib/notifications/auth-security-deliver
 import { AUTH_SECURITY_KINDS } from '@/lib/notifications/auth-security-events';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
 import { emailButton, escapeHtml, renderTransactionalEmail } from '@/lib/notifications/email-template';
+import { renderLegacyWelcomeEmail } from '@/lib/notifications/legacy-welcome-email';
 import { renderNotice } from '@/lib/notifications/renewal-notices';
 import { seminarRegistrationConfirmationBodyHtml, type SeminarEmailDetails } from '@/lib/seminars/registrations';
 import { formatDateTime } from '@/lib/format';
@@ -46,12 +47,16 @@ const SEMINAR_PREVIEWS = [
   ['seminar.refund_confirmed', 'Payment Status Changed: Refunded'],
 ] as const;
 
+// The legacy welcome shares the security outbox for delivery but is a product tour, so it has its own preview entry.
+const SECURITY_PREVIEW_KINDS = AUTH_SECURITY_KINDS.filter((kind) => kind !== 'legacy_welcome');
+
 export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
   ...OTP_PURPOSES.map(({ label, purpose }) => ({ category: 'Account & authentication' as const, id: `otp:${purpose}`, label })),
   { category: 'Account & authentication', id: 'account:migration_activation', label: 'Imported-account activation' },
   { category: 'Account & authentication', id: 'account:password_reset_link', label: 'Password reset link' },
   { category: 'Account & authentication', id: 'account:verify_email', label: 'Verify changed email address' },
-  ...AUTH_SECURITY_KINDS.map((kind) => ({ category: 'Security' as const, id: `security:${kind}`, label: AUTH_SECURITY_CONTENT[kind].heading })),
+  { category: 'Account & authentication', id: 'account:legacy_welcome', label: 'Welcome to the new idoc.club (first sign-in of an imported member)' },
+  ...SECURITY_PREVIEW_KINDS.map((kind) => ({ category: 'Security' as const, id: `security:${kind}`, label: AUTH_SECURITY_CONTENT[kind].heading })),
   ...MEMBERSHIP_PREVIEWS.map(([id, label]) => ({ category: 'Membership & billing' as const, id, label })),
   ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars/Courses' as const, id, label })),
 ];
@@ -165,9 +170,10 @@ async function renderPreview(id: string): Promise<{ html: string; subject: strin
   if (id === 'account:migration_activation') return accountLinkPreview('migration_activation');
   if (id === 'account:password_reset_link') return accountLinkPreview('password_reset_link');
   if (id === 'account:verify_email') return emailChangePreview();
+  if (id === 'account:legacy_welcome') return renderLegacyWelcomeEmail({ firstName: 'Ameyalli' });
   if (id.startsWith('security:')) {
     const kind = id.slice(9) as (typeof AUTH_SECURITY_KINDS)[number];
-    if (!(AUTH_SECURITY_KINDS as readonly string[]).includes(kind)) throw new Error('Unknown preview.');
+    if (!(SECURITY_PREVIEW_KINDS as readonly string[]).includes(kind)) throw new Error('Unknown preview.');
     return securityPreview(kind);
   }
   if (id === 'seminar.registration_created') return seminarRegistrationPreview({ approvalStatus: 'pending_fei_approval', isFei: true });

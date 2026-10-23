@@ -582,6 +582,13 @@
       "when": 1792400000000,
       "tag": "0082_member_list_name_sort_index",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1792410000000,
+      "tag": "0083_legacy_welcome_notification_kind",
+      "breakpoints": true
     }
   ]
 }
