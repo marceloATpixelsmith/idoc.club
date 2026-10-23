@@ -56,7 +56,7 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Click a column heading to sort. Use the page controls under the table to move through results.',
       'Click an email address to write to a member.',
     ],
-    videoSrc: null,
+    videoSrc: howToVideoUrl('directory'),
   },
   {
     id: 'contact',
@@ -74,7 +74,7 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Your conversation appears under Your conversations with a status: Open, Responded to by admin, Member Replied, or Closed/Resolved. A "New reply" label tells you when the team has answered.',
       'Open a conversation to read the reply and respond in the same thread.',
     ],
-    videoSrc: null,
+    videoSrc: howToVideoUrl('contact'),
   },
   {
     id: 'seminars',
@@ -92,7 +92,7 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'For an FEI course, also make sure your National Federation registers you with FEI. Your Registration Status stays "Pending FEI Approval" until FEI decides.',
       'You are emailed whenever your registration status changes. FEI may approve you ("Approved by FEI"), approve you to audit only ("Approved to Audit Only by FEI"), or not approve you ("Not Approved by FEI").',
     ],
-    videoSrc: null,
+    videoSrc: howToVideoUrl('seminars'),
   },
   {
     id: 'my-seminars',
@@ -111,7 +111,7 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Past: review the courses you have already completed.',
       'Use Available Seminars/Courses to register for more, and Past Seminars/Courses to browse the archive.',
     ],
-    videoSrc: null,
+    videoSrc: howToVideoUrl('my-seminars'),
   },
 ];
 
