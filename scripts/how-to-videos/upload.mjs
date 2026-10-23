@@ -19,6 +19,13 @@ if (!dryRun && (!apiKey || !apiSecret)) {
   process.exit(1);
 }
 
+// Create the dedicated idoc/how-to folder explicitly (idempotent) so it exists in both fixed and dynamic folder modes.
+if (!dryRun) {
+  const basic = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+  const created = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/folders/${FOLDER}`, { headers: { Authorization: `Basic ${basic}` }, method: 'POST' });
+  if (!created.ok && created.status !== 409) console.warn(`folder ${FOLDER}: could not create (${created.status}); uploads may still create it`);
+}
+
 let failed = false;
 for (const id of SECTION_IDS) {
   const file = join(dir, `${id}.mp4`);
@@ -33,12 +40,13 @@ for (const id of SECTION_IDS) {
     continue;
   }
   const timestamp = Math.floor(Date.now() / 1000);
-  const signed = `invalidate=true&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
+  const signed = `asset_folder=${FOLDER}&invalidate=true&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
   const form = new FormData();
   form.set('file', new Blob([readFileSync(file)], { type: 'video/mp4' }), `${id}.mp4`);
   form.set('api_key', apiKey);
   form.set('timestamp', String(timestamp));
   form.set('public_id', publicId);
+  form.set('asset_folder', FOLDER);
   form.set('invalidate', 'true'); // purge the CDN copy so the unversioned URL serves the new take
   form.set('overwrite', 'true');
   form.set('signature', createHash('sha1').update(signed + apiSecret).digest('hex'));
