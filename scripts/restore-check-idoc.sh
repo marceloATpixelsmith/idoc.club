@@ -18,6 +18,10 @@ pg() { env -i PATH="$PATH" HOME="$HOME" PGHOST="$sock" PGPORT=55433 PGUSER=resto
 env -i PATH="$PATH" HOME="$HOME" "$pgbin/initdb" -D "$scratch" -A trust -U restore_check >/dev/null
 env -i PATH="$PATH" HOME="$HOME" "$pgbin/pg_ctl" -D "$scratch" -o "-p 55433 -k $sock -c listen_addresses=''" -l "$work/server.log" -w start >/dev/null
 pg "$pgbin/createdb" restore_check_db
+# The archive holds only the two IDOC schemas, so extensions installed in `public` on the live server (pg_trgm, used by the member directory
+# trigram indexes from migration 0081) are not in it, and the indexes' gin_trgm_ops operator class would be missing. Install the extension from
+# the runner's own PostgreSQL package (not from the archive) so those indexes restore.
+pg "$pgbin/psql" -d restore_check_db -qc "CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public"
 # Ownership and grants name roles that do not exist in the scratch cluster, so they are skipped; structure and data are not.
 if ! pg "$pgbin/pg_restore" --no-owner --no-privileges --dbname=restore_check_db "$dir/archive.dump" 2>"$work/errors.log"; then
   echo "::error::Restore check failed: $(grep -c '^pg_restore: error:' "$work/errors.log" || true) restore error(s)"
