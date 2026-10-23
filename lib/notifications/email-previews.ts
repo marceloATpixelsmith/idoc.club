@@ -195,12 +195,14 @@ async function renderPreview(id: string): Promise<{ html: string; subject: strin
 
 export async function sendEmailPreview(id: string) {
   const rendered = await renderPreview(id);
+  //PREVIEWS GO ONLY TO THE FIXED REVIEW INBOX FROM A SUPER-ADMIN-GATED ACTION. FLAGGING THEM AS AUTHENTICATION EMAIL LETS THEM
+  //THROUGH THE MEMBER-COMMUNICATIONS HOLD ON STAGING ONLY (STILL REQUIRES THE STAGING OPT-IN; BLOCKED EVERYWHERE ELSE).
   await sendTransactionalEmail({
     html: rendered.html,
     messageId: `preview-${id.replace(/[^a-z0-9]+/gi, '-')}-${Date.now()}`,
     subject: previewSubject(rendered.subject),
     to: EMAIL_PREVIEW_RECIPIENT,
-  });
+  }, { authenticationEmail: true });
 }
 
 export type EmailPreviewSendResult = {
