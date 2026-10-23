@@ -166,13 +166,15 @@ test('an existing email collision never blocks other members sharing its Stripe 
   assert.ok(bea);
   bea.stripe.customerId = 'cus_ADA';
   const result = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] });
-  assert.equal(result.imported, 2);
+  assert.equal(result.imported, 1);
   assert.equal(result.skippedExistingAccounts, 1);
-  assert.deepEqual((await sql`select legacy_id from idoc.migration_map order by legacy_id`).map((row) => row.legacy_id), ['1', '3']);
+  assert.equal(result.skippedAmbiguousBillingReferences, 1);
+  assert.deepEqual((await sql`select legacy_id from idoc.migration_map order by legacy_id`).map((row) => row.legacy_id), ['3']);
   const [unchanged] = await sql`select password_hash, account_state from idoc.users where id = ${existing.id}`;
   assert.equal(unchanged.password_hash, 'keep');
   assert.equal(unchanged.account_state, 'active');
   const [audit] = await sql`select after_json from idoc.audit_log where action = 'admin.legacy_import.import'`;
   assert.equal(audit.after_json.skippedExistingAccountDetails[0].legacyUserId, '2');
   assert.match(audit.after_json.skippedExistingAccountDetails[0].existingAccount, /existing account/);
+  assert.equal(audit.after_json.skippedAmbiguousBillingReferenceDetails[0].legacyUserId, '1');
 });
