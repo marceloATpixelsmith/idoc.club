@@ -2113,9 +2113,10 @@
         "tests": [
           "tests/legacy-wordpress-hash.test.ts",
           "tests/password-composition-policy.test.ts",
-          "tests/security-e2e/password-recovery-and-change.spec.ts"
+          "tests/security-e2e/password-recovery-and-change.spec.ts",
+          "tests/token-password-redirect.test.ts"
         ],
-        "rationale": "Credential-format and policy checks run in CI; the disposable WordPress fixture, real activation email and first-login browser lifecycle run against staging."
+        "rationale": "Credential-format and policy checks run in CI, including the contract that a successful activation-link submit redirects to /sign-in with a flash notice instead of leaving the form on screen; the disposable WordPress fixture, real activation email and first-login browser lifecycle run against staging."
       },
       "live": {
         "enabled": true,

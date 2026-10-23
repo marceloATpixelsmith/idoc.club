@@ -1154,7 +1154,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-STORAGE-004, AUTH-PASSWORD-005, AUTH-IDENTITY-003
-- **CI coverage:** mapped — `tests/legacy-wordpress-hash.test.ts`, `tests/password-composition-policy.test.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts` — Credential-format and policy checks run in CI; the disposable WordPress fixture, real activation email and first-login browser lifecycle run against staging.
+- **CI coverage:** mapped — `tests/legacy-wordpress-hash.test.ts`, `tests/password-composition-policy.test.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`, `tests/token-password-redirect.test.ts` — Credential-format and policy checks run in CI, including the contract that a successful activation-link submit redirects to /sign-in with a flash notice instead of leaving the form on screen; the disposable WordPress fixture, real activation email and first-login browser lifecycle run against staging.
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
