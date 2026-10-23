@@ -116,7 +116,7 @@ export default async function LegacyImportPage() {
                     <p>Run #{entry.id} · Performed by {entry.actorEmail ?? 'Administrator account no longer available'} · Schema: {typeof data.schema === 'string' ? data.schema : 'Unknown'}</p>
                     <p>Payments: {amount('payments')} · Refunds: {amount('refunds')} · Subscriptions: {amount('subscriptions')} · Billing accounts: {amount('billingAccounts')}</p>
                     <p>Zero-amount payments skipped: {amount('skippedZeroAmountPayments')} · Members without storable subscriptions: {amount('membersWithoutStorableSubscription')}</p>
-                    <p>Existing accounts skipped: {amount('skippedExistingAccounts')} · Existing billing references skipped: {amount('skippedExistingBillingReferences')}</p>
+                    <p>Existing accounts skipped: {amount('skippedExistingAccounts')} · Existing billing references skipped: {amount('skippedExistingBillingReferences')} · Ambiguous source billing references skipped: {amount('skippedAmbiguousBillingReferences')}</p>
                     {Array.isArray(data.skippedExistingAccountDetails) && data.skippedExistingAccountDetails.length > 0 ? (
                       <div className="space-y-1">
                         <p className="font-medium text-foreground">Existing accounts preserved and skipped:</p>
@@ -125,6 +125,18 @@ export default async function LegacyImportPage() {
                             if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
                             const detail = item as Record<string, unknown>;
                             return <li className="break-words" key={index}>Legacy user {String(detail.legacyUserId ?? '?')} ({String(detail.email ?? '?')}) — {String(detail.existingAccount ?? 'Existing account')}</li>;
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {Array.isArray(data.skippedAmbiguousBillingReferenceDetails) && data.skippedAmbiguousBillingReferenceDetails.length > 0 ? (
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">Legacy members skipped due to ambiguous Stripe ownership:</p>
+                        <ul className="list-disc space-y-1 pl-5">
+                          {data.skippedAmbiguousBillingReferenceDetails.map((item, index) => {
+                            if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+                            const detail = item as Record<string, unknown>;
+                            return <li className="break-words" key={index}>Legacy user {String(detail.legacyUserId ?? '?')} ({String(detail.email ?? '?')}) — shared Stripe reference</li>;
                           })}
                         </ul>
                       </div>
