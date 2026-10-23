@@ -109,10 +109,29 @@ jobs:
         id: mailbox
         run: |
           node --input-type=module -e "import { appendFileSync } from 'node:fs'; import { createMailbox } from './scripts/live-auth-mailbox.mjs'; const email = await createMailbox(); appendFileSync(process.env.GITHUB_OUTPUT, 'email=' + email + '\\n'); console.log('Created one disposable mailbox for this run.');"
+      - name: Create disposable legacy-login mailboxes and seed WordPress credentials
+        id: legacy_fixtures
+        env:
+          LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL: ${{ steps.mailbox.outputs.email }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { createMailbox } from './scripts/live-auth-mailbox.mjs';
+          const bad = await createMailbox();
+          const good = await createMailbox();
+          appendFileSync(process.env.GITHUB_OUTPUT, 'bad=' + bad + '\\n' + 'good=' + good + '\\n');
+          NODE
+      - name: Seed isolated migrated WordPress test members
+        env:
+          LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.bad }}
+          LIVE_AUTH_LEGACY_COMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.good }}
+        run: node --conditions=react-server --import tsx scripts/e2e-seed-legacy-auth-fixtures.ts
       - name: Run live auth journey against staging
         id: live_tests
         env:
           LIVE_AUTH_EMAIL: ${{ steps.mailbox.outputs.email }}
+          LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.bad }}
+          LIVE_AUTH_LEGACY_COMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.good }}
         run: pnpm exec playwright test --config=playwright.live-auth.config.mjs
       - name: Build matrix result report
         if: always() && steps.mailbox.outputs.email != ''
@@ -127,6 +146,21 @@ jobs:
         env:
           LIVE_AUTH_EMAIL: ${{ steps.mailbox.outputs.email }}
         run: node --input-type=module -e "import { deleteMailbox } from './scripts/live-auth-mailbox.mjs'; await deleteMailbox(process.env.LIVE_AUTH_EMAIL); console.log('Deleted the run mailbox.');"
+      - name: Clean up disposable legacy staging accounts
+        if: always() && steps.legacy_fixtures.outputs.bad != ''
+        env:
+          LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.bad }}
+          LIVE_AUTH_LEGACY_COMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.good }}
+        run: |
+          node --conditions=react-server --import tsx scripts/e2e-delete-test-account.ts --email="$LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL" --confirm-staging
+          node --conditions=react-server --import tsx scripts/e2e-delete-test-account.ts --email="$LIVE_AUTH_LEGACY_COMPLIANT_EMAIL" --confirm-staging
+      - name: Delete disposable legacy mailboxes
+        if: always() && steps.legacy_fixtures.outputs.bad != ''
+        env:
+          LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.bad }}
+          LIVE_AUTH_LEGACY_COMPLIANT_EMAIL: ${{ steps.legacy_fixtures.outputs.good }}
+        run: |
+          node --input-type=module -e "import { deleteMailbox } from './scripts/live-auth-mailbox.mjs'; await deleteMailbox(process.env.LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL); await deleteMailbox(process.env.LIVE_AUTH_LEGACY_COMPLIANT_EMAIL);"
       - name: Upload live auth results and browser evidence
         if: always()
         uses: actions/upload-artifact@v4
