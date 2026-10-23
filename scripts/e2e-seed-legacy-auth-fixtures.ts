@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { hash as bcryptHash } from 'bcryptjs';
 import { passwordSchema } from '../lib/auth/password-policy.ts';
 import { requireDisposableTestEmail, validateStagingDatabaseUrl } from '../lib/db/staging-database-url.ts';
@@ -7,8 +7,10 @@ import { requireDisposableTestEmail, validateStagingDatabaseUrl } from '../lib/d
 // Seed only disposable, isolated staging identities with real WordPress bcrypt hashes.
 // Never replace an existing account or touch production schema/data.
 async function main() {
+  const noncompliantEmail = requireDisposableTestEmail(process.env.LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL);
+  const noncompliantPassword = `Legacy${createHash('sha256').update(noncompliantEmail).digest('hex').slice(0, 16)}A1`;
   const scenarios = [
-    { email: requireDisposableTestEmail(process.env.LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL), password: 'Legacy1!' },
+    { email: noncompliantEmail, password: noncompliantPassword },
     { email: requireDisposableTestEmail(process.env.LIVE_AUTH_LEGACY_COMPLIANT_EMAIL), password: process.env.LIVE_AUTH_TEST_PASSWORD || '' },
   ];
   if (scenarios[0].email === scenarios[1].email) throw new Error('Distinct legacy test mailboxes are required.');
