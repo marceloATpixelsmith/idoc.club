@@ -158,16 +158,21 @@ test('a preowned Stripe ID skips only its legacy member and preserves billing ow
   assert.equal(owned.profile_id, profileRow.id);
 });
 
-test('a duplicate source Stripe customer stays blocking even if one member already exists', async () => {
+test('an existing email collision never blocks other members sharing its Stripe customer reference', async () => {
   const admin = await adminUser();
-  await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'keep', 'active')`;
+  const [existing] = await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'keep', 'active') returning id`;
   const { plan: reviewedPlan, report } = reviewed();
   const bea = reviewedPlan.members.find((member) => member.legacyUserId === '2');
   assert.ok(bea);
   bea.stripe.customerId = 'cus_ADA';
-  await assert.rejects(
-    runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }),
-    /share Stripe references inside the uploaded files/,
-  );
-  assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
+  const result = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] });
+  assert.equal(result.imported, 2);
+  assert.equal(result.skippedExistingAccounts, 1);
+  assert.deepEqual((await sql`select legacy_id from idoc.migration_map order by legacy_id`).map((row) => row.legacy_id), ['1', '3']);
+  const [unchanged] = await sql`select password_hash, account_state from idoc.users where id = ${existing.id}`;
+  assert.equal(unchanged.password_hash, 'keep');
+  assert.equal(unchanged.account_state, 'active');
+  const [audit] = await sql`select after_json from idoc.audit_log where action = 'admin.legacy_import.import'`;
+  assert.equal(audit.after_json.skippedExistingAccountDetails[0].legacyUserId, '2');
+  assert.match(audit.after_json.skippedExistingAccountDetails[0].existingAccount, /existing account/);
 });
