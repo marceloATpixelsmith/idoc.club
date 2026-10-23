@@ -2,6 +2,10 @@
 
 `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` is a server-only deployment setting that prevents accidental communications and live billing during migration, verification, or an incident. Only the exact string `false` releases it. `true`, missing, empty, whitespace-padded values, uppercase values, and every other invalid value hold it closed. It is never a `NEXT_PUBLIC_` variable and is never serialized to a browser. A build does not require this variable or provider credentials.
 
+## Staging-only authentication email exception
+
+Set `ENABLE_AUTH_EMAILS_WHEN_COMMUNICATIONS_DISABLED=true` in Vercel Preview scoped only to `staging`, then redeploy. The exception requires `VERCEL_ENV=preview` and `VERCEL_GIT_COMMIT_REF=staging`. It permits authentication codes and requested password reset and legacy activation links only. Membership notices, marketing, seminar mail, other account notifications, and billing remain blocked. Previously suppressed jobs remain suppressed; request fresh messages after deployment.
+
 ## Configure each deployment
 
 In Vercel Project Settings → Environment Variables, configure the name separately for **Production** and **Preview scoped to the `staging` branch**. Set both to `true` throughout migration and verification, then redeploy both branches. Do not configure an unscoped Preview `false`: unrelated previews must remain held. The value differs by deployment even though staging and production deliberately share PostgreSQL. Changing environment settings affects a new deployment; it does not change an already-running instance. Confirm the new deployment is serving the intended domain and retire older instances before judging the hold effective.
