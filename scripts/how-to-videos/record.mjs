@@ -9,17 +9,27 @@
 //   HOW_TO_BASE_URL=https://staging.idoc.club HOW_TO_STORAGE_STATE=demo-member.json \
 //     node scripts/how-to-videos/record.mjs [outDir]
 //
-// HOW_TO_STORAGE_STATE is a Playwright storage-state file saved after signing in as the demo member
-// (`npx playwright codegen --save-storage=demo-member.json <site>/sign-in`), so sign-in codes and MFA never run here.
+// HOW_TO_STORAGE_STATE is a Playwright storage-state file saved after signing in as the demo member. When it is unset
+// but HOW_TO_DEMO_EMAIL and HOW_TO_DEMO_PASSWORD are set, this script runs sign-in.mjs first (real sign-in page, saved to
+// a temp file that is deleted afterwards). It stops, rather than bypassing, a Turnstile challenge or MFA; an emailed
+// 6-digit code is supplied through the file sign-in.mjs names. HOW_TO_CHROMIUM_PATH points at a preinstalled Chromium.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const baseUrl = (process.env.HOW_TO_BASE_URL ?? '').replace(/\/$/, '');
-const storageState = process.env.HOW_TO_STORAGE_STATE;
+let storageState = process.env.HOW_TO_STORAGE_STATE;
+let signInDir = null;
+if (!storageState && baseUrl && process.env.HOW_TO_DEMO_EMAIL && process.env.HOW_TO_DEMO_PASSWORD) {
+  signInDir = mkdtempSync(join(process.env.HOW_TO_TEMP_DIR ?? tmpdir(), 'how-to-state-'));
+  storageState = join(signInDir, 'demo-member.json');
+  execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'sign-in.mjs'), storageState], { stdio: 'inherit' });
+}
 if (!baseUrl || !storageState) {
-  console.error('Set HOW_TO_BASE_URL and HOW_TO_STORAGE_STATE.');
+  console.error('Set HOW_TO_BASE_URL and either HOW_TO_STORAGE_STATE or HOW_TO_DEMO_EMAIL + HOW_TO_DEMO_PASSWORD.');
   process.exit(1);
 }
 const outDir = resolve(process.argv[2] ?? 'out/how-to-videos');
@@ -83,7 +93,7 @@ const scenes = {
   },
 };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.HOW_TO_CHROMIUM_PATH || undefined });
 for (const [id, scene] of Object.entries(scenes)) {
   const raw = join(outDir, `.raw-${id}`);
   rmSync(raw, { force: true, recursive: true });
@@ -103,3 +113,4 @@ for (const [id, scene] of Object.entries(scenes)) {
   console.log(`rendered ${mp4}`);
 }
 await browser.close();
+if (signInDir) rmSync(signInDir, { force: true, recursive: true });
