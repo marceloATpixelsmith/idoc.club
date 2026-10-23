@@ -2,6 +2,13 @@
 
 **Administrator & Operations Runbook**
 
+
+## Legacy password compliance first-login verification
+
+A member whose imported WordPress credential verifies successfully but fails any current IDOC password requirement (10–128 Unicode code points, uppercase, lowercase, numeral, special character) cannot enter the site with that password. Login displays the policy-specific explanation and sends a fresh migration-activation email link; only after setting a policy-compliant password can the member continue. A confirmed HIBP breach instead displays the breach-specific explanation and requires the same secure replacement. A compliant non-breached imported password upgrades its hash and proceeds through existing email verification and profile onboarding; incorrect passwords remain invalid without sending activation mail.
+
+**Staging evidence:** LIVE-AUTH-039 provisions *two disposable* imported WordPress credentials in `idoc_staging`, tests a real noncompliant first-login/activation link/old-password rejection and a real compliant first-login/OTP flow, and cleans up test accounts and mailboxes. The separate breached-password first-login explanation should additionally be verified with a safe disposable fixture before launch. Staging must retain the communications and billing hold while enabling the staging-only authentication email exception. Do not accept ordinary signup/login results as evidence that legacy first-login behavior was exercised.
+
 ## Signup and password reset breach checks
 
 Password creation during signup and password reset checks the new password against Have I Been Pwned's free Pwned Passwords range endpoint. The application computes a SHA-1 hash server-side and sends only its first five hexadecimal characters; it compares the returned suffixes locally. The password and full hash are never sent. A breached match is rejected with a request to choose another password. Provider outages are recorded as an unavailable check and do not block password creation.
