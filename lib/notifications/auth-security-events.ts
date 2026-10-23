@@ -12,6 +12,7 @@ export const AUTH_SECURITY_KINDS = [
   'authenticator_replaced', 'recovery_code_used', 'recovery_codes_regenerated', 'role_granted', 'role_revoked',
   'other_sessions_revoked', 'new_sign_in', 'passkey_registered', 'passkey_removed',
   'account_suspended', 'account_reinstated', 'mfa_replay_detected', 'authority_force_revoked',
+  'legacy_welcome',
 ] as const;
 
 export type AuthSecurityKind = (typeof AUTH_SECURITY_KINDS)[number];
