@@ -1,5 +1,5 @@
 import 'server-only';
-import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
+import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled, stagingAuthEmailsAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -54,9 +54,9 @@ export async function requestAccountLink(
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
         if (testFailureAt === 'after_token_insert') throw new Error('injected transaction failure');
-        await tx.insert(accountDeliveryOutbox).values({ ...communicationHoldFields(), ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        await tx.insert(accountDeliveryOutbox).values({ ...(stagingAuthEmailsAllowed() ? {} : communicationHoldFields()), ...deliveryPayload, messageId: stagingAuthEmailsAllowed() ? `staging-auth-${randomUUID()}` : randomUUID(), purpose, tokenId: token.id, userId: user.id });
         if (testFailureAt === 'after_outbox_insert') throw new Error('injected transaction failure');
-        await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
+        await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() && !stagingAuthEmailsAllowed() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
       });
       // Dispatch only after the token and outbox entry are committed.
@@ -141,6 +141,11 @@ async function applyMigrationActivationMutation(tx: Tx, userId: number, password
   if (!claimed) return null;
   await tx.update(accountTokens).set({ consumedAt: now }).where(and(eq(accountTokens.userId, userId), eq(accountTokens.purpose, 'migration_activation'), isNull(accountTokens.consumedAt)));
   await tx.insert(auditLog).values({ actorId: userId, action: 'account.migration_activation.completed', entityId: String(userId), entityType: 'user', afterJson: { accountState: profileComplete ? 'active' : 'onboarding' } });
+  // One-time welcome tour for a legacy member's first sign-in on the new site. The state claim above runs once per account and the
+  // dedupe key backs it, so this can never send twice. Queued in the same transaction; a hold marks it dead-lettered like every other notice.
+  await tx.execute(sql`insert into auth_security_notification_outbox(dead_lettered_at,last_error_code,user_id,kind,recipient_email,dedupe_key)
+    select ${communicationHoldTimestamp()}::timestamptz,case when ${memberCommunicationsDisabled()} then 'member_launch_hold' else null end,id,'legacy_welcome',email,${`legacy-welcome:${userId}`} from users where id=${userId}
+    on conflict (dedupe_key) where dedupe_key is not null do nothing`);
   return claimed.sessionVersion;
 }
 
@@ -149,7 +154,7 @@ async function applyMigrationActivationMutation(tx: Tx, userId: number, password
  * credential while enforcing the same migration-foundation checks, conditional state claim, audit,
  * session invalidation, and outstanding-token invalidation as token-based activation. */
 export async function finalizeMigratedAccountAfterVerifiedPassword(userId: number): Promise<{ status: 'invalid' } | { status: 'success'; sessionVersion: number }> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const foundation = await inspectMigrationActivationFoundation(tx, userId);
     if (!foundation.valid) return { status: 'invalid' as const };
     // Activation itself increments the session version; the caller must carry that exact value into its guarded re-read.
@@ -157,18 +162,22 @@ export async function finalizeMigratedAccountAfterVerifiedPassword(userId: numbe
     if (sessionVersion === null) return { status: 'invalid' as const };
     return { status: 'success' as const, sessionVersion };
   });
+  if (result.status === 'success') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
 
 /** Compatibility/support entry point for migrated accounts that do not have a usable imported
  * credential. This remains unlinked from normal sign-in and establishes a new password only after
  * the migration foundation and identity proof have been validated. */
 export async function activateMigratedAccountByUserId(userId: number, password: string): Promise<{ status: 'invalid' | 'success' }> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<{ status: 'invalid' | 'success' }> => {
     const foundation = await inspectMigrationActivationFoundation(tx, userId);
     if (!foundation.valid) return { status: 'invalid' };
     if ((await applyMigrationActivationMutation(tx, userId, password, foundation.profileComplete)) === null) return { status: 'invalid' };
     return { status: 'success' };
   });
+  if (result.status === 'success') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  return result;
 }
 
 export async function consumeAccountToken(rawToken: string, purpose: AccountTokenPurpose, password: string) {
@@ -212,6 +221,6 @@ export async function consumeAccountToken(rawToken: string, purpose: AccountToke
       on conflict (dedupe_key) where dedupe_key is not null do nothing`);
     return { status: 'success' as const };
   });
-  if (result.status === 'success' && purpose === 'password_reset') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
+  if (result.status === 'success') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   return result;
 }

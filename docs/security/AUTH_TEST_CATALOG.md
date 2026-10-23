@@ -1148,3 +1148,36 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-039 — Imported WordPress passwords failing the current policy require a verified reset; compliant ones upgrade seamlessly
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-STORAGE-004, AUTH-PASSWORD-005, AUTH-IDENTITY-003
+- **CI coverage:** mapped — `tests/legacy-wordpress-hash.test.ts`, `tests/password-composition-policy.test.ts`, `tests/security-e2e/password-recovery-and-change.spec.ts`, `tests/token-password-redirect.test.ts` — Credential-format and policy checks run in CI, including the contract that a successful activation-link submit redirects to /sign-in with a flash notice instead of leaving the form on screen; the disposable WordPress fixture, real activation email and first-login browser lifecycle run against staging.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Run against staging.idoc.club with DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING=true and the staging-only authentication email exception enabled.
+- Provision two new disposable @pixelsmith.space mailboxes, and atomically seed corresponding migrated_pending members, current membership entitlements, professional-role/profile records and migration mappings only in idoc_staging.
+- Use a supported, verifiable WordPress bcrypt hash for each: one policy-noncompliant and one policy-compliant password. Never reuse real member accounts.
+
+### Steps
+1. Successfully enter the noncompliant imported WordPress password. Verify the explicit IDOC password-policy explanation and absence of a valid session.
+2. Receive a real activation link at the disposable mailbox, open it, set a compliant password, and verify successful activation.
+3. Try the original noncompliant password again and verify it is rejected.
+4. Successfully enter the compliant imported WordPress password and verify the ordinary email OTP, first-login activation, and profile/onboarding destination without a mandatory reset.
+5. Use a separate disposable breached-password fixture in a follow-up acceptance run to confirm the breach-specific explanation takes precedence if both checks fail.
+
+### PASS
+- Policy-noncompliant verified WordPress credentials never establish a session without replacing their password through the received, single-use email link.
+- The old credential fails after replacement and a compliant imported WordPress credential proceeds without mandatory reset.
+
+### FAIL
+- Noncompliant imported password creates a session, its required-reset explanation is missing, no activation email arrives, the old password remains accepted after reset, or a compliant legacy credential is unnecessarily forced to reset.
+
+### Cleanup
+- Neutralize only the disposable staging accounts through the authorized e2e cleanup helper; delete both disposable mailboxes.
+
+### Evidence
+- Capture browser assertion results, delivery of the activation link, the staging revision, OTP and final destination. Never log or retain raw hashes, passwords, activation tokens or mailbox credentials.

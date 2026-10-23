@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
-export type StepUpActionState = { error?: string; stepUpRequired?: boolean; success?: string; [key: string]: unknown };
+export type StepUpActionState = { error?: string; stepUpRequired?: boolean; success?: string; retryAfterSeconds?: number; [key: string]: unknown };
 type Action<T extends StepUpActionState = StepUpActionState> = (state: T, formData: FormData) => Promise<T>;
 
 /** Runs a protected Server Action, retaining its FormData only in this component's memory. After
@@ -52,6 +52,15 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
 }) {
   const [code, setCode] = useState('');
   const [state, verify, verifying] = useActionState<StepUpActionState, FormData>(verifyStepUpTotp, {});
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  useEffect(() => {
+    setRetrySeconds(Math.max(0, Math.ceil(state.retryAfterSeconds ?? 0)));
+  }, [state.retryAfterSeconds]);
+  useEffect(() => {
+    if (retrySeconds === 0) return;
+    const interval = window.setInterval(() => setRetrySeconds((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(interval);
+  }, [retrySeconds]);
   const [cancelState, cancel, cancelling] = useActionState<StepUpActionState, FormData>(cancelStepUp, {});
   const [resuming, startResume] = useTransition();
   const resumeStarted = useRef(false);
@@ -88,6 +97,9 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
   }, [cancelState.cancelled, onOpenChange, onResult]);
 
   const busy = verifying || resuming || cancelling;
+  // The persisted challenge expires after five minutes, so a rate-limited challenge must
+  // be restarted rather than reusing stale authority after a longer cooldown.
+  const restartRequired = typeof state.retryAfterSeconds === 'number';
   // Escape (or clicking away) cancels exactly like the Cancel button, so the dialog can never trap anyone; it is ignored only while a
   // verification or the resumed action is already in flight.
   return <Dialog onOpenChange={(next) => { if (!next && !busy) cancelForm.current?.requestSubmit(); }} open={open}>
@@ -98,16 +110,16 @@ function FreshStepUpDialog({ action, formDataRef, onOpenChange, onResult, open }
       </DialogHeader>
       <form action={verify} className="space-y-4">
         <CsrfField />
-        <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" disabled={busy} maxLength={6}
+        <InputOTP aria-label="Authenticator code" autoComplete="one-time-code" disabled={busy || restartRequired} maxLength={6}
           name="code" onChange={setCode} pattern={REGEXP_ONLY_DIGITS} required value={code}>
           <InputOTPGroup className="grid w-full grid-cols-6 gap-2">
             {[0, 1, 2, 3, 4, 5].map((index) => <InputOTPSlot index={index} key={index} />)}
           </InputOTPGroup>
         </InputOTP>
-        {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}</p> : null}
-        <Button className="w-full" disabled={busy} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
+        {state.error ? <p className="text-sm text-red-400" role="alert">{state.error}{retrySeconds > 0 ? ` Restart available in ${Math.floor(retrySeconds / 60)}:${String(retrySeconds % 60).padStart(2, '0')}.` : restartRequired ? ' The cooldown has ended. Restart the original action for a new verification challenge.' : null}</p> : null}
+        <Button className="w-full" disabled={busy || restartRequired} type="submit">{resuming ? 'Completing original action…' : verifying ? 'Verifying…' : 'Verify and continue'}</Button>
       </form>
-      <form action={cancel} ref={cancelForm}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">Cancel</Button></form>
+      <form action={cancel} ref={cancelForm}><CsrfField /><Button className="w-full" disabled={busy} type="submit" variant="outline">{restartRequired && retrySeconds === 0 ? 'Restart original action' : 'Cancel'}</Button></form>
     </DialogContent>
   </Dialog>;
 }

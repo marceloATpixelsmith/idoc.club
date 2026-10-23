@@ -139,10 +139,11 @@ test('every code-verification purpose (email OTP and TOTP alike) shares the same
   const now = new Date();
   for (const purpose of ['otp_verify_login', 'otp_verify_reset', 'otp_verify_signup', 'mfa_login_verify', 'mfa_recovery_code_verify', 'mfa_enrollment_confirm', 'mfa_step_up_verify', 'mfa_password_reset_verify']) {
     const email = normalizeEmail(`code-verify-${purpose}@example.test`);
-    for (let i = 0; i < 5; i += 1) {
+    const allowance = purpose === 'mfa_step_up_verify' ? 10 : 5;
+    for (let i = 0; i < allowance; i += 1) {
       assert.equal(await checkRateLimit(purpose, email, `code-verify-origin-${purpose}-${i}`, now), true, `${purpose} attempt ${i + 1} should be allowed`);
     }
-    assert.equal(await checkRateLimit(purpose, email, `code-verify-origin-${purpose}-overflow`, now), false, `${purpose}'s 6th attempt should be blocked`);
+    assert.equal(await checkRateLimit(purpose, email, `code-verify-origin-${purpose}-overflow`, now), false, `${purpose}'s ${allowance + 1}th attempt should be blocked`);
   }
 });
 

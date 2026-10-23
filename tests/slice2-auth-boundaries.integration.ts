@@ -235,12 +235,12 @@ test('AUTH-RATE-006 drives each real MFA action through its purpose-specific ato
     await withTestRequestCookies(cookies, async () => {
       await setSession(fixture.user);
       assert.equal((await requireFreshStepUp(fixture.user, 'generate-recovery-codes', '/dashboard/security')).required, true);
-      const results = await Promise.all(Array.from({ length: 7 }, () => verifyStepUpTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
-      assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many attempts')).length, 2);
+      const results = await Promise.all(Array.from({ length: 12 }, () => verifyStepUpTotp({}, form('code', '000000', csrfTokenFrom(cookies)))));
+      assert.equal(results.filter((result) => String((result as { error?: string }).error).includes('Too many verification attempts')).length, 2);
     }, 'step-up-rate.example.test');
     const rows = await rateRows('mfa_step_up_verify');
     assert.equal(rows.length, 2);
-    assert.deepEqual(rows.map((row) => row.request_count), [7, 7]);
+    assert.deepEqual(rows.map((row) => row.request_count), [12, 12]);
     for (const purpose of ['mfa_login_verify', 'mfa_recovery_code_verify', 'mfa_enrollment_confirm']) {
       assert.equal((await rateRows(purpose)).length, 0);
     }

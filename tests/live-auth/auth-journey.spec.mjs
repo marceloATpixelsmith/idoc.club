@@ -21,7 +21,7 @@ async function submitPassword(page, value) {
 }
 
 test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, login, and logout", async ({ page, context }) => {
-  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006" });
+  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-001,LIVE-AUTH-003,LIVE-AUTH-005,LIVE-AUTH-006,LIVE-AUTH-008,LIVE-AUTH-022,LIVE-AUTH-029" });
   const evidence = [];
   const beforeSignup = await otpSnapshot(email, "verification code");
   await page.goto("/sign-up");
@@ -31,6 +31,8 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   await signupButton.click();
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   const signupCode = await waitForOtp(email, "verification code", beforeSignup);
+  // Email delivery and code redemption are exercised live, but password-reset/email-change mail are not.
+  evidence.push("LIVE-AUTH-029");
   await page.locator('input[name="code"]').fill(signupCode === "000000" ? "111111" : "000000");
   await expect(page.locator(".idoc-auth-error")).toBeVisible();
   await page.reload();
@@ -41,7 +43,10 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
-  evidence.push("LIVE-AUTH-001");
+  // Verify a new onboarding account cannot use a direct protected deep link to skip onboarding.
+  await page.goto("/dashboard/membership");
+  await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
+  evidence.push("LIVE-AUTH-001", "LIVE-AUTH-008");
 
   await page.getByRole("button").filter({ has: page.locator('[data-slot="avatar"]') }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
@@ -78,4 +83,7 @@ test("LIVE-AUTH-001,003,005,006: reuse one mailbox/account through signup, OTP, 
   // Fresh signups have not completed onboarding. Their mandatory onboarding gate
   // takes precedence over the saved return URL and must not be bypassed.
   await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
+  // Partial LIVE-AUTH-022: approved returnTo is overridden by required onboarding;
+  // malicious return-path variants still require dedicated browser cases.
+  evidence.push("LIVE-AUTH-022");
 });

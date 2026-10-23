@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
+import { hash as hashBcrypt } from 'bcryptjs';
 import { signIn } from '../app/(login)/actions.ts';
 import { verifyLoginOtp } from '../app/(login)/sign-in/actions.ts';
 import { startPendingLogin } from '../lib/auth/pending-login.ts';
@@ -30,7 +31,7 @@ Object.assign(process.env, {
 });
 
 // Published phpass test vector: password "test12345".
-const PASSWORD = 'test12345';
+const PASSWORD = 'ValidLegacy1!';
 const PHPASS = '$P$9IQRaTwmfeRo7ud9Fh4E2PdI0S3r.L0';
 const PLACEHOLDER = '!legacy-import-no-password-yet';
 
@@ -56,7 +57,9 @@ async function redirected(operation: () => Promise<unknown>) {
 /** An imported member exactly as the legacy import writes one; `complete` false leaves the required profile fields blank. */
 async function importedMember(complete: boolean, legacyId = 7) {
   const user = await createUser('migrated_pending');
-  await sql`update idoc.users set password_hash=${PLACEHOLDER}, legacy_password_hash=${PHPASS}, legacy_password_format='phpass', email_verified_at=null where id=${user.id}`;
+  const prehash = createHmac('sha384', 'wp-sha384').update(PASSWORD, 'utf8').digest('base64');
+  const legacyHash = `$wp${await hashBcrypt(prehash, 4)}`.replace(/^\$wp\$2[ab]\$/, '$wp$2y$');
+  await sql`update idoc.users set password_hash=${PLACEHOLDER}, legacy_password_hash=${legacyHash}, legacy_password_format='wp_bcrypt', email_verified_at=null where id=${user.id}`;
   const blank = complete ? { address: '1 Main St', city: 'Town', state: 'ST', postal: '12345', country: 'DE' } : { address: '', city: '', state: '', postal: '', country: '' };
   const [profile] = await sql<{ id: number }[]>`insert into idoc.profiles (user_id, legacy_wp_user_id, first_name, last_name, address_1, city, state_province, postal_code, country_code)
     values (${user.id}, ${legacyId}, 'Ada', 'Lovelace', ${blank.address}, ${blank.city}, ${blank.state}, ${blank.postal}, ${blank.country}) returning id`;
@@ -99,7 +102,7 @@ test('a wrong password changes nothing and keeps the exported hash', async () =>
   assert.deepEqual(result, { error: 'Invalid email or password. Please try again.', email: user.email });
   const row = await stored(user.id);
   assert.equal(row.password_hash, PLACEHOLDER);
-  assert.equal(row.legacy_password_hash, PHPASS);
+  assert.match(row.legacy_password_hash, /^\$wp\$2y\$/);
 });
 
 test('a WordPress password found in the breach corpus never signs in; an activation link is queued instead', async () => {
@@ -110,8 +113,21 @@ test('a WordPress password found in the breach corpus never signs in; an activat
   assert.match(String(result.error), /data breach/);
   const row = await stored(user.id);
   assert.equal(row.password_hash, PLACEHOLDER);
+  assert.match(row.legacy_password_hash, /^\$wp\$2y\$/);
+  assert.equal((await sql`select 1 from idoc.account_delivery_outbox where user_id=${user.id} and purpose='migration_activation'`).length, 1);
+});
+
+test('a verified but policy-noncompliant WordPress password requires a reset before account activation', async () => {
+  globalThis.fetch = (async () => new Response('', { status: 200 })) as typeof fetch;
+  const user = await importedMember(true, 19);
+  await sql`update idoc.users set legacy_password_hash=${PHPASS}, legacy_password_format='phpass' where id=${user.id}`;
+  const result = await attemptSignIn(user.email, 'test12345') as { error?: string };
+  assert.match(String(result.error), /does not meet the new IDOC password requirements/);
+  const row = await stored(user.id);
+  assert.equal(row.password_hash, PLACEHOLDER);
   assert.equal(row.legacy_password_hash, PHPASS);
   assert.equal((await sql`select 1 from idoc.account_delivery_outbox where user_id=${user.id} and purpose='migration_activation'`).length, 1);
+  assert.equal((await sql`select count(*)::int as n from idoc.auth_sessions where user_id=${user.id}`)[0].n, 0);
 });
 
 test('activation moves a complete profile to active and an incomplete one to onboarding', async () => {
@@ -121,6 +137,16 @@ test('activation moves a complete profile to active and an incomplete one to onb
   assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(incomplete.id)).status, 'success');
   const states = await sql`select id, account_state from idoc.users where id in (${complete.id}, ${incomplete.id}) order by id`;
   assert.deepEqual(states.map((row) => row.account_state), ['active', 'onboarding']);
+});
+
+test('activation queues exactly one legacy welcome email and a repeat activation queues no second', async () => {
+  const user = await importedMember(true, 13);
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(user.id)).status, 'success');
+  assert.equal((await finalizeMigratedAccountAfterVerifiedPassword(user.id)).status, 'invalid');
+  const rows = await sql`select kind, recipient_email, dedupe_key from idoc.auth_security_notification_outbox where user_id = ${user.id} and kind = 'legacy_welcome'`;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].recipient_email, user.email);
+  assert.equal(rows[0].dedupe_key, `legacy-welcome:${user.id}`);
 });
 
 test('onboarding completes the imported profile in place and keeps what the import already knew', async () => {

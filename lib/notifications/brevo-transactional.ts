@@ -14,8 +14,8 @@ export interface TransactionalEmail {
  * current behavior unchanged) -- callers for whom a hung request must not block their own response
  * (e.g. a best-effort operational alert fired from inside a route handler) can pass
  * `AbortSignal.timeout(ms)` to bound delivery. */
-export async function sendTransactionalEmail(message: TransactionalEmail, options: { allowLiveAuthE2eOtp?: boolean; signal?: AbortSignal } = {}) {
-  assertTransactionalEmailAllowed('email.transactional', message.to, options.allowLiveAuthE2eOtp);
+export async function sendTransactionalEmail(message: TransactionalEmail, options: { allowLiveAuthE2eOtp?: boolean; authenticationEmail?: boolean; signal?: AbortSignal } = {}) {
+  assertTransactionalEmailAllowed('email.transactional', message.to, options.allowLiveAuthE2eOtp, options.authenticationEmail);
   const apiKey = brevoApiKeyForServer();
   const fromEmail = brevoFromEmailForServer();
   const response = await tracedFetch('brevo', 'https://api.brevo.com/v3/smtp/email', {

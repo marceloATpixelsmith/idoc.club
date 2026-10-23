@@ -17,6 +17,10 @@ test('registration confirmations cover FEI and non-FEI scenarios using the real 
   assert.match(registrationEmail, /Registering with IDOC alone does not approve you to participate/);
 });
 
+test('previews pass the staging member-communications hold as authentication emails', () => {
+  assert.match(previewDefinitions, /\{ authenticationEmail: true \}\)/);
+});
+
 test('all four FEI approval statuses are previewable as actual status updates', () => {
   for (const status of [
     'pending_fei_approval',

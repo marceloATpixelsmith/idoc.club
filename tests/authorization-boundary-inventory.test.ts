@@ -88,6 +88,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
   'app/(dashboard)/admin/email-previews/actions.ts': { sendPreviewForm: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/operations/github-operations/actions.ts': { runOperationAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access', saveMembershipPerks: 'delegates-to-data-access' },
   // The public contact form: no session/entitlement involved on either side, only Turnstile +
   // rate-limiting + CSRF, the same anonymous-safe shape as the pre-authentication login actions --
@@ -104,6 +105,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/seminar-all-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/selected-reports/route.ts': 'requireAdministrator',
+  'app/api/admin/live-auth-results/[runId]/route.ts': 'requireSuperAdmin',
   'app/api/admin/table-preferences/[table]/route.ts': 'authenticated-admin-csrf-owner-boundary',
   'app/api/admin/tiptap-image/route.ts': 'authenticated-admin-csrf-boundary',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',

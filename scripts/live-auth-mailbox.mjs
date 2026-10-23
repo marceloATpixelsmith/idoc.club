@@ -96,3 +96,31 @@ export async function waitForOtp(email, kind, previousCodes = [], timeoutMs = 90
   }
   throw new Error("Timed out waiting for the " + kind + " email code.");
 }
+
+function activationLinks(data) {
+  const result = [];
+  for (const message of collectMessages(data)) {
+    if (!/Activate your IDOC account/i.test(String(message.subject || ""))) continue;
+    const content = [message.html, message.text, message.body].filter((part) => typeof part === "string").join("\n").replace(/&amp;/g, "&");
+    for (const match of content.matchAll(/https:\/\/staging\.idoc\.club\/activate\?token=[A-Za-z0-9_-]+/g)) {
+      result.push(match[0]);
+    }
+  }
+  return [...new Set(result)];
+}
+
+export async function activationLinkSnapshot(email) {
+  return activationLinks(await messages(email, 20));
+}
+
+export async function waitForActivationLink(email, previousLinks = [], timeoutMs = 90_000) {
+  const previous = new Set(previousLinks);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const links = activationLinks(await messages(email, 20));
+    const fresh = links.find((url) => !previous.has(url));
+    if (fresh) return fresh;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  throw new Error("Timed out waiting for the account activation email.");
+}

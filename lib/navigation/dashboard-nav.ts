@@ -3,6 +3,7 @@ export const DASHBOARD_NAV_ITEMS = [
   { href: '/dashboard/membership', label: 'My Membership' },
   { href: '/dashboard/profile', label: 'My Profile' },
   { href: '/dashboard/security', label: 'My Security' },
+  { href: '/dashboard/how-to-use', label: 'How to Use idoc.club' },
 ] as const;
 
 export function dashboardNavItems() {
