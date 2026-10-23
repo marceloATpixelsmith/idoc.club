@@ -53,6 +53,10 @@ test('guide sections are unique, cover the requested areas, and only play videos
   }
 });
 
+test('every guide section plays its published Cloudinary recording', () => {
+  for (const section of HOW_TO_SECTIONS) assert.equal(section.videoSrc, howToVideoUrl(section.id), section.id);
+});
+
 test('Cloudinary video and poster URLs follow the upload convention', () => {
   assert.equal(howToVideoUrl('directory'), 'https://res.cloudinary.com/z6xv27qx/video/upload/f_auto,q_auto/idoc/how-to/directory');
   assert.match(howToVideoPosterUrl('my-seminars'), /^https:\/\/res\.cloudinary\.com\/z6xv27qx\/video\/upload\/[^/]+\/idoc\/how-to\/my-seminars\.jpg$/);

@@ -50,6 +50,11 @@ const privacyInitScript = `
 `;
 
 const pause = (page, ms = 1800) => page.waitForTimeout(ms);
+// The cookie notice would cover the page in every video, so accept it once (essential cookies only) when it appears.
+async function dismissNotice(page) {
+  const accept = page.getByRole('button', { name: /^got it$/i });
+  if (await accept.isVisible().catch(() => false)) await accept.click();
+}
 async function show(page, locator) {
   await locator.first().scrollIntoViewIfNeeded();
   await locator.first().hover();
@@ -60,31 +65,45 @@ async function show(page, locator) {
 const scenes = {
   async directory(page) {
     await page.goto(`${baseUrl}/about/members-directory`);
-    await pause(page, 3000);
+    await pause(page, 1500);
+    await dismissNotice(page);
+    await pause(page, 1500);
     // "Search Directory" is a link, not a tab. The search box is focused but never typed in (real members would match).
     await page.goto(`${baseUrl}/about/members-directory?tab=directory`);
     await pause(page, 2500);
     await page.getByRole('searchbox').first().focus();
     await pause(page, 2500);
-    await show(page, page.getByRole('columnheader').first());
+    await show(page, page.locator('thead th').first());
   },
   async contact(page) {
     await page.goto(`${baseUrl}/contact`);
-    await pause(page, 3000);
+    await pause(page, 1500);
+    await dismissNotice(page);
+    await pause(page, 1500);
     await show(page, page.getByText(/your conversations/i));
     await show(page, page.getByRole('button', { name: /start conversation/i }));
   },
   async seminars(page) {
     await page.goto(`${baseUrl}/seminars`);
-    await pause(page, 3000);
+    await pause(page, 1500);
+    await dismissNotice(page);
+    await pause(page, 1500);
     // Result cards are links named "View <title>"; the header and calendar links have other names.
     await page.getByRole('link', { name: /^View / }).first().click();
-    await pause(page, 3000);
-    await show(page, page.getByRole('button', { name: /register/i }).or(page.getByRole('link', { name: /register/i })));
+    // The page shows an empty skeleton while it loads; start the scene only once the facts panel has rendered.
+    await page.getByText(/registration deadline/i).first().waitFor({ timeout: 45_000 });
+    await pause(page, 1500);
+    // Dates, venue, price and deadline are in the facts panel. The Register control only appears for an active member;
+    // the demo member never registers (that would create real data and possibly a payment), so show it only if present.
+    await show(page, page.getByText(/registration deadline/i));
+    const register = page.getByRole('button', { name: /^register/i }).or(page.getByRole('link', { name: /^register/i }));
+    if (await register.count()) await show(page, register);
   },
   async 'my-seminars'(page) {
     await page.goto(`${baseUrl}/seminars?view=my`);
-    await pause(page, 3000);
+    await pause(page, 1500);
+    await dismissNotice(page);
+    await pause(page, 1500);
     await show(page, page.getByText(/upcoming & current/i));
     // Registration cards read "Status: ...". Without a fixture registration only the empty state exists.
     const status = page.getByText(/^Status:/);
@@ -93,8 +112,20 @@ const scenes = {
   },
 };
 
+// A cold server render leaves the seminar page on an empty skeleton for seconds, so load it once off-camera first.
+async function warmSeminarPage(browser) {
+  const context = await browser.newContext({ storageState });
+  const page = await context.newPage();
+  await page.goto(`${baseUrl}/seminars`);
+  const href = await page.getByRole('link', { name: /^View / }).first().getAttribute('href');
+  if (href) await page.goto(new URL(href, baseUrl).toString());
+  await page.getByText(/registration deadline/i).first().waitFor({ timeout: 45_000 }).catch(() => {});
+  await context.close();
+}
+
 const browser = await chromium.launch({ executablePath: process.env.HOW_TO_CHROMIUM_PATH || undefined });
 for (const [id, scene] of Object.entries(scenes)) {
+  if (id === 'seminars') await warmSeminarPage(browser);
   const raw = join(outDir, `.raw-${id}`);
   rmSync(raw, { force: true, recursive: true });
   const context = await browser.newContext({
@@ -108,7 +139,7 @@ for (const [id, scene] of Object.entries(scenes)) {
   await context.close(); // flushes the recording
   const webm = join(raw, readdirSync(raw).find((name) => name.endsWith('.webm')));
   const mp4 = join(outDir, `${id}.mp4`);
-  execFileSync('ffmpeg', ['-y', '-i', webm, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: 'ignore' });
+  execFileSync('ffmpeg', ['-y', '-ss', '1.5', '-i', webm, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4], { stdio: 'ignore' });
   rmSync(raw, { force: true, recursive: true });
   console.log(`rendered ${mp4}`);
 }
