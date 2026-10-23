@@ -55,7 +55,7 @@ export const EMAIL_PREVIEW_DEFINITIONS: EmailPreviewDefinition[] = [
   { category: 'Account & authentication', id: 'account:migration_activation', label: 'Imported-account activation' },
   { category: 'Account & authentication', id: 'account:password_reset_link', label: 'Password reset link' },
   { category: 'Account & authentication', id: 'account:verify_email', label: 'Verify changed email address' },
-  { category: 'Account & authentication', id: 'account:legacy_welcome', label: 'Welcome to the new idoc.club (first sign-in of an imported member)' },
+  { category: 'Account & authentication', id: 'account:legacy_welcome', label: 'Welcome to the new idoc.club (first activation of an imported member)' },
   ...SECURITY_PREVIEW_KINDS.map((kind) => ({ category: 'Security' as const, id: `security:${kind}`, label: AUTH_SECURITY_CONTENT[kind].heading })),
   ...MEMBERSHIP_PREVIEWS.map(([id, label]) => ({ category: 'Membership & billing' as const, id, label })),
   ...SEMINAR_PREVIEWS.map(([id, label]) => ({ category: 'Seminars/Courses' as const, id, label })),

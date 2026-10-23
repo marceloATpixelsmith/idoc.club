@@ -29,7 +29,7 @@ export function renderLegacyWelcomeEmail(options: { firstName?: string | null } 
   const guideUrl = idocEmailAssetUrl(HOW_TO_PATH);
   const bodyHtml = [
     `<p>${firstName ? `Hello ${escapeHtml(firstName)},` : 'Hello,'}</p>`,
-    '<p>Welcome to the new idoc.club, and thank you for signing in. Your account moved over from the old site. Here is a quick tour of the parts of the site you will use most.</p>',
+    '<p>Welcome to the new idoc.club, and thank you for activating your account. Your account moved over from the old site. Here is a quick tour of the parts of the site you will use most.</p>',
     ...HOW_TO_SECTIONS.map(sectionCard),
     emailNoticeCard(
       'Registering for an FEI course',
@@ -42,7 +42,7 @@ export function renderLegacyWelcomeEmail(options: { firstName?: string | null } 
   return {
     html: renderTransactionalEmail({
       bodyHtml,
-      footerNote: 'You are receiving this one-time welcome because you signed in to the new idoc.club for the first time. Questions? Sign in and use Contact.',
+      footerNote: 'You are receiving this one-time welcome because your account from the old site was activated on the new idoc.club. Questions? Sign in and use Contact.',
       heading: 'Welcome to the new idoc.club',
     }),
     subject: LEGACY_WELCOME_SUBJECT,
