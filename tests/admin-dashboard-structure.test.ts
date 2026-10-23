@@ -37,6 +37,12 @@ test('Data promotion is listed only where it can run, the staging application', 
   assert.match(navigation, /showDataPromotion \? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS\.filter\(\(item\) => item\.href !== '\/admin\/operations\/data-promotion'\)/);
 });
 
+test('Email previews is not listed on Vercel Production, where the page returns 404', () => {
+  assert.match(adminLayout, /isProduction=\{process\.env\.VERCEL_ENV === 'production'\}/);
+  assert.match(navigation, /NON_PRODUCTION_HREFS: readonly string\[\] = \['\/admin\/email-previews'\]/);
+  assert.match(navigation, /isProduction \? dataPromotionItems\.filter\(\(item\) => !NON_PRODUCTION_HREFS\.includes\(item\.href\)\)/);
+});
+
 test('the manual-payments nav item is gone -- it only told admins to go back to Members and search', () => {
   assert.doesNotMatch(navigation, /Manual payments/);
   assert.doesNotMatch(navigation, /\/admin\/payments/);
