@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { otpSnapshot, waitForOtp, waitForActivationLink } from "../../scripts/live-auth-mailbox.mjs";
+import { otpSnapshot, waitForOtp, activationLinkSnapshot, waitForActivationLink } from "../../scripts/live-auth-mailbox.mjs";
 
 const noncompliant = process.env.LIVE_AUTH_LEGACY_NONCOMPLIANT_EMAIL;
 const compliant = process.env.LIVE_AUTH_LEGACY_COMPLIANT_EMAIL;
@@ -22,7 +22,7 @@ async function signIn(page, email, password) {
 test("LIVE-AUTH-039: noncompliant imported WordPress credential forces verified replacement; compliant one upgrades seamlessly", async ({ page }) => {
   test.info().annotations.push({ type: "live-auth-cases", description: "LIVE-AUTH-039" });
 
-  const before = await otpSnapshot(noncompliant, "Activate your IDOC account");
+  const before = await activationLinkSnapshot(noncompliant);
   await signIn(page, noncompliant, "Legacy1!");
   await expect(page.locator(".idoc-auth-error")).toContainText("does not meet the new IDOC password requirements");
   await expect(page).toHaveURL(/\/sign-in/);
