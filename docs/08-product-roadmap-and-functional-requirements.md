@@ -127,7 +127,7 @@ A privacy-first members directory is implemented, not part of the original numbe
 
 ### Legacy welcome email and How to Use idoc.club
 
-Imported members receive one welcome email at first activation on the new site, and every signed-in entitled member has a **How to Use idoc.club** page in My IDOC with a video slot and step-by-step instructions for the Members Directory, Contact, Seminars/Courses registration and My Seminars/Courses. Both are generated from one shared guide definition. Recordings are added as same-origin files; until a section has one it shows a placeholder. See [07](07-administrator-and-operations-runbook.md) for operations.
+Imported members receive one welcome email at first activation on the new site, and every signed-in entitled member has a **How to Use idoc.club** page in My IDOC with a video slot and step-by-step instructions for the Members Directory, Contact, Seminars/Courses registration and My Seminars/Courses. Both are generated from one shared guide definition. Recordings are hosted on the IDOC Cloudinary account and streamed from `res.cloudinary.com`; until a section has one it shows a placeholder. See [07](07-administrator-and-operations-runbook.md) for operations.
 
 # 3. Phase 0 - decisions and data dictionary
 

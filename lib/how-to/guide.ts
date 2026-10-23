@@ -6,6 +6,20 @@ export const HOW_TO_PATH = '/dashboard/how-to-use';
 export const HOW_TO_SECTION_IDS = ['directory', 'contact', 'seminars', 'my-seminars'] as const;
 export type HowToSectionId = (typeof HOW_TO_SECTION_IDS)[number];
 
+const CLOUDINARY_CLOUD_NAME = 'z6xv27qx';
+/** Cloudinary folder holding the recordings; `scripts/how-to-videos/upload.mjs` uploads each as `<folder>/<section id>`. */
+export const HOW_TO_VIDEO_FOLDER = 'idoc/how-to';
+
+/** Cloudinary delivery URL for a section's recording (format and quality chosen per viewer). */
+export function howToVideoUrl(id: HowToSectionId): string {
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/f_auto,q_auto/${HOW_TO_VIDEO_FOLDER}/${id}`;
+}
+
+/** Still frame from the recording, used as the player poster and the email thumbnail. */
+export function howToVideoPosterUrl(id: HowToSectionId): string {
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_2,f_jpg,q_auto,w_1280/${HOW_TO_VIDEO_FOLDER}/${id}.jpg`;
+}
+
 export type HowToSection = {
   /** Where the feature lives on the site. */
   featureHref: string;
@@ -17,8 +31,9 @@ export type HowToSection = {
   steps: string[];
   title: string;
   /**
-   * Same-origin video file under /public (the site's CSP allows only same-origin media), for example
-   * '/how-to-videos/directory.mp4'. `null` shows a "video coming soon" panel until the recording is added.
+   * Recording to play: `howToVideoUrl(id)` for a Cloudinary upload, or a same-origin file under /public. The
+   * content security policy allows media only from this site and res.cloudinary.com. `null` shows a
+   * "video coming soon" panel until the recording is published.
    */
   videoSrc: string | null;
 };

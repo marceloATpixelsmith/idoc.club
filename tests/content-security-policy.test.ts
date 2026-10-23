@@ -24,3 +24,8 @@ test('CSP allows the members map worker only from the same origin', () => {
   assert.match(policy, /worker-src 'self'(;|$)/);
   assert.doesNotMatch(policy, /blob:/);
 });
+
+test('CSP allows media only from this site and the Cloudinary account that hosts the How to Use videos', () => {
+  const policy = contentSecurityPolicy('nonce', 'production');
+  assert.match(policy, /media-src 'self' https:\/\/res\.cloudinary\.com(;|$)/);
+});
