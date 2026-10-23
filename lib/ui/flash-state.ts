@@ -17,6 +17,7 @@ export type UiFlashCode =
   | 'password-created'
   | 'password-changed'
   | 'password-reset-success'
+  | 'account-activated'
   | 'membership-checkout-success'
   | 'membership-renew-panel'
   | 'membership-renewal-setup-success'

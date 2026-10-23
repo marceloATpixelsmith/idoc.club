@@ -227,15 +227,24 @@ const breachedPasswordError = { error: 'This password has appeared in a public d
 
 export const resetPassword = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'password_reset', password);
-  if (result.status === 'success') return { success: 'Your password was reset. Sign in again on every device.' };
-  return result.status === 'breached_password' ? breachedPasswordError : { error: 'This reset link is invalid or expired.' };
+  if (result.status !== 'success') return result.status === 'breached_password' ? breachedPasswordError : { error: 'This reset link is invalid or expired.' };
+  return finishTokenPasswordFlow('password-reset-success');
 });
 
 export const activateMigratedAccount = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'migration_activation', password);
-  if (result.status === 'success') return { success: 'Your account is active. Sign in to review your imported profile.' };
-  return result.status === 'breached_password' ? breachedPasswordError : { error: 'This activation link is invalid or expired.' };
+  if (result.status !== 'success') return result.status === 'breached_password' ? breachedPasswordError : { error: 'This activation link is invalid or expired.' };
+  return finishTokenPasswordFlow('account-activated');
 });
+
+// A successful token flow sends the member straight to the login page instead of leaving the
+// spent password form on screen. Any pending login from the attempt that triggered the emailed
+// link is dropped so /sign-in opens on the email step, where the flash notice is shown.
+async function finishTokenPasswordFlow(flash: 'account-activated' | 'password-reset-success'): Promise<never> {
+  await clearPendingLogin();
+  await setUiFlash(flash, '/sign-in');
+  redirect('/sign-in');
+}
 
 const resendVerificationSchema = z.object({ email: z.string().email().max(255) });
 

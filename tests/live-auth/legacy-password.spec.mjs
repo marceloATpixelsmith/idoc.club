@@ -37,7 +37,9 @@ test("LIVE-AUTH-039: noncompliant imported WordPress credential forces verified 
   await page.getByLabel("New Password").fill(newPassword);
   await page.getByLabel("Confirm Password").fill(newPassword);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText("Your account is active. Sign in to review your imported profile.")).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  await expect(page.getByText("Your account is active. Sign in with your new password to review your imported profile.")).toBeVisible();
+  await expect(page.getByLabel("New Password")).toHaveCount(0);
 
   // The imported password is no longer accepted after the activated password replaces it.
   await signIn(page, noncompliant, noncompliantPassword);
