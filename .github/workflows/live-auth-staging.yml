@@ -119,7 +119,7 @@ jobs:
           import { createMailbox } from './scripts/live-auth-mailbox.mjs';
           const bad = await createMailbox();
           const good = await createMailbox();
-          appendFileSync(process.env.GITHUB_OUTPUT, 'bad=' + bad + '\\n' + 'good=' + good + '\\n');
+          appendFileSync(process.env.GITHUB_OUTPUT, 'bad=' + bad + '\n' + 'good=' + good + '\n');
           NODE
       - name: Seed isolated migrated WordPress test members
         env:
