@@ -54,7 +54,7 @@ export async function requestAccountLink(
         await tx.execute(sql`select pg_advisory_xact_lock(${user.id}, ${purpose === 'password_reset' ? 1 : 2})`);
         const [token] = await tx.insert(accountTokens).values({ expiresAt: new Date(now.getTime() + LIFETIME_MS), purpose, tokenHash: digest(rawToken), userId: user.id }).returning({ id: accountTokens.id });
         if (testFailureAt === 'after_token_insert') throw new Error('injected transaction failure');
-        await tx.insert(accountDeliveryOutbox).values({ ...(stagingAuthEmailsAllowed() ? {} : communicationHoldFields()), ...deliveryPayload, messageId: randomUUID(), purpose, tokenId: token.id, userId: user.id });
+        await tx.insert(accountDeliveryOutbox).values({ ...(stagingAuthEmailsAllowed() ? {} : communicationHoldFields()), ...deliveryPayload, messageId: stagingAuthEmailsAllowed() ? `staging-auth-${randomUUID()}` : randomUUID(), purpose, tokenId: token.id, userId: user.id });
         if (testFailureAt === 'after_outbox_insert') throw new Error('injected transaction failure');
         await tx.insert(auditLog).values({ action: `account.${purpose}.${memberCommunicationsDisabled() && !stagingAuthEmailsAllowed() ? 'delivery_blocked' : 'delivery_queued'}`, entityId: String(user.id), entityType: 'user' });
         if (testFailureAt === 'before_commit') throw new Error('injected transaction failure');
