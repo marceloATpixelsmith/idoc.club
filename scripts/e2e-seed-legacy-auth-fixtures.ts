@@ -45,4 +45,7 @@ async function main() {
     await sql.end();
   }
 }
-await main();
+void main().catch((error: unknown) => {
+  console.error('Disposable staging legacy-auth fixture seeding failed.', error instanceof Error ? error.message : 'Unknown error');
+  process.exitCode = 1;
+});
