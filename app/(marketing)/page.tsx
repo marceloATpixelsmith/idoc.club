@@ -149,6 +149,29 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Membership CTA */}
+      <section className="border-t border-border bg-surface/60">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 lg:grid-cols-2 lg:gap-16 lg:px-8">
+          <div className="max-w-xl">
+            <p className="eyebrow">Membership</p>
+            <h2 className="mt-3 text-4xl">Join officials from more than 40 nations</h2>
+            <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+              Members receive access to the member area: seminar registration, IDOC
+              documents, General Assembly papers and the officials&apos; directory.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]">
+                <Link href="/membership">Become a Member</Link>
+              </Button>
+              <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]" variant="secondary">
+                <Link href="/sign-in">Member Login</Link>
+              </Button>
+            </div>
+          </div>
+          {concentration.ok && concentration.areas.length > 0 ? <div className="w-full max-w-md lg:ml-auto"><MemberMapPreview areas={concentration.areas} /></div> : null}
+        </div>
+      </section>
+
       {/* Dressage results + partner clubs (legacy homepage links) */}
       <section className="border-t border-border">
         <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
@@ -179,29 +202,6 @@ export default async function Home() {
               </ul>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Membership CTA */}
-      <section className="border-t border-border bg-surface/60">
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 lg:grid-cols-2 lg:gap-16 lg:px-8">
-          <div className="max-w-xl">
-            <p className="eyebrow">Membership</p>
-            <h2 className="mt-3 text-4xl">Join officials from more than 40 nations</h2>
-            <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
-              Members receive access to the member area: seminar registration, IDOC
-              documents, General Assembly papers and the officials&apos; directory.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]">
-                <Link href="/membership">Become a Member</Link>
-              </Button>
-              <Button asChild className="h-auto px-7 py-3 text-xs font-semibold uppercase tracking-[0.2em]" variant="secondary">
-                <Link href="/sign-in">Member Login</Link>
-              </Button>
-            </div>
-          </div>
-          {concentration.ok && concentration.areas.length > 0 ? <div className="w-full max-w-md lg:ml-auto"><MemberMapPreview areas={concentration.areas} /></div> : null}
         </div>
       </section>
     </>
