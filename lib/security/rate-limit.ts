@@ -10,6 +10,11 @@ import { resolveRequestOrigin } from './request-origin';
 import { testRequestOrigin } from '@/lib/auth/request-cookies';
 
 const WINDOW_MS = 15 * 60 * 1000;
+const STEP_UP_WINDOW_MS = 5 * 60 * 1000;
+
+function windowMsFor(purpose: string): number {
+  return purpose === 'mfa_step_up_verify' ? STEP_UP_WINDOW_MS : WINDOW_MS;
+}
 const DEFAULT_EMAIL_MAX_REQUESTS = 3;
 const IP_MAX_REQUESTS = 10;
 const PROVIDER_USER_MAX_REQUESTS = 60;
@@ -37,12 +42,18 @@ const IDENTIFIER_MAX_REQUESTS: Readonly<Record<string, number>> = {
   mfa_login_verify: 5,
   mfa_password_reset_verify: 5,
   mfa_recovery_code_verify: 5,
-  mfa_step_up_verify: 5,
+  mfa_step_up_verify: 10,
   otp_verify_google_disconnect: 5,
   otp_verify_login: 5,
   otp_verify_reset: 5,
   otp_verify_signup: 5,
 };
+
+/** Exact seconds until the current fixed rate-limit window expires. */
+export function rateLimitRetryAfterSeconds(purpose: string, now: Date = new Date()): number {
+  const windowMs = windowMsFor(purpose);
+  return Math.max(1, Math.ceil((Math.floor(now.getTime() / windowMs) * windowMs + windowMs - now.getTime()) / 1000));
+}
 
 function identifierMaxRequestsFor(purpose: string): number {
   return IDENTIFIER_MAX_REQUESTS[purpose] ?? DEFAULT_EMAIL_MAX_REQUESTS;
@@ -56,6 +67,9 @@ function identifierMaxRequestsFor(purpose: string): number {
  * from one origin. */
 const ORIGIN_MAX_REQUESTS: Readonly<Record<string, number>> = {
   member_directory_search: 180,
+  // Step-up challenges already enforce five incorrect codes per transaction.
+  // Allow repeated legitimate admin operations without a shared-IP lockout after ten submissions.
+  mfa_step_up_verify: 40,
 };
 
 function originMaxRequestsFor(purpose: string): number {
@@ -86,7 +100,8 @@ async function takeBucket(purpose: string, identifierHash: string, originHash: s
  * contract (lib/membership/account-recovery.ts). */
 export async function checkRateLimit(purpose: string, email: string, origin: string, now: Date = new Date()): Promise<boolean> {
   const secret = rateLimitHashKeyForServer();
-  const windowStartedAt = new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
+  const windowMs = windowMsFor(purpose);
+  const windowStartedAt = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
   const emailHash = digest(`${secret}:email:${email}`);
   const originHash = digest(`${secret}:origin:${origin || 'unknown'}`);
   const allOriginsMarker = digest(`${secret}:all-origins`);
