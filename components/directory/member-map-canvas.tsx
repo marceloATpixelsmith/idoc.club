@@ -15,7 +15,14 @@ const OCEAN = '#050c20';
 const LAND = '#14203c';
 const GOLD = '#d3af37';
 
-export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { canOpenDirectory?: boolean; dots: MemberMapDot[]; summary: string }) {
+// Dots shrink on the small homepage preview so they stay proportionate to the miniature map.
+const PREVIEW_DOT_SCALE = 0.4;
+
+/**
+ * `preview` renders the same map as a small, static, non-interactive thumbnail (no zoom/pan, controls,
+ * hover popup, click-through or first-visit hint); the homepage wraps it in a link to the full map.
+ */
+export function MemberMapCanvas({ canOpenDirectory = false, dots, preview = false, summary }: { canOpenDirectory?: boolean; dots: MemberMapDot[]; preview?: boolean; summary: string }) {
   const container = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const routerRef = useRef(router);
@@ -43,7 +50,8 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
         const map = new maplibre.Map({
           attributionControl: false,
           container: element,
-          cooperativeGestures: true,
+          cooperativeGestures: !preview,
+          interactive: !preview,
           // Fit the whole world (minus Antarctica) at any container width, so a narrow phone starts
           // zoomed out rather than cropped to a desktop-sized world; users can still zoom in.
           bounds: [[-170, -56], [180, 80]],
@@ -80,14 +88,23 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
                 paint: {
                   'circle-color': GOLD,
                   'circle-opacity': 0.7,
-                  'circle-radius': ['get', 'radius'],
+                  'circle-radius': preview ? ['*', ['get', 'radius'], PREVIEW_DOT_SCALE] : ['get', 'radius'],
                   'circle-stroke-color': '#f3e3a0',
-                  'circle-stroke-width': 1,
+                  'circle-stroke-width': preview ? 0.5 : 1,
                 },
               },
             ],
           },
         });
+        if (preview) {
+          map.on('error', (event) => {
+            console.warn('Members map preview error:', event.error?.message);
+            if (!map.loaded()) setFailed(true);
+          });
+          teardown = () => map.remove();
+          if (cancelled) teardown();
+          return;
+        }
         map.addControl(new maplibre.NavigationControl({ showCompass: false }), 'top-right');
 
         const popup = new maplibre.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
@@ -167,8 +184,12 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, summary }: { c
       setHintLeaving(false);
       teardown?.();
     };
-  }, [canOpenDirectory, dots]);
+  }, [canOpenDirectory, dots, preview]);
 
+  if (preview) {
+    // The surrounding link carries the accessible name; a failed map just leaves the tinted panel.
+    return <div aria-hidden="true" className="aspect-[16/9] w-full bg-background" ref={container} />;
+  }
   if (failed) {
     return <p className="border border-border bg-surface/50 p-6 text-sm text-muted-foreground">The interactive map could not be displayed in this browser.</p>;
   }
