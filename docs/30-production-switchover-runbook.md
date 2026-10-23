@@ -55,3 +55,9 @@ Staging variables do not change on the day. `DB_SCHEMA` and `POSTGRES_URL` never
 - Before step B4: undo B3 env values; WordPress is untouched.
 - After B4: point DNS back at WordPress (TTL bounds the delay). Members created on the new site in the interim would need a manual export.
 - After B6: the import is all-or-nothing; a failed import writes nothing. A completed import cannot be re-run as a delta (already-imported members are skipped).
+
+## Legacy password compliance first-login verification
+
+A member whose imported WordPress credential verifies successfully but fails any current IDOC password requirement (10–128 Unicode code points, uppercase, lowercase, numeral, special character) cannot enter the site with that password. Login displays the policy-specific explanation and sends a fresh migration-activation email link; only after setting a policy-compliant password can the member continue. A confirmed HIBP breach instead displays the breach-specific explanation and requires the same secure replacement. A compliant non-breached imported password upgrades its hash and proceeds through existing email verification and profile onboarding; incorrect passwords remain invalid without sending activation mail.
+
+**Staging evidence:** LIVE-AUTH-039 provisions *two disposable* imported WordPress credentials in `idoc_staging`, tests a real noncompliant first-login/activation link/old-password rejection and a real compliant first-login/OTP flow, and cleans up test accounts and mailboxes. The separate breached-password first-login explanation should additionally be verified with a safe disposable fixture before launch. Staging must retain the communications and billing hold while enabling the staging-only authentication email exception. Do not accept ordinary signup/login results as evidence that legacy first-login behavior was exercised.
