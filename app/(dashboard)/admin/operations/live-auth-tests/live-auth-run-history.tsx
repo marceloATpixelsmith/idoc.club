@@ -24,7 +24,7 @@ export function LiveAuthRunHistory({ runs, cases }: { runs: Run[]; cases: Case[]
       <ul className="space-y-2">
         {runs.map(run => <li className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3" key={run.id}>
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <strong className={run.status === 'success' ? 'text-amber-200' : run.status === 'failure' ? 'text-red-300' : run.status === 'queued' || run.status === 'in_progress' ? 'text-amber-200' : 'text-muted-foreground'}>{run.status === 'success' ? 'JOURNEY PASSED · COVERAGE INCOMPLETE' : run.status === 'failure' ? 'JOURNEY FAILED' : run.status.toUpperCase()}</strong>
+            <strong className={run.status === 'success' ? 'text-amber-200' : run.status === 'failure' ? 'text-red-300' : run.status === 'queued' || run.status === 'in_progress' ? 'text-amber-200' : 'text-muted-foreground'}>{run.status === 'success' ? 'SMOKE TEST PASSED · AUTH NOT FULLY VERIFIED' : run.status === 'failure' ? 'AUTH SMOKE TEST FAILED' : run.status.toUpperCase()}</strong>
             <span>Run #{run.runNumber}</span>
             <span className="text-muted-foreground">{new Date(run.startedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'} · {run.event === 'workflow_dispatch' ? 'Manual' : 'Automatic'}</span>
           </div>
