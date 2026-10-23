@@ -455,3 +455,16 @@ test('the map shows a one-time, short-lived, animated click hint over the US bub
   // It animates to grab attention (flash + bounce + tap + ring), only for visitors who allow motion.
   assert.match(globals, /@media \(prefers-reduced-motion: no-preference\) \{[^@]*idoc-map-hint-flash[^@]*idoc-map-hint-bob[^@]*idoc-map-hint-tap[^@]*idoc-map-hint-ring/);
 });
+
+test('the homepage shows a static map preview whose whole tile links to the interactive map with a sliding blue overlay', () => {
+  const preview = readFileSync('components/directory/member-map-preview.tsx', 'utf8');
+  const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
+  const home = readFileSync('app/(marketing)/page.tsx', 'utf8');
+  assert.match(preview, /href="\/about\/members-directory"/);
+  assert.match(preview, /translate-y-full[^"]*bg-blue-600\/70|bg-blue-600\/70[^"]*translate-y-full/);
+  assert.match(preview, /group-hover:translate-y-0/);
+  assert.match(preview, /View Interactive Map/);
+  assert.match(preview, /ArrowUpRight/);
+  assert.match(canvas, /interactive: !preview/);
+  assert.match(home, /<MemberMapPreview areas=\{concentration\.areas\}/);
+});
