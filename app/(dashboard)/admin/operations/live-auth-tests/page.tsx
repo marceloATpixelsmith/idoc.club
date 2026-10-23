@@ -22,16 +22,16 @@ export default async function LiveAuthTestsPage() {
     <header className="space-y-2">
       <p className="eyebrow">Super Admin Operations</p>
       <h1 className="text-3xl font-semibold text-gold">Live Authentication Tests</h1>
-      <p className="max-w-3xl text-muted-foreground">Run the real staging authentication journey, examine each saved test report, and distinguish passed cases from failures, blocked cases and tests not yet automated.</p>
+      <p className="max-w-3xl text-muted-foreground">Run the current real-staging authentication smoke test and inspect its evidence. This is not yet a complete authentication acceptance suite: most catalog cases still require automated coverage before authentication can be marked fully verified.</p>
     </header>
     <section className="space-y-3 rounded-lg border border-border bg-surface/40 p-5">
-      <div className="flex items-center gap-2"><TestTube2 className="size-5 text-gold"/><h2 className="text-lg font-semibold">Start Live Authentication Test</h2></div>
-      <p className="text-sm text-muted-foreground">Uses the currently deployed staging commit. Creates and cleans up a disposable account and mailbox; uploads results and browser evidence to GitHub Actions.</p>
-      <ManualGithubOperationForm action={runOperationAction} workflow="live-auth" label="Run Live Authentication Tests" />
+      <div className="flex items-center gap-2"><TestTube2 className="size-5 text-gold"/><h2 className="text-lg font-semibold">Start Authentication Smoke Test</h2></div>
+      <p className="text-sm text-muted-foreground">Exercises real signup, email verification, login, logout and selected access checks on the deployed staging revision. It does not validate all 38 catalog cases. Creates and cleans up a disposable account and mailbox; saves evidence in GitHub Actions.</p>
+      <ManualGithubOperationForm action={runOperationAction} workflow="live-auth" label="Run Authentication Smoke Test" />
     </section>
     <section className="space-y-4 rounded-lg border border-border bg-surface/40 p-5">
-      <h2 className="text-lg font-semibold">Recent Live Authentication Tests</h2>
-      <p className="text-sm text-muted-foreground">Select View Results to open the JSON report in a drawer. A green workflow confirms the implemented browser run—not that every cataloged case was executed.</p>
+      <h2 className="text-lg font-semibold">Recent Authentication Smoke Tests</h2>
+      <p className="text-sm text-muted-foreground">Select View Results to open the JSON report in a drawer. Only a complete pass of all applicable cases establishes full authentication verification. A green GitHub workflow alone confirms only the limited smoke test succeeded.</p>
       {error ? <p role="alert" className="text-red-300">{error}</p> : null}
       <LiveAuthRunHistory cases={cases} runs={runs} />
     </section>

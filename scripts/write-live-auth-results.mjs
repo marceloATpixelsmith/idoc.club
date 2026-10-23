@@ -18,6 +18,24 @@ const results = manifest.cases.map((item) => {
   if (completed) return completed;
   return { id: item.id, status: "blocked", summary: "This live case is not yet implemented in the GitHub Actions browser runner.", evidence: [] };
 });
+const counts = Object.fromEntries(["pass", "partial", "fail", "blocked", "not-applicable"].map(status => [
+  status, results.filter(item => item.status === status).length,
+]));
+const applicable = results.length - counts["not-applicable"];
+const verified = applicable > 0 && counts.pass === applicable && counts.fail === 0 && counts.partial === 0 && counts.blocked === 0;
+const verification = {
+  status: verified ? "verified" : counts.fail > 0 ? "failed" : "incomplete",
+  fullyVerified: counts.pass,
+  applicable,
+  partiallyExercised: counts.partial,
+  failed: counts.fail,
+  notRun: counts.blocked,
+  explanation: verified
+    ? "Every applicable live authentication requirement was fully exercised and passed."
+    : counts.fail > 0
+      ? "One or more live authentication assertions failed. Authentication is not verified."
+      : "This is a partial real-staging smoke test. Unexercised or partially exercised requirements are not verified, even if the GitHub workflow succeeded.",
+};
 mkdirSync("test-results/auth", { recursive: true });
 writeFileSync("test-results/auth/auth-live-results.json", JSON.stringify({
   schemaVersion: 1,
@@ -25,5 +43,6 @@ writeFileSync("test-results/auth/auth-live-results.json", JSON.stringify({
   startedAt: automated.startedAt,
   completedAt: automated.completedAt,
   tester: "GitHub Actions",
+  verification,
   results,
 }, null, 2) + "\n");
