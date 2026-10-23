@@ -22,6 +22,14 @@ test('the welcome email links every featured area and its how-to video section',
   assert.ok(html.includes(`href="${BASE}${HOW_TO_PATH}"`));
 });
 
+test('the welcome email tells members they must log in, in a note placed above the How to Use button', () => {
+  const { html } = renderLegacyWelcomeEmail();
+  const note = html.indexOf('you must be logged in to idoc.club to see the How to Use idoc.club page');
+  const button = html.indexOf(`href="${BASE}${HOW_TO_PATH}"`);
+  assert.ok(note > -1, 'login note present');
+  assert.ok(note < button, 'login note precedes the How to Use button');
+});
+
 test('the welcome email states the FEI approval and audit-only rules and the support categories', () => {
   const { html } = renderLegacyWelcomeEmail();
   assert.match(html, /not complete until FEI approves/);
