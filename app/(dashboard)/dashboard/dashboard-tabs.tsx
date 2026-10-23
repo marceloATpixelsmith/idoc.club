@@ -4,13 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Users, Shield, Menu, UserCog } from 'lucide-react';
+import { CirclePlay, Users, Shield, Menu, UserCog } from 'lucide-react';
 import { DASHBOARD_NAV_ITEMS, dashboardNavItems, isDashboardNavItemActive } from '@/lib/navigation/dashboard-nav';
 
 const TAB_ICONS: Record<(typeof DASHBOARD_NAV_ITEMS)[number]['href'], typeof Users> = {
   '/dashboard/membership': Users,
   '/dashboard/profile': UserCog,
   '/dashboard/security': Shield,
+  '/dashboard/how-to-use': CirclePlay,
 };
 
 /** Before payment, the member has no dashboard capability beyond paying -- see
