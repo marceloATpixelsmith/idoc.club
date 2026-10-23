@@ -73,9 +73,18 @@ try {
       console.error('Timed out waiting for the sign-in code.');
       process.exit(1);
     }
-    await page.getByRole('textbox').first().fill(code);
-    await page.getByRole('button', { name: /verify|continue|submit/i }).first().click();
-    await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 45_000 });
+    // The code field is a segmented OTP widget: focus it and type, so every slot receives a digit.
+    await page.locator('input[autocomplete="one-time-code"], input[inputmode="numeric"], [data-input-otp]').first().click();
+    await page.keyboard.type(code, { delay: 80 });
+    const verify = page.getByRole('button', { name: /verify|continue|submit/i }).first();
+    if (await verify.isEnabled().catch(() => false)) await verify.click();
+    try {
+      await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 45_000 });
+    } catch {
+      const message = await page.getByRole('alert').first().textContent().catch(() => '');
+      console.error(`Code was not accepted${message ? `: ${message.trim()}` : ''} (still at ${new URL(page.url()).pathname}).`);
+      process.exit(1);
+    }
   } else if (outcome !== 'signed-in') {
     console.error(`Sign-in did not complete (ended at ${new URL(page.url()).pathname}).`);
     process.exit(1);
