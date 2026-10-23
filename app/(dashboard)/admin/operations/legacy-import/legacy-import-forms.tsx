@@ -172,7 +172,7 @@ function ImportPanel({ result, environment, pending }: { result: NonNullable<Leg
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            Creates {report.importable.toLocaleString('en-GB')} members with their memberships, payments and subscriptions in <strong>{environment}</strong>. It sends no email and changes nothing in Stripe. Members already imported are skipped, and it is all-or-nothing. It only imports the files you just reviewed.
+            Creates {report.importable.toLocaleString('en-GB')} members with their memberships, payments and subscriptions in <strong>{environment}</strong>. It sends no email and changes nothing in Stripe. Members already imported or already present in this environment are skipped, including those with billing references already owned by another account. Only new members are inserted, together in one transaction. It only imports the files you just reviewed.
           </p>
           {result.files.map((file) => <input key={file.sha256} name="reviewedSha" type="hidden" value={file.sha256} />)}
           <label className="flex items-start gap-2 text-sm text-foreground">
@@ -195,6 +195,8 @@ function ImportedNotice({ summary }: { summary: LegacyImportSummary }) {
     <div className="mt-4 rounded border border-emerald-400/40 bg-emerald-950/20 p-3 text-sm text-emerald-200" role="status">
       Import complete in {summary.schema}: {summary.imported.toLocaleString('en-GB')} members, {summary.payments.toLocaleString('en-GB')} payments ({summary.refunds} refunds), {summary.subscriptions.toLocaleString('en-GB')} subscriptions and {summary.billingAccounts.toLocaleString('en-GB')} billing accounts created.
       {summary.alreadyImported > 0 ? ` ${summary.alreadyImported} were already imported and skipped.` : ''}
+      {summary.skippedExistingAccounts > 0 ? ` ${summary.skippedExistingAccounts} existing accounts were skipped without changes.` : ''}
+      {summary.skippedExistingBillingReferences > 0 ? ` ${summary.skippedExistingBillingReferences} members with already-owned billing references were skipped without changes.` : ''}
       {summary.skippedZeroAmountPayments > 0 ? ` ${summary.skippedZeroAmountPayments} zero-amount payments were not stored.` : ''}
       {summary.membersWithoutStorableSubscription > 0 ? ` ${summary.membersWithoutStorableSubscription} subscriptions could not be stored.` : ''}
     </div>

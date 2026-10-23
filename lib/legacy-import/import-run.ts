@@ -33,6 +33,8 @@ export interface LegacyImportSummary {
   schema: string;
   imported: number;
   alreadyImported: number;
+  skippedExistingAccounts: number;
+  skippedExistingBillingReferences: number;
   payments: number;
   refunds: number;
   subscriptions: number;
@@ -92,7 +94,7 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
   return db.transaction(async (tx) => {
     const mapped = new Set((await tx.select({ id: migrationMap.legacyId }).from(migrationMap).where(sql`${migrationMap.legacyType} = 'wp_user'`)).map((row) => row.id));
     const todo = candidates.filter((member) => !mapped.has(member.legacyUserId));
-    const rows: ImportMemberRows[] = todo.map((member) => buildMemberRows(member, input.snapshot, forms));
+    let rows: ImportMemberRows[] = todo.map((member) => buildMemberRows(member, input.snapshot, forms));
 
     const emails = rows.map((row) => row.user.email);
     const existingByEmail = new Map<string, string>();
@@ -104,12 +106,6 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
         existingByEmail.set(row.email.toLowerCase(), `existing account #${row.id}: ${name || 'no profile name'}, ${row.email}, ${row.state}`);
       }
     }
-    if (existingByEmail.size > 0) {
-      const clashing = rows.filter((row) => existingByEmail.has(row.user.email));
-      const lines = clashing.map((row) => `${describeLegacyMember(input.plan, row.legacyUserId)}  ↔  ${existingByEmail.get(row.user.email)}`);
-      throw new LegacyImportBlockedError(`${clashing.length} member(s) already have an account in this environment with the same email. Nothing was imported. Decide what to do with those accounts first.\n${listWithOverflow(lines)}`);
-    }
-
     // Stripe IDs are unique in the database. A clash (inside the files, or with data already here) would otherwise be dropped
     // silently, leaving a member imported without their billing link or history, so it stops the whole run instead.
     const duplicates = (values: string[]) => values.filter((value, index) => values.indexOf(value) !== index);
@@ -121,11 +117,23 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     for (const part of chunks(customerIds)) for (const row of await tx.select({ id: billingAccounts.externalCustomerId }).from(billingAccounts).where(inArray(billingAccounts.externalCustomerId, part))) existingIds.add(row.id);
     for (const part of chunks(subscriptionIds)) for (const row of await tx.select({ id: subscriptions.externalSubscriptionId }).from(subscriptions).where(inArray(subscriptions.externalSubscriptionId, part))) existingIds.add(row.id);
     for (const part of chunks(paymentIds)) for (const row of await tx.select({ id: payments.externalPaymentId }).from(payments).where(inArray(payments.externalPaymentId, part))) if (row.id) existingIds.add(row.id);
-    if (insideFiles.size > 0 || existingIds.size > 0) {
+    // A Stripe reference already owned by another database record must never be
+    // reassigned. Skip its entire legacy member so no partial billing history is created.
+    // Repeated references in the source files remain a blocking ambiguity: there is
+    // no reliable way to choose which legacy member should own them.
+    if (insideFiles.size > 0) {
       const clashing = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
-        .some((id) => id && (insideFiles.has(id) || existingIds.has(id)))).map((row) => row.legacyUserId);
-      throw new LegacyImportBlockedError(`${clashing.length} member(s) have a Stripe customer, subscription or payment ID that is used twice in the files or already exists in this environment. Nothing was imported.\n${listWithOverflow(clashing.map((legacyUserId) => describeLegacyMember(input.plan, legacyUserId)))}`);
+        .some((id) => id && insideFiles.has(id))).map((row) => row.legacyUserId);
+      throw new LegacyImportBlockedError(`${clashing.length} member(s) share Stripe references inside the uploaded files. Resolve those ambiguous owners before importing.\n${listWithOverflow(clashing.map((id) => describeLegacyMember(input.plan, id))) }`);
     }
+    // Never modify a member account already present in this environment.
+    const skippedExistingAccounts = rows.filter((row) => existingByEmail.has(row.user.email)).length;
+    rows = rows.filter((row) => !existingByEmail.has(row.user.email));
+
+    const skippedExistingBillingReferences = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
+      .some((id) => id && existingIds.has(id))).length;
+    rows = rows.filter((row) => ![row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
+      .some((id) => id && existingIds.has(id)));
 
     const userIdByLegacy = new Map<string, number>();
     for (const part of chunks(rows)) {
@@ -183,7 +191,7 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
     for (const part of chunks(mapRows)) await tx.insert(migrationMap).values(part);
 
     const summary: LegacyImportSummary = {
-      schema, imported: rows.length, alreadyImported: candidates.length - todo.length, payments: paymentCount, refunds: refundCount, subscriptions: subscriptionCount, billingAccounts: billingCount,
+      schema, imported: rows.length, alreadyImported: candidates.length - todo.length, skippedExistingAccounts, skippedExistingBillingReferences, payments: paymentCount, refunds: refundCount, subscriptions: subscriptionCount, billingAccounts: billingCount,
       skippedZeroAmountPayments: rows.reduce((sum, row) => sum + row.skipped.zeroAmountPayments, 0), membersWithoutStorableSubscription: rows.filter((row) => row.skipped.unstorableSubscription).length,
     };
     await tx.insert(auditLog).values({

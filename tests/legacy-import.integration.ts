@@ -112,19 +112,24 @@ test('the import writes members, memberships, payments, subscriptions and mappin
   assert.equal((await sql`select count(*)::int as n from idoc.users where account_state = 'migrated_pending'`)[0].n, 3);
 });
 
-test('an existing account with the same email stops the whole import and writes nothing', async () => {
+test('an existing account is preserved while all other legacy members import', async () => {
   const admin = await adminUser();
-  await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'x', 'active')`;
+  const [existing] = await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'keep-this-password', 'active') returning id`;
   const { plan: reviewedPlan, report } = reviewed();
-  // The message names the people involved, not just an ID: the legacy member's name and email, and the account that already exists.
-  await assert.rejects(runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }), (error: unknown) => {
-    assert.ok(error instanceof LegacyImportBlockedError);
-    assert.match(error.message, /legacy user 2: Bea .*, bea@example\.com/);
-    assert.match(error.message, /existing account #\d+: no profile name, BEA@example\.com, active/);
-    return true;
-  });
-  assert.equal((await sql`select count(*)::int as n from idoc.profiles`)[0].n, 0);
-  assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
+  const result = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] });
+  assert.equal(result.imported, 2);
+  assert.equal(result.skippedExistingAccounts, 1);
+  assert.equal(result.skippedExistingBillingReferences, 0);
+  assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 2);
+  assert.deepEqual((await sql`select legacy_wp_user_id from idoc.profiles order by legacy_wp_user_id`).map((row) => row.legacy_wp_user_id), [1, 3]);
+  const [unchanged] = await sql`select id, password_hash, account_state from idoc.users where lower(email) = 'bea@example.com'`;
+  assert.equal(unchanged.id, existing.id);
+  assert.equal(unchanged.password_hash, 'keep-this-password');
+  assert.equal(unchanged.account_state, 'active');
+  const again = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] });
+  assert.equal(again.imported, 0);
+  assert.equal(again.alreadyImported, 2);
+  assert.equal(again.skippedExistingAccounts, 1);
 });
 
 test('the import refuses to run unless every precondition holds', async () => {
@@ -139,12 +144,30 @@ test('the import refuses to run unless every precondition holds', async () => {
   await createUser();
 });
 
-test('a Stripe ID that already exists here stops the whole import instead of being skipped', async () => {
+test('a preowned Stripe ID skips only its legacy member and preserves billing ownership', async () => {
   const admin = await adminUser();
   const user = await createUser();
   const [profileRow] = await sql`insert into idoc.profiles (user_id, first_name, last_name, address_1, city, state_province, postal_code, country_code) values (${user.id}, 'X', 'Y', '1', 'C', 'S', '1', 'DE') returning id`;
   await sql`insert into idoc.billing_accounts (profile_id, external_customer_id) values (${profileRow.id}, 'cus_ADA')`;
   const { plan: reviewedPlan, report } = reviewed();
-  await assert.rejects(runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }), /used twice|already exists/);
+  const result = await runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] });
+  assert.equal(result.imported, 2);
+  assert.equal(result.skippedExistingBillingReferences, 1);
+  assert.deepEqual((await sql`select legacy_id from idoc.migration_map order by legacy_id`).map((row) => row.legacy_id), ['2', '3']);
+  const [owned] = await sql`select profile_id from idoc.billing_accounts where external_customer_id = 'cus_ADA'`;
+  assert.equal(owned.profile_id, profileRow.id);
+});
+
+test('a duplicate source Stripe customer stays blocking even if one member already exists', async () => {
+  const admin = await adminUser();
+  await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'keep', 'active')`;
+  const { plan: reviewedPlan, report } = reviewed();
+  const bea = reviewedPlan.members.find((member) => member.legacyUserId === '2');
+  assert.ok(bea);
+  bea.stripe.customerId = 'cus_ADA';
+  await assert.rejects(
+    runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }),
+    /share Stripe references inside the uploaded files/,
+  );
   assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
 });

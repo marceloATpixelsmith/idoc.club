@@ -21,7 +21,13 @@ test("LIVE-AUTH-006: anonymous users cannot access protected member/admin routes
   const userResponse = await request.get("/api/user");
   expect(userResponse.status()).toBe(200);
   expect(await userResponse.json()).toBeNull();
-  const mutation = await request.delete("/api/admin/table-preferences/members");
+
+  //USE THE VALID ANONYMOUS DOUBLE-SUBMIT TOKEN SO THIS REACHES THE ROUTE'S AUTHORIZATION CHECK.
+  const csrfCookie = (await request.storageState()).cookies.find((cookie) => cookie.name === "__Host-idoc-csrf");
+  expect(csrfCookie).toBeTruthy();
+  const mutation = await request.delete("/api/admin/table-preferences/members", {
+    headers: { "x-idoc-csrf": csrfCookie.value },
+  });
   expect(mutation.status()).toBe(403);
 });
 
