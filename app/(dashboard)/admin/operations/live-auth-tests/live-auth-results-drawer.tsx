@@ -97,7 +97,13 @@ export function LiveAuthResultsDrawer({ run, onClose, cases }: { run: Run | null
                       <p className="mt-2 font-medium">Pass Criteria</p>
                       <ul className="ml-5 mt-1 list-disc space-y-1 text-muted-foreground">{(matrixById.get(item.id)?.passCriteria ?? []).map((criterion, i) => <li key={i}>{criterion}</li>)}</ul>
                     </details>
-                    {Array.isArray(item.evidence) && item.evidence.length > 0 ? <p className="text-xs text-muted-foreground">Evidence entries recorded: {item.evidence.length}. Open the GitHub artifact for supporting files.</p> : null}
+                    {Array.isArray(item.evidence) && item.evidence.length > 0 ? (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <p className="font-medium">Actual automated browser test(s) that produced this evidence:</p>
+                        <ul className="ml-4 list-disc">{item.evidence.filter((value): value is string => typeof value === 'string').map((value, index) => <li key={index}>{value}</li>)}</ul>
+                        <p>Open the GitHub artifact for logs and supporting files. A partial result does not establish all pass criteria.</p>
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>
