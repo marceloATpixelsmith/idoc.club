@@ -23,6 +23,13 @@ export function logMemberLaunchHold(action: string) {
   console.warn('[member_launch_hold]', { action });
 }
 
+/**//AUTH EMAIL EXCEPTION IS LIMITED TO THE STAGING PREVIEW DEPLOYMENT. */
+export function stagingAuthEmailsAllowed(environment: Environment = process.env): boolean {
+  return environment.ENABLE_AUTH_EMAILS_WHEN_COMMUNICATIONS_DISABLED === 'true'
+    && environment.VERCEL_ENV === 'preview'
+    && environment.VERCEL_GIT_COMMIT_REF === 'staging';
+}
+
 export function liveAuthE2eOtpMayBypassCommunicationsHold(recipient: string, environment: Environment = process.env): boolean {
   if (!memberCommunicationsDisabled(environment)
     || environment.VERCEL_ENV !== 'preview'
@@ -30,9 +37,10 @@ export function liveAuthE2eOtpMayBypassCommunicationsHold(recipient: string, env
   return /^[^@\s]+@pixelsmith\.space$/i.test(recipient);
 }
 
-export function assertTransactionalEmailAllowed(action: string, recipient: string, liveAuthE2eOtp = false) {
+export function assertTransactionalEmailAllowed(action: string, recipient: string, liveAuthE2eOtp = false, authenticationEmail = false) {
   if (!memberCommunicationsDisabled()) return;
   if (liveAuthE2eOtp && liveAuthE2eOtpMayBypassCommunicationsHold(recipient)) return;
+  if (authenticationEmail && stagingAuthEmailsAllowed()) return;
   logMemberLaunchHold(action);
   throw new MemberLaunchHoldError();
 }
