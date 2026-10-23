@@ -157,3 +157,17 @@ test('a preowned Stripe ID skips only its legacy member and preserves billing ow
   const [owned] = await sql`select profile_id from idoc.billing_accounts where external_customer_id = 'cus_ADA'`;
   assert.equal(owned.profile_id, profileRow.id);
 });
+
+test('a duplicate source Stripe customer stays blocking even if one member already exists', async () => {
+  const admin = await adminUser();
+  await sql`insert into idoc.users (email, password_hash, account_state) values ('BEA@example.com', 'keep', 'active')`;
+  const { plan: reviewedPlan, report } = reviewed();
+  const bea = reviewedPlan.members.find((member) => member.legacyUserId === '2');
+  assert.ok(bea);
+  bea.stripe.customerId = 'cus_ADA';
+  await assert.rejects(
+    runLegacyImport({ plan: reviewedPlan, report, snapshot, actorId: admin.id, fileFingerprints: ['a'] }),
+    /share Stripe references inside the uploaded files/,
+  );
+  assert.equal((await sql`select count(*)::int as n from idoc.migration_map`)[0].n, 0);
+});
