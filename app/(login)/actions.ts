@@ -90,10 +90,19 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   if (legacyHashChecked && foundUser.legacyPasswordHash) {
     const breach = await checkPasswordBreached(password);
-    if (breach.breached) {
-      // Nothing is signed in. The member sets a new password through the existing activation link, which applies the breach check too.
+    // A verified legacy password may be used for identification, but it may only be
+    // retained if it satisfies the current creation policy and is not known breached.
+    // Require the existing email-verified activation/reset flow before any password
+    // hash upgrade, account activation, MFA, or normal authenticated session.
+    const legacyPasswordMeetsPolicy = passwordSchema.safeParse(password).success;
+    if (breach.breached || !legacyPasswordMeetsPolicy) {
       await requestAccountLink(email, 'migration_activation', await requestOrigin());
-      return { error: 'That password appears in a known data breach, so it cannot be used any more. If this email has an account, we have sent a link to choose a new password.', email };
+      return {
+        error: breach.breached
+          ? 'That password appears in a known data breach and must be replaced. If this email has an account, we have sent a link to choose a new password.'
+          : 'Your previous password does not meet the new IDOC password requirements. If this email has an account, we have sent a link to choose a new password.',
+        email,
+      };
     }
     if (!breach.checked) {
       await db.insert(auditLog).values({ action: 'auth.legacy_password.breach_check_unavailable', actorId: foundUser.id, entityId: String(foundUser.id), entityType: 'user' });
