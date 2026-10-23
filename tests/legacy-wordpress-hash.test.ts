@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import test from 'node:test';
 import { hash as hashBcrypt } from 'bcryptjs';
 import { verifyLegacyPassword, verifyPhpassPortable, verifyWordPressBcrypt } from '../lib/auth/legacy-wordpress-hash.ts';
+import { passwordSchema } from '../lib/auth/password-policy.ts';
 
 // Published phpass test vector (phpass 0.5 documentation): password "test12345".
 const PHPASS = '$P$9IQRaTwmfeRo7ud9Fh4E2PdI0S3r.L0';
@@ -37,4 +38,23 @@ test('the format column selects the verifier and unknown formats never verify', 
   assert.equal(await verifyLegacyPassword('test12345', PHPASS, 'phpass'), true);
   assert.equal(await verifyLegacyPassword('test12345', PHPASS, 'wp_bcrypt'), false);
   assert.equal(await verifyLegacyPassword('test12345', PHPASS, 'md5'), false);
+});
+
+// A verified WordPress password is eligible for a seamless first login only when
+// the same current creation policy used by migration activation accepts it.
+test('verified legacy credentials failing the current site policy require password replacement', async () => {
+  const credentials = [
+    'short',
+    'longpassword1!',
+    'LONGPASSWORD1!',
+    'LongPassword!!',
+    'LongPassword11',
+    'Aa1!12345',
+  ];
+  for (const password of credentials) {
+    const prehash = createHmac('sha384', 'wp-sha384').update(password, 'utf8').digest('base64');
+    const stored = `$wp${await hashBcrypt(prehash, 4)}`;
+    assert.equal(await verifyLegacyPassword(password, stored, 'wp_bcrypt'), true);
+    assert.equal(passwordSchema.safeParse(password).success, password === 'Aa1!12345');
+  }
 });
