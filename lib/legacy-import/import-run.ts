@@ -72,20 +72,6 @@ export function assertImportAllowed(report: DryRunReport, environment: Record<st
   if (report.importable === 0) throw new LegacyImportBlockedError('There is nobody to import.');
 }
 
-const LISTED_CLASHES = 20;
-
-/** One line naming a legacy member the way the operator knows them: legacy ID, name and email as exported. */
-function describeLegacyMember(plan: LegacyImportPlan, legacyUserId: string): string {
-  const member = plan.members.find((candidate) => candidate.legacyUserId === legacyUserId);
-  if (!member) return `legacy user ${legacyUserId}`;
-  const name = `${member.profile.firstName} ${member.profile.lastName}`.trim();
-  return `legacy user ${legacyUserId}: ${name || '(no name)'}, ${member.emailDisplay}`;
-}
-
-function listWithOverflow(lines: string[]): string {
-  return lines.slice(0, LISTED_CLASHES).map((line) => `• ${line}`).join('\n') + (lines.length > LISTED_CLASHES ? `\n…and ${lines.length - LISTED_CLASHES} more` : '');
-}
-
 export async function runLegacyImport(input: { plan: LegacyImportPlan; report: DryRunReport; snapshot: StripeSnapshot; actorId: number; fileFingerprints: string[] }): Promise<LegacyImportSummary> {
   assertImportAllowed(input.report);
   const schema = getDatabaseSchemaName();
