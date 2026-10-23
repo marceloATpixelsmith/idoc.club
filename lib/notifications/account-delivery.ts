@@ -30,6 +30,8 @@ function dependenciesForTest(overrides?: Partial<DeliveryDependencies>) {
 
 /** Atomically leases one eligible row or terminalizes one invalid row. */
 export async function claimAccountDelivery(owner: string = randomUUID(), now = new Date()) {
+  ////ISOLATE STAGING AUTH JOBS FROM PRODUCTION JOBS IN THE SHARED OUTBOX.
+  const stagingOnly = stagingAuthEmailsAllowed();
   const rows = await db.execute<(typeof accountDeliveryOutbox.$inferSelect) & { eligible: boolean }>(sql`
       with candidate as (
         select o.id,
@@ -51,6 +53,7 @@ export async function claimAccountDelivery(owner: string = randomUUID(), now = n
         left join account_tokens t on t.id=o.token_id
         left join users u on u.id=o.user_id
         where o.sent_at is null and o.dead_lettered_at is null and o.terminal_at is null
+          and (${stagingOnly} = (o.message_id like 'staging-auth-%'))
           and o.available_at <= ${now.toISOString()} and (o.lease_expires_at is null or o.lease_expires_at < ${now.toISOString()})
         order by o.available_at, o.id for update of o skip locked limit 1
       )
