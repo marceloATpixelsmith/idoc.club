@@ -106,10 +106,6 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
         existingByEmail.set(row.email.toLowerCase(), `existing account #${row.id}: ${name || 'no profile name'}, ${row.email}, ${row.state}`);
       }
     }
-    // Never modify a member account already present in this environment.
-    const skippedExistingAccounts = rows.filter((row) => existingByEmail.has(row.user.email)).length;
-    rows = rows.filter((row) => !existingByEmail.has(row.user.email));
-
     // Stripe IDs are unique in the database. A clash (inside the files, or with data already here) would otherwise be dropped
     // silently, leaving a member imported without their billing link or history, so it stops the whole run instead.
     const duplicates = (values: string[]) => values.filter((value, index) => values.indexOf(value) !== index);
@@ -130,6 +126,10 @@ export async function runLegacyImport(input: { plan: LegacyImportPlan; report: D
         .some((id) => id && insideFiles.has(id))).map((row) => row.legacyUserId);
       throw new LegacyImportBlockedError(`${clashing.length} member(s) share Stripe references inside the uploaded files. Resolve those ambiguous owners before importing.\n${listWithOverflow(clashing.map((id) => describeLegacyMember(input.plan, id))) }`);
     }
+    // Never modify a member account already present in this environment.
+    const skippedExistingAccounts = rows.filter((row) => existingByEmail.has(row.user.email)).length;
+    rows = rows.filter((row) => !existingByEmail.has(row.user.email));
+
     const skippedExistingBillingReferences = rows.filter((row) => [row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
       .some((id) => id && existingIds.has(id))).length;
     rows = rows.filter((row) => ![row.billingCustomerId, row.subscription?.externalSubscriptionId, ...row.payments.map((payment) => payment.externalPaymentId)]
