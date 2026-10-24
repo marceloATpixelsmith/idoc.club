@@ -4,6 +4,7 @@ import { publishQStashJob, verifyQStashRequest, QSTASH_JOBS, type QStashJob } fr
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { client } from '@/lib/db/drizzle';
 import { recordJobResult } from '@/lib/observability/job-metrics';
+import { recordJobRun } from '@/lib/observability/job-run-record';
 import { GET as accountDelivery } from '@/app/api/cron/account-delivery/route';
 import { GET as seminarCancellation } from '@/app/api/cron/seminar-cancellation-resolution/route';
 import { GET as renewalScan } from '@/app/api/cron/renewal-notice-scan/route';
@@ -43,30 +44,39 @@ export async function POST(request: Request): Promise<Response> {
   if (!secret) return Response.json({ error: 'Worker unavailable' }, { status: 503 });
   const response = await handlers[job as QStashJob](new Request(request.url, { method: 'GET', headers: { authorization: `Bearer ${secret}` } }));
   await recordJobResult(job, request, response);
-  if (job === 'account-delivery' && response.ok) {
-    const summary = await response.clone().json() as { retryable?: number; delivered?: number; deadLettered?: number; ineligible?: number; leaseLost?: number; blocked?: number };
-    const fullBatch = !summary.blocked && (summary.delivered ?? 0) + (summary.retryable ?? 0) + (summary.deadLettered ?? 0) + (summary.ineligible ?? 0) + (summary.leaseLost ?? 0) >= 20;
-    if ((summary.retryable ?? 0) > 0 || fullBatch) {
-      // Schedule another attempt only after actual temporary delivery failures.
-      // DB availability windows and lease checks prevent premature redelivery.
-      // Honor the DB's persisted exponential backoff, including retries beyond 120 seconds.
-      const [next] = await client<{ available_at: string | null }[]>`
-        select min(available_at) as available_at from (
-          select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from account_delivery_outbox where sent_at is null and dead_lettered_at is null and terminal_at is null
-          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from auth_security_notification_outbox where sent_at is null and dead_lettered_at is null
-          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from operational_alert_outbox where sent_at is null and dead_lettered_at is null
-          union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from notification_outbox where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
-        ) pending`;
-      const earliest = next?.available_at ? new Date(next.available_at).getTime() : Date.now() + 120_000;
-      const delay = Number.isFinite(earliest) ? Math.max(15, Math.ceil((earliest - Date.now()) / 1000) + 10) : 120;
-      await publishQStashJob('account-delivery', delay);
+  // The run is recorded with the status this route finally returns (a job summary reporting failures is converted to a retryable 503 below).
+  let finalStatus = response.status;
+  try {
+    if (job === 'account-delivery' && response.ok) {
+      const summary = await response.clone().json() as { retryable?: number; delivered?: number; deadLettered?: number; ineligible?: number; leaseLost?: number; blocked?: number };
+      const fullBatch = !summary.blocked && (summary.delivered ?? 0) + (summary.retryable ?? 0) + (summary.deadLettered ?? 0) + (summary.ineligible ?? 0) + (summary.leaseLost ?? 0) >= 20;
+      if ((summary.retryable ?? 0) > 0 || fullBatch) {
+        // Schedule another attempt only after actual temporary delivery failures.
+        // DB availability windows and lease checks prevent premature redelivery.
+        // Honor the DB's persisted exponential backoff, including retries beyond 120 seconds.
+        const [next] = await client<{ available_at: string | null }[]>`
+          select min(available_at) as available_at from (
+            select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from account_delivery_outbox where sent_at is null and dead_lettered_at is null and terminal_at is null
+            union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from auth_security_notification_outbox where sent_at is null and dead_lettered_at is null
+            union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from operational_alert_outbox where sent_at is null and dead_lettered_at is null
+            union all select greatest(available_at,coalesce(lease_expires_at,available_at)) as available_at from notification_outbox where kind='stripe.customer_email_sync' and sent_at is null and dead_lettered_at is null
+          ) pending`;
+        const earliest = next?.available_at ? new Date(next.available_at).getTime() : Date.now() + 120_000;
+        const delay = Number.isFinite(earliest) ? Math.max(15, Math.ceil((earliest - Date.now()) / 1000) + 10) : 120;
+        await publishQStashJob('account-delivery', delay);
+      }
     }
+    if (job === 'seminar-cancellation-resolution' && response.ok) {
+      const summary = await response.clone().json() as { failed?: number; processed?: number; blocked?: number };
+      // A failed Stripe call should be retried by QStash, not acknowledged as completed.
+      if ((summary.failed ?? 0) > 0) { finalStatus = 503; return Response.json({ error: 'Cancellation resolution pending retry' }, { status: 503 }); }
+      if (!summary.blocked && (summary.processed ?? 0) >= 25) await publishQStashJob('seminar-cancellation-resolution', 120);
+    }
+    return response;
+  } catch (error) {
+    finalStatus = 500;
+    throw error;
+  } finally {
+    await recordJobRun(job, 'qstash', finalStatus);
   }
-  if (job === 'seminar-cancellation-resolution' && response.ok) {
-    const summary = await response.clone().json() as { failed?: number; processed?: number; blocked?: number };
-    // A failed Stripe call should be retried by QStash, not acknowledged as completed.
-    if ((summary.failed ?? 0) > 0) return Response.json({ error: 'Cancellation resolution pending retry' }, { status: 503 });
-    if (!summary.blocked && (summary.processed ?? 0) >= 25) await publishQStashJob('seminar-cancellation-resolution', 120);
-  }
-  return response;
 }
