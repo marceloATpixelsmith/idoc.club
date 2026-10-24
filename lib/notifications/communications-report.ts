@@ -34,6 +34,8 @@ export type BrevoCheck = 'delivered' | 'failed' | 'not_found' | 'unavailable';
 export type SentEmail = { email: string | null; id: string; sentAt: Date };
 
 const CLOCK_SLACK_MS = 2 * 60_000;
+// Brevo reports a delivery or bounce within minutes, a deferred retry within hours; a later event for the same address belongs to a later send.
+const OUTCOME_WINDOW_MS = 24 * 3_600_000;
 
 /** Matches each sent email to the Brevo log by recipient and time. A Brevo "delivered" event is consumed by
  * the first send to that address at or before it, so two emails to one member in the window are not both
@@ -50,9 +52,14 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
     byEmail.set(key, [...(byEmail.get(key) ?? []), event]);
   }
   const consumed = new Set<BrevoLogEvent>();
-  for (const row of [...sent].sort((left, right) => left.sentAt.getTime() - right.sentAt.getTime())) {
+  const ordered = [...sent].sort((left, right) => left.sentAt.getTime() - right.sentAt.getTime());
+  for (const [index, row] of ordered.entries()) {
     const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
-    const after = candidates.filter((event) => event.at.getTime() >= row.sentAt.getTime() - CLOCK_SLACK_MS).sort((left, right) => left.at.getTime() - right.at.getTime());
+    // An outcome belongs to this send only until the next send to the same address (or 24 hours), so a later
+    // message's bounce can never overturn an earlier delivery.
+    const nextSend = ordered.slice(index + 1).find((other) => other.email !== null && other.email.trim().toLowerCase() === row.email?.trim().toLowerCase());
+    const upper = Math.min(row.sentAt.getTime() + OUTCOME_WINDOW_MS, nextSend ? nextSend.sentAt.getTime() - CLOCK_SLACK_MS : Infinity);
+    const after = candidates.filter((event) => event.at.getTime() >= row.sentAt.getTime() - CLOCK_SLACK_MS && event.at.getTime() <= upper).sort((left, right) => left.at.getTime() - right.at.getTime());
     const failure = after.find((event) => FAILURE_EVENTS.includes(event.event) && !consumed.has(event));
     if (failure) { consumed.add(failure); result.set(row.id, 'failed'); continue; }
     const delivered = after.find((event) => event.event === 'delivered' && !consumed.has(event));

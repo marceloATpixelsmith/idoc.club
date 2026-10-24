@@ -1,4 +1,5 @@
-import { getCommunicationsReport, UPCOMING_DAYS, type SentRow } from '@/lib/notifications/communications-report-data';
+import { SentNoticesTable, UpcomingNoticesTable } from './communications-tables';
+import { getCommunicationsReport, UPCOMING_DAYS } from '@/lib/notifications/communications-report-data';
 import { BREVO_CHECK_LABELS, type KindTotals } from '@/lib/notifications/communications-report';
 import { memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
@@ -28,19 +29,6 @@ function TotalsTable({ caption, totals }: { caption: string; totals: KindTotals[
   </table></div>;
 }
 
-function SentTable({ rows }: { rows: SentRow[] }) {
-  if (rows.length === 0) return <p className="mt-2 text-sm text-muted-foreground">No renewal notices were sent in this period.</p>;
-  return <div className="mt-3 overflow-x-auto"><table className="min-w-full border text-sm">
-    <caption className="sr-only">Renewal notices from the last 7 days</caption>
-    <thead><tr><th className="p-2 text-left">Sent</th><th className="p-2 text-left">Notice</th><th className="p-2 text-left">Member</th><th className="p-2 text-left">Email</th><th className="p-2 text-left">Queue</th><th className="p-2 text-left">Brevo log</th></tr></thead>
-    <tbody>{rows.map((row, index) => <tr className="border-t" key={`${row.kind}-${row.email}-${index}`}>
-      <td className="p-2">{row.sentAt ? utc(row.sentAt) : '—'}</td><td className="p-2">{row.label}</td><td className="p-2">{row.member}</td><td className="p-2">{row.email ?? '—'}</td>
-      <td className="p-2">{row.status === 'sent' ? 'Sent' : row.status === 'failed' ? 'Failed (gave up)' : 'Pending'}</td>
-      <td className="p-2">{row.brevo ? BREVO_CHECK_LABELS[row.brevo] : '—'}</td>
-    </tr>)}</tbody>
-  </table></div>;
-}
-
 export default async function CommunicationsPage() {
   const report = await getCommunicationsReport();
   const systemSent = sum(report.systemTotals, 'sent');
@@ -64,14 +52,10 @@ export default async function CommunicationsPage() {
       <Stat label="Bounced / blocked" value={report.brevoAvailable ? sum(report.renewalTotals, 'brevoFailed') : '—'} /><Stat label="Pending or failed to send" value={sum(report.renewalTotals, 'pending') + sum(report.renewalTotals, 'failedToSend')} />
     </section>
     <TotalsTable caption="Renewal notice totals by type for the last 7 days" totals={report.renewalTotals} />
-    <SentTable rows={report.renewalRows} />
+    <div className="mt-4"><SentNoticesTable rows={report.renewalRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, id: `sent-${index}`, member: row.member, notice: row.label, queue: row.status === 'sent' ? 'Sent' : row.status === 'failed' ? 'Failed (gave up)' : 'Pending', sent: row.sentAt?.toISOString() }))} /></div>
 
     <h2 className="mt-10 text-lg font-medium">Renewal notices going out in the next {UPCOMING_DAYS} days</h2>
     <p className="mt-1 text-sm text-muted-foreground">Notices the daily scan has not queued yet, by the date it will queue them. A member already inside a notice window goes out on the next scan.</p>
-    {report.upcoming.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">No renewal notices are scheduled for this period.</p> : <div className="mt-3 overflow-x-auto"><table className="min-w-full border text-sm">
-      <caption className="sr-only">Upcoming renewal notices</caption>
-      <thead><tr><th className="p-2 text-left">Goes out</th><th className="p-2 text-left">Notice</th><th className="p-2 text-left">Member</th><th className="p-2 text-left">Email</th><th className="p-2 text-left">Renewal / expiry date</th></tr></thead>
-      <tbody>{report.upcoming.map((row, index) => <tr className="border-t" key={`${row.kind}-${row.email}-${index}`}><td className="p-2">{isoToDisplay(row.sendOn)}</td><td className="p-2">{row.label}</td><td className="p-2">{row.member}</td><td className="p-2">{row.email}</td><td className="p-2">{isoToDisplay(row.targetDate)}</td></tr>)}</tbody>
-    </table></div>}
+    <div className="mt-4"><UpcomingNoticesTable rows={report.upcoming.map((row, index) => ({ email: row.email, goesOut: `${row.sendOn}T00:00:00.000Z`, id: `upcoming-${index}`, member: row.member, notice: row.label, target: isoToDisplay(row.targetDate) }))} /></div>
   </main>;
 }

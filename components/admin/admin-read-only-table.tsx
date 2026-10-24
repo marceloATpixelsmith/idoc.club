@@ -47,7 +47,8 @@ export function AdminReadOnlyTable({
   rows: ReadOnlyRow[];
   searchLabel: string;
   statusColumn?: string;
-  tableType: 'notifications' | 'reconciliation';
+  /** Selected-row CSV export is served by `/api/admin/export/selected-reports`; a table without a server export omits `tableType` and the Export action. */
+  tableType?: 'notifications' | 'reconciliation';
 }) {
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -120,6 +121,7 @@ export function AdminReadOnlyTable({
       setExportNotice('Select no more than 100 rows to export.');
       return;
       }
+    if (!tableType) return;
     const params = new URLSearchParams({ table: tableType });
     for (const row of selected) params.append('id', row.id);
     const anchor = document.createElement('a');
@@ -135,7 +137,7 @@ export function AdminReadOnlyTable({
   }
   const dateFilterValue = dateColumn ? (table.getColumn(dateColumn)?.getFilterValue() as DateFilterValue | undefined) : undefined;
   const dateColumnLabel = definitions.find(({ id }) => id === dateColumn)?.label ?? dateColumn ?? '';
-  return <DataTable loading={viewChanging} table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup><ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem>{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+  return <DataTable loading={viewChanging} table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup>{tableType ? <ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem> : null}{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
     <DataTableToolbar
       className="mt-4 rounded-xl border bg-background p-3"
       table={table}

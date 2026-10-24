@@ -15,6 +15,7 @@ import {
 const WINDOW_DAYS = 7;
 export const UPCOMING_DAYS = 28;
 const BREVO_EVENTS: BrevoEventName[] = ['delivered', 'hardBounces', 'softBounces', 'blocked', 'spam', 'invalid', 'error'];
+// Profile-change alerts go to the operator mailbox (deliverProfileChangeNotification), not to the member the row is linked to.
 const BREVO_PAGE_SIZE = 500;
 const BREVO_MAX_PAGES = 10;
 
@@ -68,12 +69,13 @@ function memberName(firstName: string | null, lastName: string | null): string {
 export async function getCommunicationsReport(now: Date = new Date()): Promise<CommunicationsReport> {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
+  const adminAlertRecipient = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL?.trim() || null;
   const from = new Date(now.getTime() - WINDOW_DAYS * 86_400_000);
   const today = now.toISOString().slice(0, 10);
   const horizon = new Date(now.getTime() + UPCOMING_DAYS * 86_400_000).toISOString().slice(0, 10);
 
   const [outbox, accountDeliveries, upcoming, events] = await Promise.all([
-    client<OutboxRow[]>`select o.id, o.kind, o.sent_at, o.dead_lettered_at, coalesce(o.payload->>'to', u.email) as email, p.first_name, p.last_name
+    client<OutboxRow[]>`select o.id, o.kind, o.sent_at, o.dead_lettered_at, case when o.kind = 'administrator.profile_changed' then ${adminAlertRecipient}::text else coalesce(o.payload->>'to', u.email) end as email, p.first_name, p.last_name
       from notification_outbox o left join profiles p on p.id = o.profile_id left join users u on u.id = p.user_id
       where o.kind not like 'stripe.%' and (o.sent_at >= ${from} or (o.sent_at is null and o.created_at >= ${from}))`,
     client<{ dead_lettered_at: Date | null; email: string | null; id: number; purpose: string; sent_at: Date | null; terminal_at: Date | null }[]>`

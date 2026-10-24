@@ -53,3 +53,18 @@ test('the Communications page is an administrator-only menu item under Members, 
   assert.doesNotMatch(navigation, /text-navy/);
   assert.match(readFileSync('lib/notifications/communications-report-data.ts', 'utf8'), /requireAdministrator\(actor\)/);
 });
+
+test('a later send to the same address cannot overturn an earlier delivery', () => {
+  const checks = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'renewal', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'reset', sentAt: at('2026-10-21T10:00:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:00:03Z'), event('a@x.org', 'hardBounces', '2026-10-21T10:00:05Z')]);
+  assert.equal(checks.get('renewal'), 'delivered');
+  assert.equal(checks.get('reset'), 'failed');
+});
+
+test('the Communications lists use the shared administrator report table', () => {
+  const tables = readFileSync('app/(dashboard)/admin/communications/communications-tables.tsx', 'utf8');
+  assert.match(tables, /AdminReadOnlyTable/);
+  assert.match(tables, /filterColumns/);
+  assert.doesNotMatch(readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8'), /<table[\s>]+className="min-w-full border text-sm">\s*<caption className="sr-only">(Renewal notices from|Upcoming)/);
+});
