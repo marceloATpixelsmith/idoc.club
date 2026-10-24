@@ -81,3 +81,11 @@ test('two sends to one address less than two minutes apart each keep their own d
   assert.equal(onlySecond.get('first'), 'not_found');
   assert.equal(onlySecond.get('second'), 'delivered');
 });
+
+test('every outcome of an earlier send stays with it, so a close second send cannot reuse its leftover delivery', () => {
+  const checks = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:00:05Z'), event('a@x.org', 'softBounces', '2026-10-20T10:00:09Z')]);
+  assert.equal(checks.get('first'), 'failed');
+  assert.equal(checks.get('second'), 'not_found');
+});

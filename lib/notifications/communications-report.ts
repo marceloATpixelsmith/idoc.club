@@ -63,11 +63,11 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
     const nextSend = ordered.slice(index + 1).find(sameAddress);
     const lower = Math.max(row.sentAt.getTime() - CLOCK_SLACK_MS, previousSend ? previousSend.sentAt.getTime() : -Infinity);
     const upper = Math.min(row.sentAt.getTime() + OUTCOME_WINDOW_MS, nextSend ? nextSend.sentAt.getTime() : Infinity);
-    const after = candidates.filter((event) => event.at.getTime() >= lower && event.at.getTime() <= upper).sort((left, right) => left.at.getTime() - right.at.getTime());
-    const failure = after.find((event) => FAILURE_EVENTS.includes(event.event) && !consumed.has(event));
-    if (failure) { consumed.add(failure); result.set(row.id, 'failed'); continue; }
-    const delivered = after.find((event) => event.event === 'delivered' && !consumed.has(event));
-    if (delivered) { consumed.add(delivered); result.set(row.id, 'delivered'); continue; }
+    const window = candidates.filter((event) => event.at.getTime() >= lower && event.at.getTime() <= upper && !consumed.has(event)).sort((left, right) => left.at.getTime() - right.at.getTime());
+    // Every outcome inside this send's window belongs to it, so a later send close behind can never pick up a leftover event.
+    for (const event of window) consumed.add(event);
+    if (window.some((event) => FAILURE_EVENTS.includes(event.event))) { result.set(row.id, 'failed'); continue; }
+    if (window.some((event) => event.event === 'delivered')) { result.set(row.id, 'delivered'); continue; }
     result.set(row.id, 'not_found');
   }
   return result;
