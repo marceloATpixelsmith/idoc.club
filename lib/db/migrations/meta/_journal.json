@@ -589,6 +589,13 @@
       "when": 1792410000000,
       "tag": "0083_legacy_welcome_notification_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1792850000000,
+      "tag": "0084_cron_job_runs",
+      "breakpoints": true
     }
   ]
 }

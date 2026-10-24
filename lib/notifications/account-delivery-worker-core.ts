@@ -35,10 +35,28 @@ export async function handleAccountDeliveryCron(request: Request, dependencies: 
 }) {
   if (!authorized(request, dependencies.secret)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    return Response.json(await dependencies.processBatch());
+    const summary = await dependencies.processBatch();
+    await recordCronRun(request, 200);
+    return Response.json(summary);
   } catch (error) {
     if (typeof Sentry.captureException === 'function') Sentry.captureException(error);
     await dependencies.reportFailure();
+    await recordCronRun(request, 500);
     return Response.json({ error: 'Worker failed' }, { status: 500 });
+  }
+}
+
+/** Records an authorized direct Vercel Cron run (/api/cron/<job>) for the cron monitor. Loaded on demand and only when a database is
+ * configured, so unit tests and database-free callers never touch it; QStash-driven runs are recorded by the QStash route instead. */
+async function recordCronRun(request: Request, status: number): Promise<void> {
+  try {
+    if (!process.env.POSTGRES_URL && !process.env.TEST_DATABASE_URL) return;
+    const { vercelCronJobFromUrl } = await import('@/lib/observability/job-run-record-core');
+    const job = vercelCronJobFromUrl(request.url);
+    if (!job) return;
+    const { recordJobRun } = await import('@/lib/observability/job-run-record');
+    await recordJobRun(job, 'vercel', status);
+  } catch {
+    // Best-effort only.
   }
 }
