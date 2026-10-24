@@ -95,6 +95,11 @@ test('a required interactive challenge is shown via Cloudflare\'s own callbacks,
   assert.match(widget, /'after-interactive-callback'/);
   assert.match(widget, /hasVisibleContent \|\| interactiveRef\.current/);
   assert.match(widget, /attempts >= TOKEN_WATCHDOG_ATTEMPTS\) \{[\s\S]*?setFailed\(true\)/);
+  assert.ok(
+    widget.indexOf('challengeVisibleRef.current) return') < widget.indexOf('attempts >= TOKEN_WATCHDOG_ATTEMPTS'),
+    'an on-screen challenge is exempt before retries are declared exhausted'
+  );
+  assert.match(widget, /if \(token\.length > 0\) setFailed\(false\)/);
 });
 
 test('a widget that rendered but issued no token (e.g. after a server-action redirect) is re-rendered in place a bounded number of times, and a missed onReady is recovered by polling window.turnstile', () => {
