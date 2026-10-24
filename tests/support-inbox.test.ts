@@ -140,3 +140,16 @@ test('the member close action is close-only and never reads a client-supplied di
   assert.doesNotMatch(fn, /formData\.get\('operation'\)/);
   assert.doesNotMatch(memberThread, /name="operation"/);
 });
+
+test('a new member ticket is a chat page with the category picked inside the first message, no drawer, and the subject taken from that message', () => {
+  const newPage = readFileSync('components/support/member-support-new.tsx', 'utf8');
+  const home = readFileSync('components/support/member-support-home.tsx', 'utf8');
+  const memberActions = readFileSync(new URL('../app/(dashboard)/dashboard/support/actions.ts', import.meta.url), 'utf8');
+  assert.match(readFileSync('app/(marketing)/contact/new/page.tsx', 'utf8'), /<MemberSupportNew \/>/);
+  assert.match(home, /href="\/contact\/new"/);
+  assert.doesNotMatch(home + memberChat, /Dialog|NewTicketDrawer/);
+  assert.match(memberChat, /name="category"[^>]*required[^>]*type="radio"/);
+  assert.doesNotMatch(memberChat, /name="subject"/);
+  assert.match(newPage, /navAccess\.memberSupport/);
+  assert.match(memberActions, /subject: subjectFromBody\(formData\.get\('body'\)\)/);
+});

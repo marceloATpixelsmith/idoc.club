@@ -69,8 +69,8 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
     ],
     steps: [
       'Open Contact from the main menu.',
-      'Select New ticket to open the ticket drawer, then choose a category: Billing/Membership, Seminars/Courses, Technical Support, Make a suggestion, or Other.',
-      'Write a short subject and your message, then send it.',
+      'Select New ticket. A chat opens with the IDOC team.',
+      'In your first message, choose a topic (Billing/Membership, Seminars/Courses, Technical Support, Make a suggestion, or Other), write your message, then send it.',
       'Your conversation appears under Your conversations with a status: Open, Responded to by admin, Member Replied, or Closed/Resolved. A "New reply" label tells you when the team has answered.',
       'Open a conversation to read the reply in chat form and respond in the same thread.',
     ],
