@@ -1,8 +1,7 @@
 'use client';
 
-import { useActionState, useRef, useState } from 'react';
-import { Dialog } from 'radix-ui';
-import { Loader2, MessageSquarePlus, SendHorizontal, X } from 'lucide-react';
+import { useActionState, useRef } from 'react';
+import { Loader2, SendHorizontal } from 'lucide-react';
 import { CsrfField } from '@/components/security/csrf-field';
 import { Button } from '@/components/ui/button';
 
@@ -15,7 +14,7 @@ export function SupportAvatar({ side }: { side: 'admin' | 'member' }) {
 }
 
 /** A single chat bubble: avatar, rounded bubble, then the author/time line -- the same shape in the thread page and
- * in the new-ticket drawer's greeting so the two read as one conversation. */
+ * on the new-ticket page so a new ticket and an existing thread read as one conversation. */
 export function SupportBubble({ author, children, side, time }: { author: string; children: React.ReactNode; side: 'admin' | 'member'; time?: string }) {
   const mine = side === 'member';
   return <li className={`flex items-end gap-2.5 ${mine ? 'flex-row-reverse' : ''}`}>
@@ -30,13 +29,15 @@ export function SupportBubble({ author, children, side, time }: { author: string
 function Composer({ action, children, idempotencyKey, label, placeholder, rows }: { action: Action; children?: React.ReactNode; idempotencyKey: string; label: string; placeholder: string; rows: number }) {
   const [state, formAction, pending] = useActionState(action, {});
   const form = useRef<HTMLFormElement>(null);
-  return <form action={formAction} className="space-y-3" key={idempotencyKey} ref={form}>
+  return <form action={formAction} className="space-y-2" key={idempotencyKey} ref={form}>
     <CsrfField />
     <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
-    {children}
-    <div className="flex items-end gap-2 rounded-2xl border bg-background p-2 focus-within:border-gold/60 focus-within:ring-2 focus-within:ring-gold/20">
-      <textarea aria-label="Message" className="max-h-48 min-h-11 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-muted-foreground" maxLength={10000} name="body" onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); form.current?.requestSubmit(); } }} placeholder={placeholder} required rows={rows} />
-      <Button aria-label={label} className="shrink-0 rounded-full" disabled={pending} size="icon" type="submit">{pending ? <Loader2 aria-hidden className="animate-spin" /> : <SendHorizontal aria-hidden />}</Button>
+    <div className="rounded-2xl border bg-background p-2 focus-within:border-gold/60 focus-within:ring-2 focus-within:ring-gold/20">
+      {children}
+      <div className="flex items-end gap-2">
+        <textarea aria-label="Message" className="max-h-48 min-h-11 w-full resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-muted-foreground" maxLength={10000} name="body" onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); form.current?.requestSubmit(); } }} placeholder={placeholder} required rows={rows} />
+        <Button aria-label={label} className="shrink-0 rounded-full" disabled={pending} size="icon" type="submit">{pending ? <Loader2 aria-hidden className="animate-spin" /> : <SendHorizontal aria-hidden />}</Button>
+      </div>
     </div>
     <p className="px-1 text-xs text-muted-foreground">Press Ctrl/⌘ + Enter to send.</p>
     {state.error ? <p className="text-sm text-red-500" role="alert">{state.error}</p> : null}
@@ -47,27 +48,19 @@ export function ReplyComposer({ action, idempotencyKey, publicId }: { action: Ac
   return <Composer action={action} idempotencyKey={idempotencyKey} label="Send reply" placeholder="Write a reply…" rows={1}><input name="publicId" type="hidden" value={publicId} /></Composer>;
 }
 
-export function NewTicketDrawer({ action, categories, idempotencyKey }: { action: Action; categories: Option[]; idempotencyKey: string }) {
-  const [open, setOpen] = useState(false);
-  return <Dialog.Root open={open} onOpenChange={setOpen}>
-    <Dialog.Trigger asChild><Button type="button"><MessageSquarePlus aria-hidden />New ticket</Button></Dialog.Trigger>
-    <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-      <Dialog.Content aria-describedby={undefined} className="fixed inset-y-0 right-0 z-50 flex h-dvh w-full flex-col border-l bg-background shadow-2xl outline-none sm:max-w-xl">
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <Dialog.Title className="text-2xl font-semibold text-gold">New support ticket</Dialog.Title>
-          <Dialog.Close asChild><Button aria-label="Close" size="icon-sm" title="Close" type="button" variant="ghost"><X aria-hidden /></Button></Dialog.Close>
-        </div>
-        <div className="flex-1 space-y-6 overflow-y-auto px-5 py-6">
-          <ul><SupportBubble author="IDOC Support" side="admin">Hello! Tell us what you need help with and a member of the IDOC team will reply here.</SupportBubble></ul>
-          <Composer action={action} idempotencyKey={idempotencyKey} label="Start conversation" placeholder="Describe how we can help…" rows={5}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm font-medium">Category<select className="mt-1 block w-full rounded-md border bg-background p-2 text-base" name="category" required>{categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-              <label className="block text-sm font-medium">Subject<input className="mt-1 block w-full rounded-md border bg-background p-2 text-base" maxLength={160} name="subject" required /></label>
-            </div>
-          </Composer>
-        </div>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>;
+/** The first message of a new ticket: the same bubble conversation as a thread, with the category picked inside the
+ * message box itself (radio pills, one must be chosen) rather than in a separate form or drawer. */
+export function NewTicketChat({ action, categories, idempotencyKey }: { action: Action; categories: Option[]; idempotencyKey: string }) {
+  return <div className="space-y-6">
+    <ul><SupportBubble author="IDOC Support" side="admin">Hello! What can we help you with? Choose a topic below, write your message and send it. A member of the IDOC team will reply here.</SupportBubble></ul>
+    <Composer action={action} idempotencyKey={idempotencyKey} label="Start conversation" placeholder="Describe how we can help…" rows={4}>
+      <fieldset className="flex flex-wrap gap-2 border-b px-2 pb-3 pt-2">
+        <legend className="sr-only">Topic</legend>
+        {categories.map((option) => <label className="cursor-pointer" key={option.value}>
+          <input className="peer sr-only" name="category" required type="radio" value={option.value} />
+          <span className="inline-flex rounded-full border px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:border-gold/60 peer-checked:border-gold peer-checked:bg-gold peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-gold/50">{option.label}</span>
+        </label>)}
+      </fieldset>
+    </Composer>
+  </div>;
 }

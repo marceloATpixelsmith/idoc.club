@@ -13,11 +13,17 @@ function errorState(error: unknown): SupportFormState {
   return { error: 'Your support request could not be saved.' };
 }
 
+/** The new-ticket chat has no subject field: the subject is the first line of the member's first message. */
+function subjectFromBody(body: FormDataEntryValue | null) {
+  const firstLine = String(body ?? '').trim().split('\n')[0].trim();
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77).trimEnd()}...` : firstLine;
+}
+
 export async function createSupportConversation(_state: SupportFormState, formData: FormData): Promise<SupportFormState> {
   let publicId: string;
   try {
     await csrf(formData);
-    publicId = await createConversation({ body: formData.get('body'), category: formData.get('category'), idempotencyKey: formData.get('idempotencyKey'), subject: formData.get('subject') });
+    publicId = await createConversation({ body: formData.get('body'), category: formData.get('category'), idempotencyKey: formData.get('idempotencyKey'), subject: subjectFromBody(formData.get('body')) });
   } catch (error) { return errorState(error); }
   redirect(`/contact/${encodeURIComponent(publicId)}`);
 }
