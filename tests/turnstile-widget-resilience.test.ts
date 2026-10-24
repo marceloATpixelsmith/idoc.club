@@ -45,7 +45,8 @@ test('the script tag has a fixed, unchanging src -- never a cache-busted or Reac
 
 test('retry only reloads the script tag as a last resort: if Turnstile already loaded once (window.turnstile exists), retry calls render() again in place and never touches the <Script> element at all', () => {
   const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
-  assert.match(retryBody, /if \(window\.turnstile\) \{\s*renderWidget\(\);\s*return;\s*\}/);
+  assert.match(retryBody, /if \(window\.turnstile\) \{\s*setFailed\(false\);\s*bumpRetryEpoch\(\);\s*return;\s*\}/);
+  assert.match(widget, /\[action, retryEpoch, scriptLoaded, siteKey, theme, updateChallengeVisibility\]/);
 });
 
 test('retry only forces a page reload when the script genuinely never loaded at all, and saves the member\'s typed email first so the reload does not cost it', () => {
