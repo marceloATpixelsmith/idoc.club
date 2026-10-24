@@ -43,6 +43,12 @@ test('Email previews is not listed on Vercel Production, where the page returns 
   assert.match(navigation, /isProduction \? dataPromotionItems\.filter\(\(item\) => !NON_PRODUCTION_HREFS\.includes\(item\.href\)\)/);
 });
 
+test('the one-off switchover tools are not listed on Production or staging', () => {
+  assert.match(adminLayout, /hideTemporaryOperations=\{process\.env\.VERCEL_ENV === 'production' \|\| process\.env\.VERCEL_ENV === 'preview'\}/);
+  assert.match(navigation, /TEMPORARY_OPERATIONS_HREFS: readonly string\[\] = \['\/admin\/operations\/switchover', '\/admin\/operations\/event-replay', '\/admin\/operations\/legacy-import'\]/);
+  assert.match(navigation, /hideTemporaryOperations \? environmentItems\.filter\(\(item\) => !TEMPORARY_OPERATIONS_HREFS\.includes\(item\.href\)\)/);
+});
+
 test('the manual-payments nav item is gone -- it only told admins to go back to Members and search', () => {
   assert.doesNotMatch(navigation, /Manual payments/);
   assert.doesNotMatch(navigation, /\/admin\/payments/);

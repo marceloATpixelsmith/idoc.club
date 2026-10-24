@@ -25,8 +25,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div data-idoc-admin-root className="flex min-h-[calc(100dvh-96px)] w-full flex-col lg:flex-row">
-      {/* Data promotion only runs from the staging application (lib/admin/data-promotion.ts), so production does not list it. Email previews 404 on Vercel Production, so it is hidden there too. */}
-      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} isProduction={process.env.VERCEL_ENV === 'production'} showDataPromotion={process.env.DB_SCHEMA === 'idoc_staging'} unreadCount={unreadCount} />
+      {/* Data promotion only runs from the staging application (lib/admin/data-promotion.ts), so production does not list it. Email previews 404 on Vercel Production, so it is hidden there too. The one-off switchover tools (Production switchover, Replay Stripe events, Legacy import) are hidden on both deployed sites. */}
+      <AdminNavigation isSuperAdmin={actor.roles.includes('super_admin')} hideTemporaryOperations={process.env.VERCEL_ENV === 'production' || process.env.VERCEL_ENV === 'preview'} isProduction={process.env.VERCEL_ENV === 'production'} showDataPromotion={process.env.DB_SCHEMA === 'idoc_staging'} unreadCount={unreadCount} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
