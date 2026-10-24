@@ -48,7 +48,7 @@ test('server and browser errors notify Technical Support without reading the ano
   assert.match(instrumentation, /Sentry\.captureRequestError\(error, request, context\)/);
   assert.match(instrumentation, /NEXT_RUNTIME !== 'nodejs'\) return/);
   const route = read('app/api/client-error/route.ts');
-  assert.match(route, /notifyTechnicalError\(/);
+  assert.match(route, /deferAdminNotification\(\(\) => notifyTechnicalError\(report\)\)/);
   assert.doesNotMatch(route, /request\.json|request\.text|formData/);
 });
 
@@ -61,6 +61,9 @@ test('error emails strip secrets and query strings, and repeats are throttled', 
   assert.equal(shouldSendErrorNotification('a', 2_000), false);
   assert.equal(shouldSendErrorNotification('a', 1_000 + 16 * 60_000), true);
   resetErrorNotificationThrottleForTests();
+  for (let index = 0; index < 5; index += 1) assert.equal(shouldSendErrorNotification(`b${index}`, 5_000, 'browser'), true);
+  assert.equal(shouldSendErrorNotification('b-more', 5_000, 'browser'), false);
+  // Exhausting the anonymous browser budget leaves the server-exception budget untouched.
   for (let index = 0; index < 20; index += 1) assert.equal(shouldSendErrorNotification(`s${index}`, 5_000), true);
   assert.equal(shouldSendErrorNotification('another', 5_000), false);
 });

@@ -84,7 +84,7 @@ export async function notifyTechnicalError(report: TechnicalErrorReport): Promis
     const message = scrubErrorText(error?.message ?? (typeof report.error === 'string' ? report.error : 'No error message was captured.'));
     const path = pathWithoutQuery(report.path);
     const signature = `${report.source}|${path ?? ''}|${error?.name ?? ''}|${message.slice(0, 160)}`;
-    if (!shouldSendErrorNotification(signature)) return;
+    if (!shouldSendErrorNotification(signature, Date.now(), report.source === 'browser' ? 'browser' : 'server')) return;
     const details: DetailRow[] = [
       ['Where', report.source === 'browser' ? 'In the visitor\'s browser (error boundary)' : report.source === 'server' ? 'On the server' : report.source],
       ['Error type', error?.name], ['Message', message], ['Page / route', path], ['HTTP method', report.method], ['Route type', report.routeType],
