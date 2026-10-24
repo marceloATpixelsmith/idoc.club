@@ -62,4 +62,24 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'edge') await import('./sentry.edge.config');
 }
 
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError: typeof Sentry.captureRequestError = async (error, request, context) => {
+  Sentry.captureRequestError(error, request, context);
+  // Email the administrators assigned to Technical Support in the support ticketing defaults. Node.js only: the
+  // notification reads the database. Best-effort -- it can never change how the failed request is answered.
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  try {
+    const { notifyTechnicalError } = await import('./lib/notifications/admin-event-alerts');
+    const header = (name: string) => {
+      const value = request.headers[name];
+      return Array.isArray(value) ? value[0] : value;
+    };
+    await notifyTechnicalError({
+      context: [['Router', context.routerKind], ['Route pattern', context.routePath], ['Referring page', header('referer')?.split(/[?#]/)[0]]],
+      digest: (error as { digest?: string } | null)?.digest ?? null,
+      error, method: request.method, path: request.path, requestId: header('x-vercel-id') ?? header('x-request-id') ?? null, routeType: context.routeType,
+      source: 'server', userAgent: header('user-agent'),
+    });
+  } catch {
+    // Notification problems are never allowed to surface from the error hook itself.
+  }
+};
