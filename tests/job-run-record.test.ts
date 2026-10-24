@@ -38,7 +38,11 @@ test('recording is best-effort, bounded, and wired to both timer systems', () =>
   assert.match(worker, /return Response\.json\(\{ error: 'Unauthorized' \}, \{ status: 401 \}\);\s*try \{/);
   assert.match(worker, /await recordCronRun\(request, 200\)/);
   assert.match(worker, /await recordCronRun\(request, 500\)/);
-  assert.match(qstash, /await recordJobResult\(job, request, response\);\s*await recordJobRun\(job, 'qstash', response\.status\);/);
+  // The QStash route records the status it finally returns, including the 503 it converts a failed-resolution summary into and a thrown error.
+  assert.match(qstash, /let finalStatus = response\.status;\s*try \{/);
+  assert.match(qstash, /\{ finalStatus = 503; return Response\.json\(\{ error: 'Cancellation resolution pending retry' \}, \{ status: 503 \}\); \}/);
+  assert.match(qstash, /catch \(error\) \{\s*finalStatus = 500;\s*throw error;\s*\} finally \{\s*await recordJobRun\(job, 'qstash', finalStatus\);/);
+  assert.doesNotMatch(qstash, /recordJobRun\(job, 'qstash', response\.status\)/);
 });
 
 test('the run table stores only names, timestamps, a status and counters', () => {
