@@ -68,3 +68,16 @@ test('the Communications lists use the shared administrator report table', () =>
   assert.match(tables, /filterColumns/);
   assert.doesNotMatch(readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8'), /<table[\s>]+className="min-w-full border text-sm">\s*<caption className="sr-only">(Renewal notices from|Upcoming)/);
 });
+
+test('two sends to one address less than two minutes apart each keep their own delivery', () => {
+  const checks = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:00:05Z'), event('a@x.org', 'delivered', '2026-10-20T10:01:05Z')]);
+  assert.equal(checks.get('first'), 'delivered');
+  assert.equal(checks.get('second'), 'delivered');
+  const onlySecond = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:01:05Z')]);
+  assert.equal(onlySecond.get('first'), 'not_found');
+  assert.equal(onlySecond.get('second'), 'delivered');
+});
