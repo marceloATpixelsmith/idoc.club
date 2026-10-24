@@ -1,7 +1,7 @@
 'use client';
 
 import Script from 'next/script';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
 import './turnstile-widget.css';
 
@@ -61,6 +61,10 @@ export function TurnstileWidget({
   // widget the script is ready, whether that happens at mount or shortly after.
   const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== 'undefined' && !!window.turnstile);
   const [failed, setFailed] = useState(false);
+  // Bumped by a manual retry so the mount effect re-renders the widget AND re-arms the bounded
+  // token watchdog; calling renderWidget() alone would leave a spent watchdog unable to resurface a
+  // second stall.
+  const [retryEpoch, bumpRetryEpoch] = useReducer((epoch: number) => epoch + 1, 0);
   const [challengeVisible, setChallengeVisible] = useState(false);
 
   // Removes any existing widget from the container before rendering a fresh one, so retry() can
@@ -164,7 +168,7 @@ export function TurnstileWidget({
       resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changing callback identity must not reset a solved challenge.
-  }, [action, scriptLoaded, siteKey, theme, updateChallengeVisibility]);
+  }, [action, retryEpoch, scriptLoaded, siteKey, theme, updateChallengeVisibility]);
 
   // The Cloudflare script sometimes never fires onLoad/onError at all (blocked by a
   // network filter or extension rather than a request that fails outright), which would
@@ -199,7 +203,8 @@ export function TurnstileWidget({
   // typed email first (the only field this widget's form ever has) so the reload doesn't cost it.
   function retry() {
     if (window.turnstile) {
-      renderWidget();
+      setFailed(false);
+      bumpRetryEpoch();
       return;
     }
     saveFormValuesForRetryReload(containerRef.current?.closest('form') ?? null);
