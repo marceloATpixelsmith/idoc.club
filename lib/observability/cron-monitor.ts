@@ -14,6 +14,11 @@ type NoticeRow = {
   attempt_count: number; last_error_code: string | null; dead_lettered_at: unknown; recipient: unknown;
 };
 
+type JobRunRow = {
+  job: string; source: string; last_run_at: unknown; last_status: number; last_success_at: unknown;
+  runs_total: number; failures_total: number; consecutive_failures: number;
+};
+
 export async function readCronMonitor(days: number, noticeLimit: number, now: Date = new Date()) {
   const [summary] = await db.execute(sql`
     select count(*)::int as total,
@@ -39,6 +44,17 @@ export async function readCronMonitor(days: number, noticeLimit: number, now: Da
     order by id desc
     limit ${noticeLimit}
   `) as unknown as NoticeRow[];
+  // Latest run of each scheduled job, recorded by the site itself. Tolerates the table not existing yet (migration pending).
+  let jobRows: JobRunRow[] = [];
+  let jobsAvailable = true;
+  try {
+    jobRows = await db.execute(sql`
+      select job, source, last_run_at, last_status, last_success_at, runs_total, failures_total, consecutive_failures
+      from cron_job_runs order by job, source
+    `) as unknown as JobRunRow[];
+  } catch {
+    jobsAvailable = false;
+  }
   return {
     generatedAt: now.toISOString(),
     outbox: {
@@ -50,6 +66,17 @@ export async function readCronMonitor(days: number, noticeLimit: number, now: Da
       oldestPendingAt: isoOrNull(summary?.oldest_pending_at),
     },
     daily: fillDailyCounts(dailyRows, days, now),
+    jobsAvailable,
+    jobs: jobRows.map((row) => ({
+      job: row.job,
+      source: row.source,
+      lastRunAt: isoOrNull(row.last_run_at),
+      lastStatus: row.last_status,
+      lastSuccessAt: isoOrNull(row.last_success_at),
+      runs: row.runs_total,
+      failures: row.failures_total,
+      consecutiveFailures: row.consecutive_failures,
+    })),
     notices: noticeRows.map((row) => ({
       id: row.id,
       kind: row.kind,
