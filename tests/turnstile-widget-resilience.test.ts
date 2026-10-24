@@ -87,7 +87,14 @@ test('Turnstile visibility is observed asynchronously and observers are cleaned 
 test('visible challenges and Turnstile errors preserve layout space', () => {
   assert.match(widget, /style=\{challengeVisible \|\| failed \? undefined/);
   assert.match(widget, /getBoundingClientRect\(\)/);
-  assert.match(widget, /setChallengeVisible\(hasVisibleContent\)/);
+  assert.match(widget, /setChallengeVisible\(visible\)/);
+});
+
+test('a required interactive challenge is shown via Cloudflare\'s own callbacks, and a tokenless widget never stays hidden', () => {
+  assert.match(widget, /'before-interactive-callback'/);
+  assert.match(widget, /'after-interactive-callback'/);
+  assert.match(widget, /hasVisibleContent \|\| interactiveRef\.current/);
+  assert.match(widget, /attempts >= TOKEN_WATCHDOG_ATTEMPTS\) \{[\s\S]*?setFailed\(true\)/);
 });
 
 test('a widget that rendered but issued no token (e.g. after a server-action redirect) is re-rendered in place a bounded number of times, and a missed onReady is recovered by polling window.turnstile', () => {
