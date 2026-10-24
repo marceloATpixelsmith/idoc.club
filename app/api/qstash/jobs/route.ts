@@ -4,6 +4,7 @@ import { publishQStashJob, verifyQStashRequest, QSTASH_JOBS, type QStashJob } fr
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { client } from '@/lib/db/drizzle';
 import { recordJobResult } from '@/lib/observability/job-metrics';
+import { recordJobRun } from '@/lib/observability/job-run-record';
 import { GET as accountDelivery } from '@/app/api/cron/account-delivery/route';
 import { GET as seminarCancellation } from '@/app/api/cron/seminar-cancellation-resolution/route';
 import { GET as renewalScan } from '@/app/api/cron/renewal-notice-scan/route';
@@ -43,6 +44,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!secret) return Response.json({ error: 'Worker unavailable' }, { status: 503 });
   const response = await handlers[job as QStashJob](new Request(request.url, { method: 'GET', headers: { authorization: `Bearer ${secret}` } }));
   await recordJobResult(job, request, response);
+  await recordJobRun(job, 'qstash', response.status);
   if (job === 'account-delivery' && response.ok) {
     const summary = await response.clone().json() as { retryable?: number; delivered?: number; deadLettered?: number; ineligible?: number; leaseLost?: number; blocked?: number };
     const fullBatch = !summary.blocked && (summary.delivered ?? 0) + (summary.retryable ?? 0) + (summary.deadLettered ?? 0) + (summary.ineligible ?? 0) + (summary.leaseLost ?? 0) >= 20;

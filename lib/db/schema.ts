@@ -905,6 +905,23 @@ export const reconciliationRuns = idocSchema.table('reconciliation_runs', {
   check('reconciliation_runs_status_check', sql`${table.status} in ('completed', 'failed')`),
 ]);
 
+/** One row per (job, timer) holding that job's most recent run, so the owner's cron monitor can prove every scheduled job is
+ * running without reading provider logs. Written best-effort after each run (a failed write never affects the job); holds only
+ * the job's fixed name, the timer system, timestamps, an HTTP status and counters: never request or response content. */
+export const cronJobRuns = idocSchema.table('cron_job_runs', {
+  job: varchar('job', { length: 60 }).notNull(),
+  source: varchar('source', { length: 10 }).notNull(),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }).notNull(),
+  lastStatus: integer('last_status').notNull(),
+  lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+  runsTotal: integer('runs_total').notNull().default(0),
+  failuresTotal: integer('failures_total').notNull().default(0),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.job, table.source], name: 'cron_job_runs_job_source_pk' }),
+  check('cron_job_runs_source_check', sql`${table.source} in ('vercel', 'qstash')`),
+]);
+
 export const migrationMap = idocSchema.table('migration_map', {
   id: serial('id').primaryKey(),
   legacyType: varchar('legacy_type', { length: 50 }).notNull(),
