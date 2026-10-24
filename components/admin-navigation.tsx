@@ -29,14 +29,14 @@ import { useState } from 'react';
 const SHARED_ITEMS = [
   { href: '/admin', icon: LayoutDashboard, label: 'Overview' },
   { href: '/admin/members', icon: Users, label: 'Members' },
+  { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
   { href: '/admin/communications', icon: Send, label: 'Communications' },
   { href: '/admin/revenue', icon: LineChart, label: 'Revenue' },
   { href: '/admin/exports', icon: FileDown, label: 'Exports' },
-  { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
-  { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
-  { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
   { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars/Courses' },
   { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
+  { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
+  { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [

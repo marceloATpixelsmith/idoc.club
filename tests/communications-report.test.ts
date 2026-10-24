@@ -68,3 +68,43 @@ test('the Communications lists use the shared administrator report table', () =>
   assert.match(tables, /filterColumns/);
   assert.doesNotMatch(readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8'), /<table[\s>]+className="min-w-full border text-sm">\s*<caption className="sr-only">(Renewal notices from|Upcoming)/);
 });
+
+test('two sends to one address less than two minutes apart each keep their own delivery', () => {
+  const checks = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:00:05Z'), event('a@x.org', 'delivered', '2026-10-20T10:01:05Z')]);
+  assert.equal(checks.get('first'), 'delivered');
+  assert.equal(checks.get('second'), 'delivered');
+  const onlySecond = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:01:05Z')]);
+  assert.equal(onlySecond.get('first'), 'not_found');
+  assert.equal(onlySecond.get('second'), 'delivered');
+});
+
+test('every outcome of an earlier send stays with it, so a close second send cannot reuse its leftover delivery', () => {
+  const checks = checkAgainstBrevoLog([
+    { email: 'a@x.org', id: 'first', sentAt: at('2026-10-20T10:00:00Z') }, { email: 'a@x.org', id: 'second', sentAt: at('2026-10-20T10:01:00Z') },
+  ], [event('a@x.org', 'delivered', '2026-10-20T10:00:05Z'), event('a@x.org', 'softBounces', '2026-10-20T10:00:09Z')]);
+  assert.equal(checks.get('first'), 'failed');
+  assert.equal(checks.get('second'), 'not_found');
+});
+
+test('the Communications and new-member queries pass ISO strings, never Date objects, to the database client', () => {
+  for (const file of ['lib/notifications/communications-report-data.ts', 'lib/membership/new-members.ts']) {
+    const source = readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /\$\{from\}|\$\{since\}(?!::timestamptz)/);
+    assert.match(source, /::timestamptz/);
+  }
+  const navigation = readFileSync('components/admin-navigation.tsx', 'utf8');
+  assert.ok(navigation.indexOf("label: 'Members'") < navigation.indexOf("label: 'Support inbox'"));
+  assert.ok(navigation.indexOf("label: 'Support inbox'") < navigation.indexOf("label: 'Communications'"));
+});
+
+test('admin menu order: Members, Support inbox, Communications, then Seminars, Registrations, News / Blog, with Stripe reconciliation last', () => {
+  const navigation = readFileSync('components/admin-navigation.tsx', 'utf8');
+  const order = ['Members', 'Support inbox', 'Communications', 'Revenue', 'Exports', 'Seminars/Courses', 'Registrations', 'News / Blog', 'Stripe reconciliation'].map((label) => navigation.indexOf(`label: '${label}'`));
+  assert.ok(order.every((position) => position > 0));
+  assert.deepEqual(order, [...order].sort((left, right) => left - right));
+  assert.ok(order.at(-1)! < navigation.indexOf('const SUPER_ADMIN_ITEMS'));
+});
