@@ -44,6 +44,10 @@ export function TurnstileWidget({
   const widgetIdRef = useRef<string | null>(null);
   const tokenIssuedRef = useRef(false);
   const challengeVisibleRef = useRef(false);
+  // Set by Cloudflare's own before/after-interactive callbacks. This is the authoritative signal that
+  // a challenge needs the visitor; the DOM sniffing in updateChallengeVisibility is only a fallback,
+  // so a missed iframe never leaves a required challenge hidden behind the 0-height wrapper.
+  const interactiveRef = useRef(false);
   // Lazily checks window.turnstile at mount time as a fast path, but the real fix below is using
   // next/script's onReady callback rather than onLoad. onLoad fires exactly once per script src,
   // globally across the whole app -- so on a client-side (soft) navigation to a second page whose
@@ -73,8 +77,9 @@ export function TurnstileWidget({
       return styles.display !== 'none' && styles.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     });
 
-    challengeVisibleRef.current = hasVisibleContent;
-    setChallengeVisible(hasVisibleContent);
+    const visible = hasVisibleContent || interactiveRef.current;
+    challengeVisibleRef.current = visible;
+    setChallengeVisible(visible);
   }, []);
 
   function renderWidget() {
@@ -84,16 +89,28 @@ export function TurnstileWidget({
       widgetIdRef.current = null;
     }
     tokenIssuedRef.current = false;
+    interactiveRef.current = false;
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         action,
         appearance: 'interaction-only',
         callback: (token: string) => {
           tokenIssuedRef.current = token.length > 0;
+          interactiveRef.current = false;
+          updateChallengeVisibility();
           onVerify?.(token);
+        },
+        'after-interactive-callback': () => {
+          interactiveRef.current = false;
+          updateChallengeVisibility();
+        },
+        'before-interactive-callback': () => {
+          interactiveRef.current = true;
+          updateChallengeVisibility();
         },
         'error-callback': () => setFailed(true),
         'expired-callback': () => onVerify?.(''),
+        'unsupported-callback': () => setFailed(true),
         sitekey: siteKey,
         size: 'flexible',
         theme,
@@ -114,8 +131,15 @@ export function TurnstileWidget({
     renderWidget();
     let attempts = 1;
     const watchdog = window.setInterval(() => {
-      if (tokenIssuedRef.current || attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
+      if (tokenIssuedRef.current) {
         window.clearInterval(watchdog);
+        return;
+      }
+      if (attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
+        // Out of automatic retries with no token: never stay silently hidden and disabled; show the
+        // widget area and the retry message so the member has a visible way forward.
+        window.clearInterval(watchdog);
+        setFailed(true);
         return;
       }
       // Never reset a challenge the visitor is currently looking at or solving.
