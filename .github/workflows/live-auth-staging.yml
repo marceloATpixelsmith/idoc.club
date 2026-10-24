@@ -1,9 +1,8 @@
 name: Live authentication staging suite
 
+# Super Admin only: started from Operations > Live Authentication Tests (workflow_dispatch on staging). It must never run on a
+# push, a pull request, or a schedule, because each run creates and removes real accounts and mailboxes on staging.
 on:
-  push:
-    branches:
-      - staging
   workflow_dispatch:
 
 concurrency:
