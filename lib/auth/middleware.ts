@@ -32,7 +32,7 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {
-      return { error: result.error.errors[0].message };
+      return { error: result.error.issues[0].message };
     }
 
     return action(result.data, formData);
@@ -66,7 +66,7 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
 
     const result = schema.safeParse(Object.fromEntries(formData));
     if (!result.success) {
-      return { error: result.error.errors[0].message };
+      return { error: result.error.issues[0].message };
     }
 
     return action(result.data, formData, user);
