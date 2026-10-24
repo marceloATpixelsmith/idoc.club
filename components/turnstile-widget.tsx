@@ -96,6 +96,7 @@ export function TurnstileWidget({
         appearance: 'interaction-only',
         callback: (token: string) => {
           tokenIssuedRef.current = token.length > 0;
+          if (token.length > 0) setFailed(false);
           interactiveRef.current = false;
           updateChallengeVisibility();
           onVerify?.(token);
@@ -135,6 +136,8 @@ export function TurnstileWidget({
         window.clearInterval(watchdog);
         return;
       }
+      // Never reset or flag a challenge the visitor is currently looking at or solving.
+      if (challengeVisibleRef.current) return;
       if (attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
         // Out of automatic retries with no token: never stay silently hidden and disabled; show the
         // widget area and the retry message so the member has a visible way forward.
@@ -142,8 +145,6 @@ export function TurnstileWidget({
         setFailed(true);
         return;
       }
-      // Never reset a challenge the visitor is currently looking at or solving.
-      if (challengeVisibleRef.current) return;
       attempts += 1;
       renderWidget();
     }, TOKEN_WATCHDOG_MS);
