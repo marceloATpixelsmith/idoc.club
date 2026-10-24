@@ -30,4 +30,3 @@ export function scrubErrorText(value: string): string {
 export function pathWithoutQuery(value: string | null | undefined): string | null {
   return value ? value.split(/[?#]/)[0].slice(0, 300) : null;
 }
-
