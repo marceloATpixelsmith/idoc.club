@@ -14,7 +14,7 @@ export async function MemberSupportHome() {
     if (error instanceof AuthorizationError) redirect('/dashboard');
     throw error;
   }
-  return <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 lg:px-8">
+  return <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8"><div className="max-w-4xl space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h2 className="text-2xl font-semibold">Your conversations</h2><p className="text-muted-foreground">Most recent activity first.</p></div>
       <Button asChild><Link href="/contact/new"><MessageSquarePlus aria-hidden />New ticket</Link></Button>
@@ -33,5 +33,5 @@ export async function MemberSupportHome() {
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link></li>;
       })}</ul>}
-  </div>;
+  </div></div>;
 }

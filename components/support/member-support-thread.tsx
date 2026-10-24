@@ -17,7 +17,7 @@ export async function MemberSupportThread({ publicId }: { publicId: string }) {
     throw error;
   }
   if (!conversation) notFound();
-  return <div className="mx-auto max-w-3xl px-5 pb-10 lg:px-8"><BackLink href="/contact">Back to My Support Tickets</BackLink>
+  return <div className="mx-auto max-w-7xl px-5 pb-10 lg:px-8"><div className="max-w-3xl"><BackLink href="/contact">Back to My Support Tickets</BackLink>
     <header className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b pb-5">
       <div><h1 className="text-2xl font-semibold">{String(conversation.subject)}</h1><p className="text-sm text-muted-foreground">{CATEGORY_LABELS[conversation.category as keyof typeof CATEGORY_LABELS]} · <strong className="text-gold">{STATUS_LABELS[String(conversation.status)]}</strong></p></div>
       {conversation.status === 'closed' ? null : <SupportForm action={closeOwnConversation} submitLabel="Close conversation"><input name="publicId" type="hidden" value={publicId} /></SupportForm>}
@@ -29,5 +29,5 @@ export async function MemberSupportThread({ publicId }: { publicId: string }) {
     {conversation.status === 'closed' ? <p className="mt-8 rounded-xl border p-4 text-muted-foreground">This conversation is closed and remains available to read. An administrator can reopen it.</p> :
       <section aria-label="Reply" className="sticky bottom-0 mt-8 border-t bg-background/95 pb-2 pt-4 backdrop-blur"><ReplyComposer action={replyToSupportConversation} idempotencyKey={randomUUID()} publicId={publicId} /></section>
     }
-  </div>;
+  </div></div>;
 }

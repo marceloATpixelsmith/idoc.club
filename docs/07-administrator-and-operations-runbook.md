@@ -142,7 +142,7 @@ Staging and production are two copies of the same application. Each has its own 
 | Try a new feature, run UAT, rehearse a migration, send test emails, run live-auth tests, test Stripe test-mode payments | **Staging** (`staging.idoc.club`) | Test data is isolated in `idoc_staging`. Admin: Live Authentication Tests, Email previews. Stripe is always test mode. Member emails stay held. |
 | Prepare seminars, News/Blog and the organization address before they go live | **Staging**, then promote | Staging admin → **Data promotion** (up to ten records at a time, authenticator code). It copies only those allowlisted content records into production. It exists only on staging. |
 | Ship verified code to the real site | **GitHub**, then watch production | Open/merge the `staging` → `main` pull request (or Super Admin → **Promote To Production**, which runs the same monitored promotion). Never merge feature work straight to `main`. Migrations are applied by the manual/auto-migrate workflows (docs/15), not by Vercel builds. |
-| Look after real members, payments, seminars, support, news, revenue, reconciliation | **Production** | Normal admin menu (Members, Revenue, Exports, Stripe reconciliation, Support inbox, News / Blog, Seminars/Courses, Registrations). Everything here is real data. |
+| Look after real members, payments, seminars, support, news, revenue, reconciliation | **Production** | Normal admin menu (Members, Communications, Revenue, Exports, Stripe reconciliation, Support inbox, News / Blog, Seminars/Courses, Registrations). Everything here is real data. |
 | Take or restore a backup, switch maintenance mode | **Production** for real protection; each site has its own switch | Super Admin → **Backups & restore**. The backup covers both schemas; the maintenance switch applies to the site you are on only. |
 | Run the one-off move from WordPress to `idoc.club` (switchover, legacy import, Stripe event replay) | **Production**, from the day-of runbook (docs/30) | These three pages are no longer in the menu on either site. A Super Admin opens them by direct address: `/admin/operations/switchover`, `/admin/operations/legacy-import`, `/admin/operations/event-replay`. Legacy import additionally needs `LEGACY_IMPORT_ENABLED=true` and a redeploy; a staging dry run is the rehearsal. |
 | Change a setting (Stripe keys, `BASE_URL`, hold flag, Brevo keys, `DB_SCHEMA`) | **Vercel project settings**, per scope | Each variable has a Production scope and a Preview scope limited to the `staging` branch. Changes apply only after a redeploy. Never point staging at a live Stripe key or production at the staging schema; the runtime refuses both. |
@@ -479,6 +479,16 @@ After each **scheduled** scan, every active Super Admin receives an email with t
 5. The other former multisite sites will already have been retired independently; retire the IDOC WordPress site only after acceptance is complete.
 
 6. Document the final decommission date and retained archive location.
+
+## 13.2 Communications report
+
+`/admin/communications` (Administrator tier, listed under Members) is a read-only dashboard of what the system emailed in the last 7 days. It has three parts:
+
+- **System emails** — totals per email type (account activation, password reset, payment failed, seminar confirmations, and so on) from `notification_outbox` and `account_delivery_outbox`, excluding the renewal notices below.
+- **Renewal notices sent** — the renewal, expiration, and grace reminders, as totals and a per-email list.
+- **Coming renewal notices** — notices the daily scan has not queued yet, by the date it will queue them (next 28 days).
+
+Each sent email is checked against Brevo's transactional log (`GET /v3/smtp/statistics/events`, using `BREVO_API_KEY`) by recipient address and time: *Delivered*, *Bounced / blocked*, or *Not in Brevo log*. If Brevo cannot be read, the page says so and shows queue counts only, with no delivery claims. Emails still queued, or given up after retries, are counted separately from Brevo outcomes. The Admin Dashboard overview shows last week's newest members (total, by judge/steward/veterinarian role, and the newest ten) and the renewal notices Brevo confirmed as delivered; it no longer lists Stripe reconciliation findings (the full report remains at `/admin/reconciliation`). The Communications page sends nothing and changes nothing; while member communications are on hold (docs/27) it says so.
 
 ## Production runtime configuration boundary
 
