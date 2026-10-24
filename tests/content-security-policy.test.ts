@@ -25,7 +25,7 @@ test('CSP allows the members map worker only from the same origin', () => {
   assert.doesNotMatch(policy, /blob:/);
 });
 
-test('CSP allows media only from this site and the Cloudinary account that hosts the How to Use videos', () => {
+test('CSP allows frames only from Cloudflare Turnstile and the Vimeo player that hosts the How to Use videos', () => {
   const policy = contentSecurityPolicy('nonce', 'production');
-  assert.match(policy, /media-src 'self' https:\/\/res\.cloudinary\.com(;|$)/);
+  assert.match(policy, /frame-src https:\/\/challenges\.cloudflare\.com https:\/\/player\.vimeo\.com(;|$)/);
 });

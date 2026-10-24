@@ -26,13 +26,12 @@ export function contentSecurityPolicy(
     "frame-ancestors 'none'",
     "object-src 'none'",
     "img-src 'self' data: https://res.cloudinary.com",
-    // How to Use idoc.club videos are streamed from the existing Cloudinary account (lib/how-to/guide.ts).
-    "media-src 'self' https://res.cloudinary.com",
     `script-src 'self' 'nonce-${nonce}'${developmentEval} https://challenges.cloudflare.com`,
     // Next.js and Tailwind currently emit framework/style attributes without a nonce hook. This is
     // deliberately the sole production unsafe-inline exception; scripts never receive it.
     "style-src 'self' 'unsafe-inline'",
     `connect-src 'self' https://challenges.cloudflare.com${sentryOrigin}${browserAgentOrigin ? ` ${browserAgentOrigin}` : ''}`,
-    'frame-src https://challenges.cloudflare.com',
+    // How to Use idoc.club videos are Vimeo embeds (lib/how-to/guide.ts).
+    'frame-src https://challenges.cloudflare.com https://player.vimeo.com',
   ].join('; ');
 }
