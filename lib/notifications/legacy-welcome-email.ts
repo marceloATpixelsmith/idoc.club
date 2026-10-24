@@ -37,6 +37,7 @@ export function renderLegacyWelcomeEmail(options: { firstName?: string | null } 
       + '<p style="margin:0;">FEI may approve you <strong>to audit the course only</strong>. Check the Registration Status on My Seminars/Courses, and watch for our status emails.</p>',
     ),
     '<p>Every area above has a short video on the How to Use idoc.club page in My IDOC, so you can watch exactly where to click.</p>',
+    '<p><strong>Please note:</strong> you must be logged in to idoc.club to see the How to Use idoc.club page. If the button below asks you to sign in, log in with your email and password first, and you will be taken to the page.</p>',
     emailButton(guideUrl, 'How to Use idoc.club'),
   ].join('');
   return {
