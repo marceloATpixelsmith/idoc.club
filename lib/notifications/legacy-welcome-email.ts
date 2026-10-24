@@ -8,8 +8,7 @@ export const LEGACY_WELCOME_SUBJECT = 'Welcome to the new idoc.club: your quick 
 const SECTION_INTRO: Record<(typeof HOW_TO_SECTIONS)[number]['id'], string> = {
   contact: 'Need help or have a question? Reach the IDOC team.',
   directory: 'Find and contact fellow officials worldwide.',
-  'my-seminars': 'Keep track of every course you have registered for.',
-  seminars: 'Browse and register for IDOC and FEI courses.',
+  seminars: 'Browse and register for IDOC and FEI courses, and keep track of your registrations.',
 };
 
 function paragraphs(lines: readonly string[]): string {

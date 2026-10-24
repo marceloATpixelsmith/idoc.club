@@ -3,21 +3,12 @@
 
 export const HOW_TO_PATH = '/dashboard/how-to-use';
 
-export const HOW_TO_SECTION_IDS = ['directory', 'contact', 'seminars', 'my-seminars'] as const;
+export const HOW_TO_SECTION_IDS = ['directory', 'contact', 'seminars'] as const;
 export type HowToSectionId = (typeof HOW_TO_SECTION_IDS)[number];
 
-const CLOUDINARY_CLOUD_NAME = 'z6xv27qx';
-/** Cloudinary folder holding the recordings; `scripts/how-to-videos/upload.mjs` uploads each as `<folder>/<section id>`. */
-export const HOW_TO_VIDEO_FOLDER = 'idoc/how-to';
-
-/** Cloudinary delivery URL for a section's recording (format and quality chosen per viewer). */
-export function howToVideoUrl(id: HowToSectionId): string {
-  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/f_auto,q_auto/${HOW_TO_VIDEO_FOLDER}/${id}`;
-}
-
-/** Still frame from the recording, used as the player poster and the email thumbnail. */
-export function howToVideoPosterUrl(id: HowToSectionId): string {
-  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_2,f_jpg,q_auto,w_1280/${HOW_TO_VIDEO_FOLDER}/${id}.jpg`;
+/** Embed URL for a Vimeo video id (the number in https://vimeo.com/<id>). */
+function vimeoEmbedUrl(vimeoId: string): string {
+  return `https://player.vimeo.com/video/${vimeoId}`;
 }
 
 export type HowToSection = {
@@ -30,18 +21,14 @@ export type HowToSection = {
   /** Step-by-step list shown on the How to Use page only. */
   steps: string[];
   title: string;
-  /**
-   * Recording to play: `howToVideoUrl(id)` for a Cloudinary upload, or a same-origin file under /public. The
-   * content security policy allows media only from this site and res.cloudinary.com. `null` shows a
-   * "video coming soon" panel until the recording is published.
-   */
+  /** Vimeo player URL for the recording. `null` shows a "video coming soon" panel. The content security policy allows frames only from player.vimeo.com. */
   videoSrc: string | null;
 };
 
 export const HOW_TO_SECTIONS: readonly HowToSection[] = [
   {
     id: 'directory',
-    title: 'Members Directory',
+    title: 'Member directory',
     featureHref: '/about/members-directory',
     featureLabel: 'Open the Members Directory',
     summary: [
@@ -56,11 +43,11 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Click a column heading to sort. Use the page controls under the table to move through results.',
       'Click an email address to write to a member.',
     ],
-    videoSrc: howToVideoUrl('directory'),
+    videoSrc: vimeoEmbedUrl('1239144062'),
   },
   {
     id: 'contact',
-    title: 'Contact and the support inbox',
+    title: 'Contact & Support Inbox',
     featureHref: '/contact',
     featureLabel: 'Open Contact',
     summary: [
@@ -74,15 +61,16 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Your conversation appears under Your conversations with a status: Open, Responded to by admin, Member Replied, or Closed/Resolved. A "New reply" label tells you when the team has answered.',
       'Open a conversation to read the reply in chat form and respond in the same thread.',
     ],
-    videoSrc: howToVideoUrl('contact'),
+    videoSrc: vimeoEmbedUrl('1239146044'),
   },
   {
     id: 'seminars',
-    title: 'Seminars/Courses and how to register',
+    title: 'Seminars & Courses',
     featureHref: '/seminars',
     featureLabel: 'Open Seminars/Courses',
     summary: [
       'Browse upcoming IDOC and FEI seminars and courses. You must be signed in with an active membership to register, so sign in first if you are not already.',
+      'The Seminars/Courses page has three tabs. Available Seminars/Courses lists what you can register for now. Past Seminars/Courses is the archive of completed courses. My Seminars/Courses is your own registration history and appears only when you are signed in. Inside it, "Upcoming & current" shows registrations you can still act on and "Past" shows courses you have already attended.',
       'FEI courses have an extra step. Your registration is not complete until FEI approves your participation, which happens after your National Federation registers you with FEI. FEI may approve you to audit the course only, meaning you attend as an auditor rather than as a full participant.',
     ],
     steps: [
@@ -91,27 +79,10 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
       'Select Register and follow the steps, including payment where one applies.',
       'For an FEI course, also make sure your National Federation registers you with FEI. Your Registration Status stays "Pending FEI Approval" until FEI decides.',
       'You are emailed whenever your registration status changes. FEI may approve you ("Approved by FEI"), approve you to audit only ("Approved to Audit Only by FEI"), or not approve you ("Not Approved by FEI").',
+      'Select the My Seminars/Courses tab (visible only when signed in). Upcoming & current shows each registration with its Registration Status and Payment status, such as "Pending FEI Approval / Paid"; Past shows courses you have already attended.',
+      'To cancel an upcoming registration, select Cancel registration on that row. Use Past Seminars/Courses to browse the archive.',
     ],
-    videoSrc: howToVideoUrl('seminars'),
-  },
-  {
-    id: 'my-seminars',
-    title: 'The tabs on the Seminars page, especially My Seminars/Courses',
-    featureHref: '/seminars?view=my',
-    featureLabel: 'Open My Seminars/Courses',
-    summary: [
-      'The Seminars/Courses page has three tabs. Available Seminars/Courses lists what you can register for now. Past Seminars/Courses is the archive of completed courses. My Seminars/Courses is your own registration history and appears only when you are signed in.',
-      'Inside My Seminars/Courses, "Upcoming & current" shows registrations you can still act on, and "Past" shows courses you have already attended. Each registration shows its Registration Status and Payment status, such as "Pending FEI Approval / Paid", and upcoming registrations have a Cancel registration button.',
-    ],
-    steps: [
-      'Open Seminars/Courses and select the My Seminars/Courses tab (you will only see it when signed in).',
-      'Upcoming & current: check the Registration Status and Payment status for each course. For FEI courses, look for the FEI decision here.',
-      'Select a registration to open the seminar page with its full details.',
-      'To cancel an upcoming registration, select Cancel registration on that row.',
-      'Past: review the courses you have already completed.',
-      'Use Available Seminars/Courses to register for more, and Past Seminars/Courses to browse the archive.',
-    ],
-    videoSrc: howToVideoUrl('my-seminars'),
+    videoSrc: vimeoEmbedUrl('1239145729'),
   },
 ];
 
