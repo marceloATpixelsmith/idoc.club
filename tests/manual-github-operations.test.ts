@@ -124,6 +124,8 @@ test('dedicated Super Admin pages share protected launch actions and show live-a
   assert.match(api, /requireSuperAdmin/);
   assert.match(api, /auth-live-results\.json/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /\non:\n  workflow_dispatch:\n/);
+  assert.doesNotMatch(workflow, /\n  (push|pull_request|pull_request_target|schedule|workflow_run):/);
 });
 
 test('promotion workflow reports CI, reviews, merge, Vercel and production health separately', () => {
