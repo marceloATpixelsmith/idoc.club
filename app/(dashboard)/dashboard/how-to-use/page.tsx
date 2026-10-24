@@ -5,7 +5,7 @@ import { getOwnPrivateMember, requireAccountAccess } from '@/lib/membership/data
 import { isPrivilegedActor } from '@/lib/membership/account-access';
 import { isEntitled } from '@/lib/membership/entitlement';
 import { getUser } from '@/lib/db/queries';
-import { HOW_TO_SECTIONS, type HowToSection, howToVideoPosterUrl } from '@/lib/how-to/guide';
+import { HOW_TO_SECTIONS, type HowToSection } from '@/lib/how-to/guide';
 
 export const metadata: Metadata = { title: 'How to Use idoc.club — IDOC' };
 
@@ -18,8 +18,8 @@ function VideoPanel({ section }: { section: HowToSection }) {
     );
   }
   return (
-    // The content security policy allows media only from this site and res.cloudinary.com.
-    <video aria-label={`How to: ${section.title}`} className="aspect-video w-full border border-border bg-black" controls playsInline poster={section.videoSrc.startsWith('https://res.cloudinary.com/') ? howToVideoPosterUrl(section.id) : undefined} preload="metadata" src={section.videoSrc} />
+    // The content security policy allows frames only from player.vimeo.com.
+    <iframe allow="fullscreen; picture-in-picture" allowFullScreen className="aspect-video w-full border border-border bg-black" loading="lazy" src={section.videoSrc} title={`How to: ${section.title}`} />
   );
 }
 

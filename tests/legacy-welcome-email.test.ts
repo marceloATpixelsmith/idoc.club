@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { dashboardNavItems } from '../lib/navigation/dashboard-nav.ts';
-import { HOW_TO_PATH, HOW_TO_SECTIONS, HOW_TO_SECTION_IDS, howToSectionPath, howToVideoPosterUrl, howToVideoUrl } from '../lib/how-to/guide.ts';
+import { HOW_TO_PATH, HOW_TO_SECTIONS, HOW_TO_SECTION_IDS, howToSectionPath } from '../lib/how-to/guide.ts';
 import { LEGACY_WELCOME_SUBJECT, renderLegacyWelcomeEmail } from '../lib/notifications/legacy-welcome-email.ts';
 
 const BASE = 'https://idoc.club';
@@ -50,24 +50,22 @@ test('support categories in the guide match the real inbox categories', () => {
   for (const label of ['Billing/Membership', 'Seminars/Courses', 'Technical Support', 'Make a suggestion', 'Other']) assert.ok(inbox.includes(`'${label}'`), label);
 });
 
-test('guide sections are unique, cover the requested areas, and only play videos from this site or Cloudinary', () => {
+test('guide sections are unique, cover the requested areas, and each plays its Vimeo recording', () => {
   assert.deepEqual(HOW_TO_SECTIONS.map(({ id }) => id), [...HOW_TO_SECTION_IDS]);
+  const vimeoIds = { contact: '1239146044', directory: '1239144062', seminars: '1239145729' } as const;
   for (const section of HOW_TO_SECTIONS) {
     assert.ok(section.featureHref.startsWith('/'));
-    assert.ok(
-      section.videoSrc === null || section.videoSrc.startsWith('/how-to-videos/') || section.videoSrc === howToVideoUrl(section.id),
-      `${section.id} video must be same-origin or its Cloudinary recording`,
-    );
+    assert.equal(section.videoSrc, `https://player.vimeo.com/video/${vimeoIds[section.id]}`, section.id);
   }
 });
 
-test('every guide section plays its published Cloudinary recording', () => {
-  for (const section of HOW_TO_SECTIONS) assert.equal(section.videoSrc, howToVideoUrl(section.id), section.id);
-});
-
-test('Cloudinary video and poster URLs follow the upload convention', () => {
-  assert.equal(howToVideoUrl('directory'), 'https://res.cloudinary.com/z6xv27qx/video/upload/f_auto,q_auto/idoc/how-to/directory');
-  assert.match(howToVideoPosterUrl('my-seminars'), /^https:\/\/res\.cloudinary\.com\/z6xv27qx\/video\/upload\/[^/]+\/idoc\/how-to\/my-seminars\.jpg$/);
+test('the seminars section covers both registration and the Seminars page tabs', () => {
+  const seminars = HOW_TO_SECTIONS.find(({ id }) => id === 'seminars');
+  assert.ok(seminars);
+  const text = [...seminars.summary, ...seminars.steps].join(' ');
+  assert.match(text, /Register/);
+  assert.match(text, /My Seminars\/Courses/);
+  assert.match(text, /Cancel registration/);
 });
 
 test('My IDOC navigation exposes the How to Use page', () => {

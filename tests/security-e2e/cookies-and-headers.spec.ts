@@ -32,7 +32,7 @@ test('CSP uses a fresh framework script nonce and denies unapproved origins', as
   expect(firstPolicy).toContain("img-src 'self' data:");
   expect(firstPolicy).not.toContain('img-src https:');
   expect(firstPolicy).toContain("connect-src 'self' https://challenges.cloudflare.com");
-  expect(firstPolicy).toContain('frame-src https://challenges.cloudflare.com');
+  expect(firstPolicy).toContain('frame-src https://challenges.cloudflare.com https://player.vimeo.com');
   expect(firstPolicy).toContain("frame-ancestors 'none'");
   expect(firstPolicy).not.toContain('evil.example');
 
