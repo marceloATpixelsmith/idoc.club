@@ -131,7 +131,7 @@ export async function saveTablePreferences(tableInput: unknown, value: unknown):
   const actor = await authorizedActor();
   const table = validateTableIdentifier(tableInput);
   const preferences = validateTablePreferences(table, value);
-  if (!preferences) throw new z.ZodError([]);
+  if (!preferences) throw new z.ZodRealError([]);
   const now = new Date();
   await db.insert(administratorTablePreferences).values({ preferences, tableIdentifier: table, updatedAt: now, userId: actor.id })
     .onConflictDoUpdate({ set: { preferences, updatedAt: now }, target: [administratorTablePreferences.userId, administratorTablePreferences.tableIdentifier] });

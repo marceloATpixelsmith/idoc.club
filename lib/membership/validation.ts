@@ -31,7 +31,8 @@ const countryCode = z.string().trim().toUpperCase().refine(
 );
 export const memberPhoneSchema = z.string().trim().refine(isValidInternationalPhone, 'Enter a valid international phone number.');
 
-const optionalMemberPhoneSchema = z.union([memberPhoneSchema, z.literal(''), z.null(), z.undefined()])
+const optionalMemberPhoneSchema = z.union([memberPhoneSchema, z.literal(''), z.null()])
+  .optional()
   .transform((value) => value || null);
 const requiredText = (label: string, max: number) => z.string().trim().min(1, `${label} is required`).max(max);
 const officialBase = z.object({
@@ -79,16 +80,19 @@ export const memberProfileSchema = z.object({
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 
 export const adminBoardProfileSchema = z.object({
-  boardFacebookUrl: z.union([z.string().trim().url().max(500), z.literal(''), z.null(), z.undefined()])
+  boardFacebookUrl: z.union([z.string().trim().url().max(500), z.literal(''), z.null()])
+    .optional()
     .transform((value) => value || null),
   boardPhotoUrl: z.union([
     z.string().trim().url().max(2000),
     z.string().trim().regex(/^\/[^\s]*$/, 'Board photo must be a valid image URL.').max(2000),
-    z.literal(''), z.null(), z.undefined(),
-  ]).transform((value) => value || null),
-  boardSubtitle: z.union([z.string().trim().max(160), z.literal(''), z.null(), z.undefined()])
+    z.literal(''), z.null(),
+  ]).optional().transform((value) => value || null),
+  boardSubtitle: z.union([z.string().trim().max(160), z.literal(''), z.null()])
+    .optional()
     .transform((value) => value || null),
-  boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null(), z.undefined()])
+  boardTitle: z.union([z.string().trim().max(120), z.literal(''), z.null()])
+    .optional()
     .transform((value) => value || null),
   // Blank/absent must stay null (sorts last); z.coerce.number() would turn '' and null into 0.
   boardSortOrder: z.preprocess(

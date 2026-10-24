@@ -51,14 +51,18 @@ const SUPER_ADMIN_ITEMS = [
   { href: '/admin/email-previews', icon: Mail, label: 'Email previews' },
 ] as const;
 
+// Pages that return 404 on Vercel Production, so production does not list them.
+const NON_PRODUCTION_HREFS: readonly string[] = ['/admin/email-previews'];
+
 function isActive(pathname: string, href: string) {
   return href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminNavigation({ isSuperAdmin, showDataPromotion, unreadCount }: { isSuperAdmin: boolean; showDataPromotion: boolean; unreadCount: number }) {
+export function AdminNavigation({ isProduction, isSuperAdmin, showDataPromotion, unreadCount }: { isProduction: boolean; isSuperAdmin: boolean; showDataPromotion: boolean; unreadCount: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const superAdminItems = showDataPromotion ? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS.filter((item) => item.href !== '/admin/operations/data-promotion');
+  const dataPromotionItems = showDataPromotion ? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS.filter((item) => item.href !== '/admin/operations/data-promotion');
+  const superAdminItems = isProduction ? dataPromotionItems.filter((item) => !NON_PRODUCTION_HREFS.includes(item.href)) : dataPromotionItems;
   const items = isSuperAdmin ? [...SHARED_ITEMS, ...superAdminItems] : SHARED_ITEMS;
   const activeHref = items.filter((item) => isActive(pathname, item.href))
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;

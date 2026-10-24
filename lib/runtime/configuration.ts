@@ -76,6 +76,8 @@ export function baseUrlForServer(environment: Environment = process.env) {
   return value;
 }
 export function cronSecretForServer(environment: Environment = process.env) { return secret(environment, 'CRON_SECRET'); }
+// Optional read-only credential for the cron monitoring dashboard feed; unset means that endpoint answers 503 not_configured.
+export function cronMonitorTokenForServer(environment: Environment = process.env) { return secret(environment, 'CRON_MONITOR_TOKEN'); }
 // Deliberately not required()-gated: this is a user-facing support contact for persistent-error UX
 // copy, not a security-critical secret or endpoint, so an unset value must not fail a production
 // build closed -- it falls back to a real, monitored address instead. Distinct from
