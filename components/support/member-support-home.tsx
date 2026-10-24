@@ -1,11 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ChevronRight, MessageCircle } from 'lucide-react';
+import { ChevronRight, MessageCircle, MessageSquarePlus } from 'lucide-react';
 import { AuthorizationError } from '@/lib/membership/authorization';
-import { NewTicketDrawer } from '@/components/support/member-support-chat';
-import { CATEGORY_LABELS, listOwnConversations, STATUS_LABELS, SUPPORT_CATEGORIES } from '@/lib/support/inbox';
-import { createSupportConversation } from '@/app/(dashboard)/dashboard/support/actions';
+import { Button } from '@/components/ui/button';
+import { CATEGORY_LABELS, listOwnConversations, STATUS_LABELS } from '@/lib/support/inbox';
 import { formatDateTime } from '@/lib/format';
 
 export async function MemberSupportHome() {
@@ -16,11 +14,10 @@ export async function MemberSupportHome() {
     if (error instanceof AuthorizationError) redirect('/dashboard');
     throw error;
   }
-  const categories = SUPPORT_CATEGORIES.map((category) => ({ label: CATEGORY_LABELS[category], value: category }));
-  return <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 lg:px-8">
+  return <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8"><div className="max-w-4xl space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h2 className="text-2xl font-semibold">Your conversations</h2><p className="text-muted-foreground">Most recent activity first.</p></div>
-      <NewTicketDrawer action={createSupportConversation} categories={categories} idempotencyKey={randomUUID()} />
+      <Button asChild><Link href="/contact/new"><MessageSquarePlus aria-hidden />New ticket</Link></Button>
     </header>
     {conversations.length === 0
       ? <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-12 text-center"><MessageCircle aria-hidden className="size-8 text-gold" /><p className="font-medium">No support tickets yet</p><p className="text-sm text-muted-foreground">Select New ticket to ask the IDOC team for help.</p></div>
@@ -36,5 +33,5 @@ export async function MemberSupportHome() {
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link></li>;
       })}</ul>}
-  </div>;
+  </div></div>;
 }

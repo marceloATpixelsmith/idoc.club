@@ -15,6 +15,7 @@ import {
   LineChart,
   Mail,
   Menu,
+  Send,
   Settings,
   ShieldCheck,
   Users,
@@ -28,13 +29,14 @@ import { useState } from 'react';
 const SHARED_ITEMS = [
   { href: '/admin', icon: LayoutDashboard, label: 'Overview' },
   { href: '/admin/members', icon: Users, label: 'Members' },
+  { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
+  { href: '/admin/communications', icon: Send, label: 'Communications' },
   { href: '/admin/revenue', icon: LineChart, label: 'Revenue' },
   { href: '/admin/exports', icon: FileDown, label: 'Exports' },
-  { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
-  { href: '/admin/support', icon: Headphones, label: 'Support inbox' },
-  { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
   { href: '/admin/seminars', icon: GraduationCap, label: 'Seminars/Courses' },
   { href: '/admin/seminars/registrations', icon: ClipboardList, label: 'Registrations' },
+  { href: '/admin/news', icon: BookOpen, label: 'News / Blog' },
+  { href: '/admin/reconciliation', icon: WalletCards, label: 'Stripe reconciliation' },
 ] as const;
 
 const SUPER_ADMIN_ITEMS = [
@@ -105,7 +107,7 @@ export function AdminNavigation({ hideTemporaryOperations, isProduction, isSuper
                 >
                   <item.icon aria-hidden="true" className="size-4 shrink-0" />
                   {item.label}
-                  {item.href === '/admin/support' && unreadCount > 0 ? <span className="ml-auto rounded-full bg-gold px-2 py-0.5 text-xs font-semibold text-navy" title="Unread assigned support conversations">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
+                  {item.href === '/admin/support' && unreadCount > 0 ? <span className="ml-auto rounded-full bg-gold px-2 py-0.5 text-xs font-semibold text-primary-foreground" title="Unread assigned support conversations">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}
                 </Link>
               </li>
             );

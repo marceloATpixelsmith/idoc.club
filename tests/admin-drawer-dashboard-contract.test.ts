@@ -46,9 +46,11 @@ test('selection bars expose Support close and News status bulk actions', () => {
   assert.match(bulkActions, /admin\.news_article\.bulk_status_changed/);
 });
 
-test('admin dashboard surfaces assigned support, reconciliation, and revenue', () => {
+test('admin dashboard surfaces assigned support, new members, delivered renewal notices, and revenue', () => {
   assert.match(dashboard, /My unresolved support/);
-  assert.match(dashboard, /Stripe reconciliation/);
+  assert.match(dashboard, /Newest members/);
+  assert.match(dashboard, /Delivered renewal notices/);
+  assert.doesNotMatch(dashboard, /reconciliation/i);
   assert.match(dashboard, /Revenue overview/);
   assert.match(dashboard, /Gross revenue/);
   assert.match(dashboard, /Stripe/);
