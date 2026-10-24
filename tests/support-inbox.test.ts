@@ -6,6 +6,7 @@ const source = readFileSync('lib/support/inbox.ts', 'utf8');
 const migration = readFileSync('lib/db/migrations/0039_support_inbox.sql', 'utf8');
 const otherCategoryMigration = readFileSync('lib/db/migrations/0068_support_other_category.sql', 'utf8');
 const memberThread = readFileSync('components/support/member-support-thread.tsx', 'utf8');
+const memberChat = readFileSync('components/support/member-support-chat.tsx', 'utf8');
 
 test('support categories, states, body lengths, and opaque identifiers are constrained in both layers', () => {
   for (const value of ['billing_membership', 'seminars', 'technical_support', 'admin_responded', 'member_replied', 'closed']) {
@@ -56,9 +57,10 @@ test('thread transitions, read sides, chronological order, and idempotency are e
 });
 
 test('message presentation uses escaped React text with whitespace preservation', () => {
-  assert.match(memberThread, /whitespace-pre-wrap/);
+  assert.match(memberChat, /whitespace-pre-wrap/);
   assert.match(memberThread, /String\(message\.body\)/);
   assert.doesNotMatch(memberThread, /dangerouslySetInnerHTML/);
+  assert.doesNotMatch(memberChat, /dangerouslySetInnerHTML/);
 });
 
 test('administrator assignment and unread state use per-administrator records', () => {
