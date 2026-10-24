@@ -69,10 +69,10 @@ export const HOW_TO_SECTIONS: readonly HowToSection[] = [
     ],
     steps: [
       'Open Contact from the main menu.',
-      'Choose a category: Billing/Membership, Seminars/Courses, Technical Support, Make a suggestion, or Other.',
-      'Write a short subject and your message, then select Start conversation.',
+      'Select New ticket to open the ticket drawer, then choose a category: Billing/Membership, Seminars/Courses, Technical Support, Make a suggestion, or Other.',
+      'Write a short subject and your message, then send it.',
       'Your conversation appears under Your conversations with a status: Open, Responded to by admin, Member Replied, or Closed/Resolved. A "New reply" label tells you when the team has answered.',
-      'Open a conversation to read the reply and respond in the same thread.',
+      'Open a conversation to read the reply in chat form and respond in the same thread.',
     ],
     videoSrc: howToVideoUrl('contact'),
   },

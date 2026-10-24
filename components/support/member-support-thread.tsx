@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { notFound, redirect } from 'next/navigation';
 import { AuthorizationError } from '@/lib/membership/authorization';
 import { SupportForm } from '@/components/support/support-form';
+import { ReplyComposer, SupportBubble } from '@/components/support/member-support-chat';
 import { CATEGORY_LABELS, getOwnConversation, STATUS_LABELS } from '@/lib/support/inbox';
 import { closeOwnConversation, replyToSupportConversation } from '@/app/(dashboard)/dashboard/support/actions';
 import { formatDateTime } from '@/lib/format';
@@ -16,10 +17,17 @@ export async function MemberSupportThread({ publicId }: { publicId: string }) {
     throw error;
   }
   if (!conversation) notFound();
-  return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8"><BackLink href="/contact">Back to My Support Tickets</BackLink><header><h1 className="text-2xl font-semibold">{String(conversation.subject)}</h1><p>{CATEGORY_LABELS[conversation.category as keyof typeof CATEGORY_LABELS]} · <strong>{STATUS_LABELS[String(conversation.status)]}</strong></p></header>
-    <ol className="space-y-4">{conversation.messages.map((message, index) => <li className={`rounded-lg border p-4 ${message.author_side === 'admin' ? 'bg-muted' : ''}`} key={`${message.created_at}-${index}`}><p className="mb-2 text-sm font-semibold">{message.author_side === 'admin' ? 'IDOC Support' : 'You'} · {formatDateTime(String(message.created_at))}</p><p className="whitespace-pre-wrap break-words">{String(message.body)}</p></li>)}</ol>
-    {conversation.status === 'closed' ? <p className="rounded border p-4 text-muted-foreground">This conversation is closed and remains available to read. An administrator can reopen it.</p> :
-      <section><h2 className="mb-3 text-lg font-semibold">Reply</h2><div className="mb-3 flex justify-end"><SupportForm action={closeOwnConversation} submitLabel="Close conversation"><input name="publicId" type="hidden" value={publicId} /></SupportForm></div><SupportForm action={replyToSupportConversation} pendingLabel="Sending" submitLabel="Send reply"><input name="idempotencyKey" type="hidden" value={randomUUID()} /><input name="publicId" type="hidden" value={publicId} /><label className="block">Message<textarea className="mt-1 block min-h-32 w-full rounded border p-2" maxLength={10000} name="body" required /></label></SupportForm></section>
+  return <div className="mx-auto max-w-3xl px-5 pb-10 lg:px-8"><BackLink href="/contact">Back to My Support Tickets</BackLink>
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b pb-5">
+      <div><h1 className="text-2xl font-semibold">{String(conversation.subject)}</h1><p className="text-sm text-muted-foreground">{CATEGORY_LABELS[conversation.category as keyof typeof CATEGORY_LABELS]} · <strong className="text-gold">{STATUS_LABELS[String(conversation.status)]}</strong></p></div>
+      {conversation.status === 'closed' ? null : <SupportForm action={closeOwnConversation} submitLabel="Close conversation"><input name="publicId" type="hidden" value={publicId} /></SupportForm>}
+    </header>
+    <ol className="space-y-5">{conversation.messages.map((message, index) => {
+      const side = message.author_side === 'admin' ? 'admin' : 'member';
+      return <SupportBubble author={side === 'admin' ? 'IDOC Support' : 'You'} key={`${message.created_at}-${index}`} side={side} time={formatDateTime(String(message.created_at))}>{String(message.body)}</SupportBubble>;
+    })}</ol>
+    {conversation.status === 'closed' ? <p className="mt-8 rounded-xl border p-4 text-muted-foreground">This conversation is closed and remains available to read. An administrator can reopen it.</p> :
+      <section aria-label="Reply" className="sticky bottom-0 mt-8 border-t bg-background/95 pb-2 pt-4 backdrop-blur"><ReplyComposer action={replyToSupportConversation} idempotencyKey={randomUUID()} publicId={publicId} /></section>
     }
   </div>;
 }

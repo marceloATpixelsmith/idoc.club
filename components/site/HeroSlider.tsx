@@ -32,7 +32,7 @@ const slides: Slide[] = [
   {
     image: '/hero-seminar.jpg',
     alt: 'Dressage rider in extended trot in a dim arena',
-    focal: '55% 50%',
+    focal: '55% 18%',
     eyebrow: 'Seminars/Courses 2026',
     title: 'Education that keeps',
     titleAccent: 'officials aligned',
