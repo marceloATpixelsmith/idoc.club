@@ -54,15 +54,19 @@ const SUPER_ADMIN_ITEMS = [
 // Pages that return 404 on Vercel Production, so production does not list them.
 const NON_PRODUCTION_HREFS: readonly string[] = ['/admin/email-previews'];
 
+// One-off switchover tools. Neither deployed site (production or staging) lists them; the pages still work by direct URL for a Super Admin.
+const TEMPORARY_OPERATIONS_HREFS: readonly string[] = ['/admin/operations/switchover', '/admin/operations/event-replay', '/admin/operations/legacy-import'];
+
 function isActive(pathname: string, href: string) {
   return href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminNavigation({ isProduction, isSuperAdmin, showDataPromotion, unreadCount }: { isProduction: boolean; isSuperAdmin: boolean; showDataPromotion: boolean; unreadCount: number }) {
+export function AdminNavigation({ hideTemporaryOperations, isProduction, isSuperAdmin, showDataPromotion, unreadCount }: { hideTemporaryOperations: boolean; isProduction: boolean; isSuperAdmin: boolean; showDataPromotion: boolean; unreadCount: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const dataPromotionItems = showDataPromotion ? SUPER_ADMIN_ITEMS : SUPER_ADMIN_ITEMS.filter((item) => item.href !== '/admin/operations/data-promotion');
-  const superAdminItems = isProduction ? dataPromotionItems.filter((item) => !NON_PRODUCTION_HREFS.includes(item.href)) : dataPromotionItems;
+  const environmentItems = isProduction ? dataPromotionItems.filter((item) => !NON_PRODUCTION_HREFS.includes(item.href)) : dataPromotionItems;
+  const superAdminItems = hideTemporaryOperations ? environmentItems.filter((item) => !TEMPORARY_OPERATIONS_HREFS.includes(item.href)) : environmentItems;
   const items = isSuperAdmin ? [...SHARED_ITEMS, ...superAdminItems] : SHARED_ITEMS;
   const activeHref = items.filter((item) => isActive(pathname, item.href))
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
