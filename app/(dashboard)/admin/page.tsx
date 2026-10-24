@@ -2,16 +2,10 @@ import Link from 'next/link';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
 import { getRevenueReport } from '@/lib/payments/revenue-report';
 import { listAssignedOpenConversationsForDashboard, CATEGORY_LABELS, STATUS_LABELS } from '@/lib/support/inbox';
-import { listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
+import { requireAccountAccess } from '@/lib/membership/data-access';
+import { listNewMembersLastWeek } from '@/lib/membership/new-members';
+import { getCommunicationsReport } from '@/lib/notifications/communications-report-data';
 import { requireAdministrator } from '@/lib/membership/authorization';
-
-const RECONCILIATION_KIND_LABELS: Record<string, string> = {
-  orphaned_subscription: 'Orphaned active Stripe subscription',
-  repeated_failure: 'Repeated payment failures',
-  status_conflict: 'Subscription status conflict',
-  unlinked_customer: 'Unlinked Stripe Customer',
-  pending_schedule_conflict: 'Pending renewal schedule conflict',
-};
 
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
@@ -20,19 +14,20 @@ function money(cents: number, currency: string) {
 export default async function AdminPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const [support, reconciliation, revenue] = await Promise.all([
+  const [support, newMembers, communications, revenue] = await Promise.all([
     listAssignedOpenConversationsForDashboard(5),
-    listReconciliationFindings(),
+    listNewMembersLastWeek(),
+    getCommunicationsReport(),
     // A one-minute per-instance cache: this overview aggregates every payment on each dashboard load. The Revenue page stays live.
     getRevenueReport({}, { cacheSeconds: 60 }),
   ]);
-  const latestReconciliation = [...reconciliation].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
+  const delivered = communications.renewalRows.filter((row) => row.brevo === 'delivered');
 
   return <main className="flex-1 space-y-6 px-5 py-8 lg:px-8">
     <header>
       <p className="eyebrow">Administration</p>
       <h1 className="mt-2 font-display text-3xl text-gold">Admin Dashboard</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">Current work requiring administrator attention and a compact operational revenue summary.</p>
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">Current work requiring administrator attention, last week's new members and delivered renewal notices, and a compact operational revenue summary.</p>
     </header>
 
     <div className="grid gap-6 xl:grid-cols-2">
@@ -51,21 +46,41 @@ export default async function AdminPage() {
         <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/support">Open Support Inbox</Link>
       </AdminFormSection>
 
-      <AdminFormSection title="Stripe reconciliation">
-        {latestReconciliation.length === 0 ? <p className="text-sm text-muted-foreground">No unresolved reconciliation findings.</p> : (
-          <ul className="divide-y divide-border">
-            {latestReconciliation.map((finding) => (
-              <li className="py-3 first:pt-0 last:pb-0" key={finding.id}>
-                <p className="font-medium">{RECONCILIATION_KIND_LABELS[finding.kind] ?? finding.kind}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{finding.summary}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{finding.createdAt.toLocaleString()}</p>
-              </li>
-            ))}
-          </ul>
+      <AdminFormSection description="Members who joined in the last 7 days." title="Newest members">
+        <p className="text-2xl font-semibold">{newMembers.total} <span className="text-sm font-normal text-muted-foreground">new this week</span></p>
+        {newMembers.total === 0 ? <p className="text-sm text-muted-foreground">No new members in the last 7 days.</p> : (
+          <>
+            {newMembers.byClassification.length > 0 ? <p className="text-sm text-muted-foreground">{newMembers.byClassification.map((row) => `${row.count} ${row.label}`).join(' · ')}</p> : null}
+            <ul className="divide-y divide-border">
+              {newMembers.recent.map((member) => (
+                <li className="py-3 first:pt-0 last:pb-0" key={member.profileId}>
+                  <Link className="font-medium hover:underline" href={`/admin/members?profileId=${member.profileId}`}>{member.name}</Link>
+                  <p className="mt-1 text-sm text-muted-foreground">{member.countryCode} · joined {member.joinedAt.toISOString().slice(0, 10)}</p>
+                </li>
+              ))}
+            </ul>
+            {newMembers.total > newMembers.recent.length ? <p className="text-xs text-muted-foreground">Showing the newest {newMembers.recent.length} of {newMembers.total}.</p> : null}
+          </>
         )}
-        <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/reconciliation">Open reconciliation</Link>
+        <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/members">Open Members</Link>
       </AdminFormSection>
     </div>
+
+    <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered." title="Delivered renewal notices">
+      {communications.brevoAvailable ? null : <p className="text-sm text-muted-foreground">Brevo&apos;s log could not be read, so delivery cannot be confirmed right now.</p>}
+      <p className="text-2xl font-semibold">{delivered.length} <span className="text-sm font-normal text-muted-foreground">delivered</span></p>
+      {delivered.length === 0 ? <p className="text-sm text-muted-foreground">No delivered renewal notices in the last 7 days.</p> : (
+        <ul className="divide-y divide-border">
+          {delivered.map((row, index) => (
+            <li className="py-3 first:pt-0 last:pb-0" key={`${row.kind}-${row.email}-${index}`}>
+              <p className="font-medium">{row.member} <span className="font-normal text-muted-foreground">· {row.label}</span></p>
+              <p className="mt-1 text-sm text-muted-foreground">{row.email ?? '—'} · {row.sentAt ? row.sentAt.toISOString().slice(0, 10) : ''}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/communications">Open Communications</Link>
+    </AdminFormSection>
 
     <AdminFormSection description={`Recorded successful membership payments from ${revenue.range.from} through ${revenue.range.to}.`} title="Revenue overview">
       {revenue.summary.length === 0 ? <p className="text-sm text-muted-foreground">No recorded revenue in this period.</p> : (
