@@ -25,12 +25,25 @@ export function resetErrorNotificationThrottleForTests() {
   for (const hour of Object.values(hours)) { hour.count = 0; hour.start = 0; }
 }
 
-/** Removes query strings and anything that looks like a bearer token, a long hex/base64 secret or an email address from free text. */
+/** Removes what must never reach an administrator mailbox from free-text error output: query strings, bearer
+ * tokens, API keys and JWTs, bound SQL parameters, row values echoed by Postgres, password hashes, long hex
+ * digests and email addresses. */
 export function scrubErrorText(value: string): string {
   return value
     .replace(/(authorization|cookie|set-cookie)\s*[:=]\s*[^\n]+/gi, '$1: [redacted]')
+    // Drizzle's query error message is "Failed query: <sql>" followed by a "params: <bound values>" line, and
+    // those values can be OTP digests, password hashes or member emails. Placeholders in the SQL stay; values go.
+    .replace(/^([ \t]*params[ \t]*:).*$/gim, '$1 [redacted]')
+    // Postgres DETAIL lines echo the offending row, e.g. `Key (email)=(someone@example.org) already exists.`
+    .replace(/(\([A-Za-z0-9_, ]+\))=\([^\n]*?\)(?=[\s.,]|$)/g, '$1=([redacted])')
+    .replace(/\bBearer[ \t]+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/\b(sk|pk|rk|whsec)_(live|test)?_?[A-Za-z0-9]{8,}/g, '[redacted-key]')
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g, '[redacted-token]')
+    // Stored password hashes: lib/auth/password-hash.ts writes argon2id$v=19$m=..,t=..,p=..$salt$hash; legacy bcrypt ($2b$..) remains.
+    .replace(/\$?argon2[a-z]*\$v=\d+\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+/gi, '[redacted-hash]')
+    .replace(/\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}/g, '[redacted-hash]')
+    .replace(/\b[A-Fa-f0-9]{32,}\b/g, '[redacted-hex]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
     .replace(/([?&][^=\s&]+)=([^&\s)]+)/g, '$1=[redacted]');
 }
 

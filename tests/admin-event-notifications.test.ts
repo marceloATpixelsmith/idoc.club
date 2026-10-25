@@ -52,6 +52,29 @@ test('server and browser errors notify Technical Support without reading the ano
   assert.doesNotMatch(route, /request\.json|request\.text|formData/);
 });
 
+test('error emails never carry bound query parameters, echoed row values, emails, bearer tokens or hashes', async () => {
+  const { scrubErrorText } = await import('../lib/notifications/error-report-text.ts');
+  // The shape Drizzle's DrizzleQueryError really produces: SQL with placeholders, then a params line.
+  const otpDigest = 'a'.repeat(32) + 'b'.repeat(32);
+  const passwordHash = 'argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhcw';
+  const bcryptHash = '$2b$10$' + 'N9qo8uLOickgx2ZMRZoMye'.padEnd(53, 'IjZAgcfl7p92ldGxad68LJZdL17lhWy').slice(0, 53);
+  const message = [
+    'Failed query: insert into "idoc"."email_otps" ("email", "code_hash") values ($1, $2)',
+    `params: someone@example.org,${otpDigest}`,
+    `cause: error: duplicate key value violates unique constraint. Key (email)=(someone@example.org) already exists.`,
+    `update users set password_hash = '${passwordHash}' for member@example.org`,
+    `legacy credential ${bcryptHash} was being upgraded`,
+    'retry with Bearer opaque-token-value-123 failed',
+  ].join('\n');
+  const scrubbed = scrubErrorText(message);
+  assert.doesNotMatch(scrubbed, /someone@example\.org|member@example\.org|opaque-token-value|argon2id\$v=19|a{32}|c29tZXNhbHRzYWx0|N9qo8uLOickgx2ZMRZoMye/);
+  // The diagnostic value stays: the SQL with its placeholders, the constraint and the column names.
+  assert.match(scrubbed, /insert into "idoc"\."email_otps" \("email", "code_hash"\) values \(\$1, \$2\)/);
+  assert.match(scrubbed, /unique constraint/);
+  assert.match(scrubbed, /Key \(email\)=\(\[redacted\]\)/);
+  assert.match(scrubbed, /^params: \[redacted\]$/m);
+});
+
 test('error emails strip secrets and query strings, and repeats are throttled', async () => {
   const { pathWithoutQuery, resetErrorNotificationThrottleForTests, scrubErrorText, shouldSendErrorNotification } = await import('../lib/notifications/error-report-text.ts');
   assert.equal(pathWithoutQuery('https://idoc.club/a/b?token=abc#x'), 'https://idoc.club/a/b');
