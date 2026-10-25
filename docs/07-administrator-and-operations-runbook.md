@@ -482,11 +482,12 @@ After each **scheduled** scan, every active Super Admin receives an email with t
 
 ## 13.2 Communications report
 
-`/admin/communications` (Administrator tier, listed under Members) is a read-only dashboard of what the system emailed in the last 7 days. It has three parts:
+`/admin/communications` (Administrator tier, listed under Members) is a read-only dashboard of what the system emailed in the last 7 days. Each part is its own tab, shown in a titled section box (docs/29); the count tables size to their content and wrap onto their own rows on narrow screens instead of stretching to full width. The tabs are:
 
 - **System emails** — totals per email type (account activation, password reset, payment failed, seminar confirmations, and so on) from `notification_outbox` and `account_delivery_outbox`, excluding the renewal notices below.
 - **Renewal notices sent** — the renewal, expiration, and grace reminders, as totals and a per-email list.
-- **Coming renewal notices** — notices the daily scan has not queued yet, by the date it will queue them (next 28 days).
+- **Upcoming notices** — notices the daily scan has not queued yet, by the date it will queue them (next 28 days).
+- **Delivery issues** — one row per email (system or renewal) that Brevo did not confirm as delivered (*Bounced / blocked*, *Not in Brevo log*) or that is still queued or given up on, with member, recipient address, queue state and Brevo status, filterable by group, type and status, so an administrator can look the address up in Brevo. The tab label shows the count, and the System emails and Renewal notices tabs link to it when they contain such emails. Not shown when Brevo's log itself is unreadable (the page-level alert covers that).
 
 Each sent email is checked against Brevo's transactional log (`GET /v3/smtp/statistics/events`, using `BREVO_API_KEY`) by recipient address and time: *Delivered*, *Bounced / blocked*, or *Not in Brevo log*. If Brevo cannot be read, the page says so and shows queue counts only, with no delivery claims. Emails still queued, or given up after retries, are counted separately from Brevo outcomes. The Admin Dashboard overview shows last week's newest members (total, by judge/steward/veterinarian role, and the newest ten) and the renewal notices Brevo confirmed as delivered; it no longer lists Stripe reconciliation findings (the full report remains at `/admin/reconciliation`). The Communications page sends nothing and changes nothing; while member communications are on hold (docs/27) it says so.
 
