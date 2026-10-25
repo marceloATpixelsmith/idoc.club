@@ -147,6 +147,7 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
 export const resendPasswordResetOtp = validatedAction(z.object({}), async (_data, formData) => {
   const pending = await getPendingPasswordReset();
   if (!pending || pending.stage === 'authorized') return { error: 'Your session expired. Start again.' };
+  const startedAt = defaultTiming.now();
   await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
   if (pending.stage === 'email-otp' && pending.subjectId &&
@@ -154,6 +155,15 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async (_data
     await issueEmailOtp(pending.email, 'password_reset', { origin, userId: pending.subjectId });
   } else {
     await checkRateLimit('password_reset_resend_neutral', pending.email, origin);
+    // An imported member's pending step carries no subject (it is deliberately identical to every other
+    // neutral case), so re-check eligibility by email and re-queue the activation link.
+    if (pending.stage === 'email-otp' && !pending.subjectId) {
+      const [account] = await db.select({ accountState: users.accountState }).from(users).where(eq(users.email, pending.email)).limit(1);
+      if (account?.accountState === 'migrated_pending') {
+        await requestAccountLink(pending.email, 'migration_activation', origin, { ...defaultTiming, sleep: async () => undefined });
+      }
+    }
+    await equalizeAnonymousResponse(startedAt, defaultTiming);
   }
   return { success: 'If email verification is available for this account, a new code was sent.' };
 }, { skipCsrf: true });

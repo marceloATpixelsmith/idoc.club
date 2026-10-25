@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
-import { startPasswordReset } from '../app/(login)/recover-password/actions.ts';
+import { resendPasswordResetOtp, startPasswordReset } from '../app/(login)/recover-password/actions.ts';
 import { getPendingPasswordReset } from '../lib/auth/pending-password-reset.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { comparePasswords } from '../lib/auth/session.ts';
@@ -73,6 +73,24 @@ async function submitReset(email: string) {
   });
 }
 
+/** Presses Resend on the verification screen left behind by `submitReset`, using that screen's own pending nonce. */
+async function pressResend(email: string) {
+  const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
+  const start = new FormData();
+  start.set('csrf_token', csrf_token);
+  start.set('email', email);
+  start.set('turnstileToken', 'XXXX.DUMMY.TOKEN.XXXX');
+  return withTestRequestCookies(cookies, async () => {
+    await assert.rejects(() => startPasswordReset({}, start), (error: unknown) => String(error).includes('NEXT_REDIRECT'));
+    const pending = await getPendingPasswordReset();
+    assert.ok(pending?.csrfNonce);
+    const resend = new FormData();
+    resend.set('csrf_token', pending.csrfNonce);
+    return resendPasswordResetOtp({}, resend);
+  });
+}
+
 const queued = async (userId: number, purpose: string) => (await sql<{ encrypted_payload: string; key_version: string }[]>`
   select encrypted_payload,key_version from idoc.account_delivery_outbox where user_id=${userId} and purpose=${purpose}`);
 const otpCount = async (userId: number) => (await sql`select count(*)::int as n from idoc.email_otp_codes where user_id=${userId}`)[0].n as number;
@@ -124,4 +142,19 @@ test('unknown and ineligible emails get the identical neutral screen and nothing
   assert.equal(ineligible?.stage, 'email-otp');
   assert.equal((await sql`select count(*)::int as n from idoc.account_delivery_outbox`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from idoc.email_otp_codes`)[0].n, 0);
+});
+
+test('Resend on the verification screen queues a fresh activation link for an imported member and stays neutral for everyone else', async () => {
+  const imported = await importedMember(23);
+  const active = await createUser('active');
+  const neutral = { success: 'If email verification is available for this account, a new code was sent.' };
+
+  assert.deepEqual(await pressResend(imported.email), neutral);
+  assert.equal((await queued(imported.id, 'migration_activation')).length, 2, 'the initial send plus the resend');
+  assert.equal(await otpCount(imported.id), 0);
+
+  assert.deepEqual(await pressResend(active.email), neutral);
+  assert.equal((await queued(active.id, 'migration_activation')).length, 0);
+  assert.deepEqual(await pressResend('nobody-at-all@example.test'), neutral);
+  assert.equal((await sql`select count(*)::int as n from idoc.account_delivery_outbox where user_id is distinct from ${imported.id}`)[0].n, 0);
 });
