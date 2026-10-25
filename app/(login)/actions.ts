@@ -35,6 +35,8 @@ import { setUiFlash } from '@/lib/ui/flash-state';
 import { loadSessionGate } from '@/lib/membership/session-gate-loader';
 import { paymentOnlyDestination } from '@/lib/membership/session-gate';
 import { supportEmailForServer } from '@/lib/runtime/configuration';
+import { recordUserActivity } from '@/lib/activity/user-activity';
+import { recordTokenSubmitted } from '@/lib/activity/token-link-activity';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -77,6 +79,8 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   if (!isPasswordValid || !['active', 'onboarding', 'migrated_pending'].includes(foundUser.accountState)) {
+    // Recorded for the administrator Member timeline only; the response below is identical for every failure.
+    await recordUserActivity(foundUser.id, 'sign_in_password_failed', { detail: { reason: isPasswordValid ? 'account_not_eligible' : 'wrong_password' } });
     return { error: 'Invalid email or password. Please try again.', email };
   }
 
@@ -227,12 +231,14 @@ const breachedPasswordError = { error: 'This password has appeared in a public d
 
 export const resetPassword = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'password_reset', password);
+  await recordTokenSubmitted(token, 'password_reset', result.status);
   if (result.status !== 'success') return result.status === 'breached_password' ? breachedPasswordError : { error: 'This reset link is invalid or expired.' };
   return finishTokenPasswordFlow('password-reset-success');
 });
 
 export const activateMigratedAccount = validatedAction(consumeTokenSchema, async ({ password, token }) => {
   const result = await consumeAccountToken(token, 'migration_activation', password);
+  await recordTokenSubmitted(token, 'migration_activation', result.status);
   if (result.status !== 'success') return result.status === 'breached_password' ? breachedPasswordError : { error: 'This activation link is invalid or expired.' };
   return finishTokenPasswordFlow('account-activated');
 });

@@ -25,8 +25,8 @@ test('only validated durable state is accepted for each supported table', () => 
   assert.match(preferences, /z\.union\(\[z\.literal\(10\), z\.literal\(25\), z\.literal\(50\), z\.literal\(100\)\]\)/);
 });
 
-test('database preferences are always the source of truth for filters/sort/columns/pagination -- there is no URL state to take precedence over, and only profileId is read from the URL', () => {
-  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string; tab\?: string \}>/);
+test('database preferences are always the source of truth for filters/sort/columns/pagination -- there is no URL state to take precedence over, and only record-opening navigation state (profileId, tab, timeline) is read from the URL', () => {
+  assert.match(membershipPage, /searchParams: Promise<\{ profileId\?: string; tab\?: string; timeline\?: string \}>/);
   assert.match(membershipPage, /const savedPreferences = await getTablePreferences\('memberships'\);/);
   assert.doesNotMatch(membershipPage, /hasUrlState/);
   assert.doesNotMatch(membershipPage, /redirect\(/);

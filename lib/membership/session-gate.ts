@@ -48,6 +48,9 @@ const PAYMENT_ONLY_PATH_PREFIXES = [
   // table-preference handlers -- is gated like any other page.
   '/api/stripe/', '/api/ui/', '/api/user', '/api/auth/google/start', '/api/auth/google/callback', '/api/address/', '/api/client-error', '/api/health', '/api/brevo/', '/api/cron/',
   // Authentication pages, so a signed-in member can sign out, complete step-up, or switch accounts.
+  // Identifying links in the payment, renewal and grace emails land here first (docs/05): it records the click and forwards to the
+  // membership page, which is exactly where a lapsed member is sent anyway.
+  '/l',
   '/sign-in', '/sign-up', '/mfa', '/recover-password', '/reset-password', '/verify-email', '/activate', '/request-activation',
   // Legal documents the onboarding consent text links to.
   '/terms', '/privacy',
