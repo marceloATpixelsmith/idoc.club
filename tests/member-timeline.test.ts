@@ -173,3 +173,25 @@ test('clearing the date filter means all dates, and Brevo is only asked for the 
   assert.match(drawer, /Showing all dates/);
   assert.match(readFileSync('app/api/admin/members/[profileId]/timeline/route.ts', 'utf8'), /get\('all'\) === '1'/);
 });
+
+test('the timeline filters are saved per administrator like every table, never in the URL', () => {
+  const preferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
+  assert.match(preferences, /ADMIN_TABLE_IDENTIFIERS = \[[^\]]*'member_timeline'\]/);
+  assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), to: date,[\s\S]*?\}\)\.strict\(\)/);
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /persistTablePreferences\('member_timeline'/);
+  assert.match(drawer, /initialPreferences/);
+  assert.doesNotMatch(drawer, /useSearchParams|router\./);
+  assert.match(readFileSync('app/(dashboard)/admin/members/page.tsx', 'utf8'), /getTablePreferences\('member_timeline'\)/);
+  assert.match(readFileSync('lib/db/migrations/0086_member_timeline_table_preference.sql', 'utf8'), /'member_timeline'/);
+  assert.match(readFileSync('lib/db/schema.ts', 'utf8'), /'seminar_registrations', 'member_timeline'/);
+});
+
+test('the timeline sorts through a standard Sort button, with no separate quick-range or order buttons', () => {
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /ArrowDownUp/);
+  assert.match(drawer, />\s*Sort\s*</);
+  assert.match(drawer, /Oldest first/);
+  assert.match(drawer, /Newest first/);
+  assert.doesNotMatch(drawer, /Last 30 days<\/Button>/);
+});

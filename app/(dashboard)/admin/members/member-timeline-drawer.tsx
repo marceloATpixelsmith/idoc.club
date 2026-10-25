@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowDownUp } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
+import { persistTablePreferences } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 import type { MemberTimeline } from '@/lib/admin/member-timeline';
 import { formatTimelineTime, TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
 import { formatTableDate } from '@/lib/format';
@@ -21,11 +25,32 @@ type State = { status: 'error'; message: string } | { status: 'loading' } | { da
 /** The member's whole history in one place, oldest first by default, every row marked as done by the member, the server on its
  * own, or an administrator. A separate drawer from the member form (docs/29); the date range lives in this component's state,
  * never in the URL. */
-export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
+export function MemberTimelineDrawer({ initialPreferences, profileId }: { initialPreferences?: TablePreferenceState | null; profileId: number }) {
   // Empty = the default last 30 days; `all` = the date filter was cleared, so no date limit.
-  const [range, setRange] = useState<{ all?: boolean; from?: string; to?: string }>({});
-  const [shown, setShown] = useState<Record<TimelineActor, boolean>>({ administrator: true, server: true, user: true });
-  const [newestFirst, setNewestFirst] = useState(false);
+  const [range, setRange] = useState<{ all?: boolean; from?: string; to?: string }>(() => {
+    if (initialPreferences?.all === '1') return { all: true };
+    const from = typeof initialPreferences?.from === 'string' ? initialPreferences.from : undefined;
+    const to = typeof initialPreferences?.to === 'string' ? initialPreferences.to : undefined;
+    return from || to ? { from, to } : {};
+  });
+  const [shown, setShown] = useState<Record<TimelineActor, boolean>>(() => {
+    const hidden = typeof initialPreferences?.hide === 'string' ? initialPreferences.hide.split(',') : [];
+    return { administrator: !hidden.includes('administrator'), server: !hidden.includes('server'), user: !hidden.includes('user') };
+  });
+  const [newestFirst, setNewestFirst] = useState(initialPreferences?.newestFirst === '1');
+  // Every change is saved for this administrator (database, not the URL), like the filters of every table, so a refresh restores them.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    const hidden = ACTORS.filter((actor) => !shown[actor]);
+    const preferences: TablePreferenceState = {};
+    if (range.all) preferences.all = '1';
+    if (range.from) preferences.from = range.from;
+    if (range.to) preferences.to = range.to;
+    if (hidden.length > 0) preferences.hide = hidden.join(',');
+    if (newestFirst) preferences.newestFirst = '1';
+    void persistTablePreferences('member_timeline', preferences).catch(() => undefined);
+  }, [newestFirst, range, shown]);
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -92,7 +117,21 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
           <DateRangeFilter from={range.all ? undefined : range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange(from || to ? { from, to } : { all: true })} to={range.all ? undefined : range.to ?? data?.to} />
-          <Button onClick={() => setRange({})} size="sm" type="button" variant="outline">Last 30 days</Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button className="h-8 font-normal" data-idoc-table-control type="button" variant="outline">
+                <ArrowDownUp className="text-muted-foreground" />
+                Sort
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 space-y-2 p-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-gold">Sort by time</p>
+              <div className="grid gap-2" role="radiogroup" aria-label="Sort order">
+                <Button aria-checked={!newestFirst} className="justify-start font-normal" onClick={() => setNewestFirst(false)} role="radio" size="sm" type="button" variant={newestFirst ? 'outline' : 'secondary'}>Oldest first</Button>
+                <Button aria-checked={newestFirst} className="justify-start font-normal" onClick={() => setNewestFirst(true)} role="radio" size="sm" type="button" variant={newestFirst ? 'secondary' : 'outline'}>Newest first</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
           {range.all ? <span className="text-sm text-muted-foreground">Showing all dates</span> : null}
           <Button onClick={() => setNewestFirst((value) => !value)} size="sm" type="button" variant="outline">{newestFirst ? 'Newest first' : 'Oldest first'}</Button>
           <div className="flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Who did it">
