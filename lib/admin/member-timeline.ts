@@ -94,7 +94,8 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
     brevoEvents(email, range.fromKey, range.toKey),
   ]);
 
-  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string))) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+  const loaded = { accountEmails: !unavailableSources.includes('Account emails'), payments: !unavailableSources.includes('Payments') };
+  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded))) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
     add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: `${label} queued` });

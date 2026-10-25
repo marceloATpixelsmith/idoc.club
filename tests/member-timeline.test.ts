@@ -106,11 +106,14 @@ test('an imported member shows when they registered on the old site and when the
   assert.ok(fresh.every((entry) => entry.actor === 'user'));
 });
 
-test('audit rows that repeat another source are skipped so events are not listed twice', () => {
-  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded'), true);
-  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued'), true);
-  assert.equal(auditDuplicatesAnotherSource('account.password_reset.delivery_succeeded'), true);
-  assert.equal(auditDuplicatesAnotherSource('account.session.signed_in'), false);
+test('audit rows that repeat another source are skipped only when that source was actually read', () => {
+  const both = { accountEmails: true, payments: true };
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', both), true);
+  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued', both), true);
+  assert.equal(auditDuplicatesAnotherSource('account.password_reset.delivery_succeeded', both), true);
+  assert.equal(auditDuplicatesAnotherSource('account.session.signed_in', both), false);
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', { accountEmails: true, payments: false }), false);
+  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued', { accountEmails: false, payments: true }), false);
   assert.equal(auditTitle('account.session.signed_in'), 'Signed in');
 });
 

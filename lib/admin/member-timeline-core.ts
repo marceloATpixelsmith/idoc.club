@@ -115,9 +115,11 @@ export function withinRange(entries: TimelineEntry[], fromIso: string, toIso: st
 }
 
 /** Audit rows that repeat a fact another source already shows in more detail (the payment row carries the amount; the email-queue
- * rows carry queued/sent/failed), so the timeline does not list the same event twice. */
-export function auditDuplicatesAnotherSource(action: string): boolean {
-  return action === 'admin.payment.recorded' || /^account\.[a-z_]+\.delivery_(queued|succeeded)$/.test(action);
+ * rows carry queued/sent/failed), so the timeline does not list the same event twice. A row is skipped only when the source that
+ * replaces it was actually read; otherwise the audit entry stays as the evidence. */
+export function auditDuplicatesAnotherSource(action: string, loaded: { accountEmails: boolean; payments: boolean }): boolean {
+  if (action === 'admin.payment.recorded') return loaded.payments;
+  return loaded.accountEmails && /^account\.[a-z_]+\.delivery_(queued|succeeded)$/.test(action);
 }
 
 export const ACCOUNT_STATE_LABELS: Record<string, string> = {
