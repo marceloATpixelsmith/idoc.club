@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
 import { signIn } from '../app/(login)/actions.ts';
-import { resendPasswordResetOtp, startPasswordReset } from '../app/(login)/recover-password/actions.ts';
+import { completePasswordReset, resendPasswordResetOtp, startPasswordReset, verifyPasswordResetOtp } from '../app/(login)/recover-password/actions.ts';
 import { startPendingLogin } from '../lib/auth/pending-login.ts';
+import { MFA_APPLICATION_ID } from '../lib/auth/mfa/login.ts';
+import { PostgresMfaStore } from '../lib/auth/mfa/store.ts';
+import { beginTotpEnrollment, completeTotpEnrollment } from '../lib/auth/mfa/totp.ts';
 import { getPendingPrimaryAuth } from '../lib/auth/mfa/pending-primary-auth.ts';
 import { getPendingPasswordReset } from '../lib/auth/pending-password-reset.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
@@ -15,6 +18,7 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 
 // Imported (legacy) members hold no usable password, so "Forgot password" must send them the activation link that
 // sets their first password. Before this, /recover-password silently sent nothing to a `migrated_pending` account.
+const totpKey = randomBytes(32);
 Object.assign(process.env, {
   ACCOUNT_DELIVERY_ENCRYPTION_KEYS: JSON.stringify({ 'test-v1': 'integration-only-key-material-at-least-32-characters' }),
   ACCOUNT_DELIVERY_KEY_VERSION: 'test-v1',
@@ -25,7 +29,7 @@ Object.assign(process.env, {
   MFA_PENDING_AUTH_SIGNING_KEY: randomBytes(32).toString('base64url'),
   MFA_RECOVERY_CODE_DIGEST_KEY: randomBytes(32).toString('base64url'),
   MFA_TOTP_ACTIVE_KEY_ID: 'migrated-password-reset',
-  MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ 'migrated-password-reset': randomBytes(32).toString('base64url') }),
+  MFA_TOTP_ENCRYPTION_KEYS: JSON.stringify({ 'migrated-password-reset': totpKey.toString('base64url') }),
   RATE_LIMIT_HASH_KEY: 'migrated-password-reset-rate-limit-secret',
   REMEMBER_TOTP_DEVICE_ENABLED: 'false',
   TURNSTILE_SECRET_KEY: 'integration-only-turnstile-secret',
@@ -190,4 +194,82 @@ test('an imported member with an administrator grant can go from Forgot password
   assert.match(outcome.redirectedTo, /\/mfa/, 'the administrator is sent to the authenticator step, not signed in');
   assert.equal(outcome.pending?.stage, 'enrollment', 'with no authenticator on file, setup is forced');
   assert.equal((await sql`select count(*)::int as n from idoc.auth_sessions where user_id=${user.id}`)[0].n, 0, 'no session exists until setup is finished');
+});
+
+function generateTotpCode(secret: string, nowMs = Date.now()) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0; let value = 0; const bytes: number[] = [];
+  for (const character of secret) {
+    value = (value << 5) | alphabet.indexOf(character); bits += 5;
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  const message = Buffer.alloc(8); message.writeBigUInt64BE(BigInt(Math.floor(nowMs / 30_000)));
+  const digest = createHmac('sha1', Buffer.from(bytes)).update(message).digest();
+  const offset = digest.at(-1)! & 15;
+  const binary = ((digest[offset] & 127) << 24) | (digest[offset + 1] << 16) |
+    (digest[offset + 2] << 8) | digest[offset + 3];
+  return String(binary % 1_000_000).padStart(6, '0');
+}
+
+async function activeTotpFactor(user: { email: string; id: number }) {
+  const store = new PostgresMfaStore(sql);
+  const nowMs = Date.now() - 30_000;
+  const enrollment = await beginTotpEnrollment({ accountLabel: user.email, applicationId: MFA_APPLICATION_ID,
+    encryptionKey: totpKey, issuer: 'IDOC', keyId: 'migrated-password-reset', nowMs, store, subjectId: String(user.id) });
+  const secret = new URL(enrollment.provisioningUri).searchParams.get('secret')!;
+  const result = await completeTotpEnrollment({ applicationId: MFA_APPLICATION_ID,
+    code: generateTotpCode(secret, nowMs), factorId: enrollment.factorId, nowMs,
+    resolveKey: () => totpKey, store, subjectId: String(user.id), transactionId: enrollment.transactionId });
+  assert.equal(result.status, 'activated');
+}
+
+test('an administrator who never set up an authenticator can reset by emailed code, and must then set one up to sign in', async () => {
+  const admin = await createUser('active');
+  await sql`insert into idoc.application_roles (user_id, role, granted_by) values (${admin.id}, 'administrator', ${admin.id})`;
+  const nonce = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(nonce, null);
+  const start = new FormData();
+  start.set('csrf_token', csrf_token);
+  start.set('email', admin.email);
+  start.set('turnstileToken', 'XXXX.DUMMY.TOKEN.XXXX');
+  const code = '317042';
+  await withTestRequestCookies(nonce, async () => {
+    await assert.rejects(() => startPasswordReset({}, start), (error: unknown) => String(error).includes('NEXT_REDIRECT'));
+    assert.equal((await getPendingPasswordReset())?.stage, 'email-otp', 'no authenticator means the emailed-code path, not a dead end');
+    assert.equal(await otpCount(admin.id), 1);
+    await sql`update idoc.email_otp_codes set code_hash=${createHash('sha256').update(code).digest('hex')} where user_id=${admin.id}`;
+
+    const wrong = new FormData(); wrong.set('csrf_token', csrf_token); wrong.set('code', '000000');
+    assert.deepEqual(await verifyPasswordResetOtp({}, wrong), { error: 'That verification code is incorrect or expired.' });
+    const good = new FormData(); good.set('csrf_token', csrf_token); good.set('code', code);
+    await assert.rejects(() => verifyPasswordResetOtp({}, good), (error: unknown) => String(error).includes('NEXT_REDIRECT'));
+    assert.equal((await getPendingPasswordReset())?.stage, 'authorized');
+
+    const finish = new FormData(); finish.set('csrf_token', csrf_token); finish.set('password', NEW_PASSWORD);
+    await assert.rejects(() => completePasswordReset({}, finish), (error: unknown) => String(error).includes('NEXT_REDIRECT'));
+  });
+  const [row] = await sql<{ password_hash: string; session_version: number }[]>`select password_hash, session_version from idoc.users where id=${admin.id}`;
+  assert.equal(await comparePasswords(NEW_PASSWORD, row.password_hash), true);
+  assert.ok(row.session_version >= 1, 'prior sessions are revoked');
+
+  const login = new TestCookies();
+  const loginCsrf = await issueTestCsrfToken(login, null);
+  const form = new FormData();
+  form.set('csrf_token', loginCsrf); form.set('email', admin.email); form.set('password', NEW_PASSWORD);
+  const pending = await withTestRequestCookies(login, async () => {
+    await startPendingLogin(admin.email);
+    await assert.rejects(() => signIn({}, form), (error: unknown) => String(error).includes('NEXT_REDIRECT'));
+    return getPendingPrimaryAuth();
+  });
+  assert.equal(pending?.stage, 'enrollment', 'the first sign-in after the reset forces authenticator setup');
+  assert.equal((await sql`select count(*)::int as n from idoc.auth_sessions where user_id=${admin.id}`)[0].n, 0);
+});
+
+test('an administrator who HAS an authenticator still cannot use an emailed code to reset', async () => {
+  const admin = await createUser('active');
+  await sql`insert into idoc.application_roles (user_id, role, granted_by) values (${admin.id}, 'administrator', ${admin.id})`;
+  await activeTotpFactor(admin);
+  const pending = await submitReset(admin.email);
+  assert.equal(pending?.stage, 'totp');
+  assert.equal(await otpCount(admin.id), 0, 'no emailed code exists to be used');
 });

@@ -30,6 +30,15 @@ import { requestAccountLink } from '@/lib/membership/account-recovery';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 
+/** An administrator who has an authenticator must recover with it. One who never finished setup has nothing the
+ * authenticator could prove, so they recover with the emailed code like any member and are forced to set up an
+ * authenticator at their next sign-in (beginPrimaryMfa), which also ends every session the reset revoked. */
+async function resetRequiresTotp(userId: number) {
+  const role = await authoritativeMfaRole(userId);
+  if (role !== 'admin' && role !== 'super-admin') return false;
+  return Boolean(await mfaStore.getActiveTotp(String(userId), MFA_APPLICATION_ID));
+}
+
 const startResetSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.').max(255),
   turnstileToken: z.string().min(1, 'Please complete the verification challenge.'),
@@ -60,15 +69,11 @@ export const startPasswordReset = validatedAction(startResetSchema, async ({ ema
   }
   let continuation: Parameters<typeof startPendingPasswordReset>[0] = { email, stage: 'email-otp' };
   if (eligible) {
-    const role = await authoritativeMfaRole(user.id);
-    if (role === 'admin' || role === 'super-admin') {
-      const factor = await mfaStore.getActiveTotp(String(user.id), MFA_APPLICATION_ID);
-      if (factor) {
-        const transactionId = randomUUID();
-        await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, expiresAtMs: Date.now() + 10 * 60 * 1000,
-          maxAttempts: 5, nowMs: Date.now(), purpose: 'password-reset', subjectId: String(user.id), transactionId });
-        continuation = { email, stage: 'totp', subjectId: user.id, transactionId };
-      } else continuation = { email, stage: 'missing-factor', subjectId: user.id };
+    if (await resetRequiresTotp(user.id)) {
+      const transactionId = randomUUID();
+      await mfaStore.createChallenge({ applicationId: MFA_APPLICATION_ID, expiresAtMs: Date.now() + 10 * 60 * 1000,
+        maxAttempts: 5, nowMs: Date.now(), purpose: 'password-reset', subjectId: String(user.id), transactionId });
+      continuation = { email, stage: 'totp', subjectId: user.id, transactionId };
     } else {
       await issueEmailOtp(email, 'password_reset', { origin, userId: user.id });
       continuation = { email, stage: 'email-otp', subjectId: user.id };
@@ -93,7 +98,7 @@ export const verifyPasswordResetOtp = validatedAction(verifyOtpSchema, async ({ 
       await checkRateLimit('password_reset_verify_neutral', pending.email, origin);
       return neutralVerificationError;
     }
-    if ((await authoritativeMfaRole(pending.subjectId)) !== 'member') {
+    if (await resetRequiresTotp(pending.subjectId)) {
       await clearPendingPasswordReset();
       return neutralVerificationError;
     }
@@ -150,8 +155,7 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async (_data
   const startedAt = defaultTiming.now();
   await requireCsrfTokenOrPendingNonce(formData, await rawCanonicalSessionId(), await rawCanonicalUserId(), pending.csrfNonce);
   const origin = await requestOrigin();
-  if (pending.stage === 'email-otp' && pending.subjectId &&
-    (await authoritativeMfaRole(pending.subjectId)) === 'member') {
+  if (pending.stage === 'email-otp' && pending.subjectId && !(await resetRequiresTotp(pending.subjectId))) {
     await issueEmailOtp(pending.email, 'password_reset', { origin, userId: pending.subjectId });
   } else {
     await checkRateLimit('password_reset_resend_neutral', pending.email, origin);
@@ -187,9 +191,8 @@ export const completePasswordReset = validatedAction(completeResetSchema, async 
     await clearPendingPasswordReset();
     return { error: 'This account is no longer eligible for a password reset.' };
   }
-  const role = await authoritativeMfaRole(user.id);
-  const privileged = role === 'admin' || role === 'super-admin';
-  if ((privileged && pending.verification !== 'totp') || (!privileged && pending.verification !== 'email-otp' && pending.verification !== 'totp')) {
+  const needsTotp = await resetRequiresTotp(user.id);
+  if ((needsTotp && pending.verification !== 'totp') || (!needsTotp && pending.verification !== 'email-otp' && pending.verification !== 'totp')) {
     await clearPendingPasswordReset();
     return { error: 'Your recovery requirements changed. Start again.' };
   }
