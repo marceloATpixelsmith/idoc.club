@@ -70,6 +70,12 @@ test('administrator assignment and unread state use per-administrator records', 
   assert.match(source, /on conflict\(conversation_id,administrator_user_id\) do update/);
 });
 
+test('the navigation unread count only includes open and member-replied conversations', () => {
+  const count = source.slice(source.indexOf('export async function adminUnreadCount'), source.indexOf('export async function getAdminConversation'));
+  assert.match(count, /c\.status in \('open','member_replied'\)/);
+  assert.doesNotMatch(count, /admin_responded|'closed'/);
+});
+
 test('the administrator queue provides Tablecn-style server controls', () => {
   const page = readFileSync('app/(dashboard)/admin/support/page.tsx', 'utf8');
   const table = readFileSync('app/(dashboard)/admin/support/support-inbox-table.tsx', 'utf8');

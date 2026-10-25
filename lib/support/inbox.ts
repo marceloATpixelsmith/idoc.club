@@ -262,7 +262,8 @@ export async function adminUnreadCount() {
   const [row] = await client<{ count: number }[]>`select count(*)::int count from support_conversations c
     join support_conversation_administrators ca on ca.conversation_id=c.id and ca.administrator_user_id=${actor.id}
     left join support_administrator_read_cursors rc on rc.conversation_id=c.id and rc.administrator_user_id=${actor.id}
-    where exists(select 1 from support_messages m where m.conversation_id=c.id and m.author_side='member'
+    where c.status in ('open','member_replied')
+      and exists(select 1 from support_messages m where m.conversation_id=c.id and m.author_side='member'
       and (rc.read_at is null or m.created_at>rc.read_at))`;
   return row?.count ?? 0;
 }
