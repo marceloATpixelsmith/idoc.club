@@ -7,7 +7,7 @@ import { EMAIL_KIND_LABELS } from '@/lib/notifications/communications-report';
 import { USER_ACTIVITY_EVENTS, type UserActivityEvent } from '@/lib/activity/user-activity-events';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
-import { auditActor, auditTitle, brevoEntry, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
+import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
 
 const ROW_LIMIT = 500;
 const BREVO_PAGE_SIZE = 500;
@@ -23,10 +23,14 @@ const text = (value: unknown): string | undefined => (typeof value === 'string' 
 const euro = (cents: unknown, currency: unknown) => new Intl.NumberFormat('en', { currency: typeof currency === 'string' ? currency : 'EUR', style: 'currency' }).format(Number(cents) / 100);
 
 export type MemberTimeline = {
+  accountStatus: string;
   entries: TimelineEntry[];
   from: string;
   member: { email: string; name: string; profileId: number; userId: number };
+  milestones: TimelineEntry[];
   providerAvailable: boolean;
+  /** Sources that could not be read (for example a table not yet created in this environment); the rest of the timeline is still shown. */
+  unavailableSources: string[];
   to: string;
   truncated: boolean;
 };
@@ -61,32 +65,36 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const fromIso = range.from.toISOString();
   const toIso = range.to.toISOString();
 
-  const [member] = await client<Row[]>`select p.id as profile_id, p.user_id, p.first_name, p.last_name, u.email from profiles p join users u on u.id = p.user_id where p.id = ${profileId} limit 1`;
+  const [member] = await client<Row[]>`select p.id as profile_id, p.user_id, p.first_name, p.last_name, p.created_at as profile_created, p.legacy_wp_user_id, u.email, u.created_at as user_created, u.email_verified_at, u.account_state from profiles p join users u on u.id = p.user_id where p.id = ${profileId} limit 1`;
   if (!member) return null;
   const userId = member.user_id as number;
   const email = member.email as string;
   const name = [member.first_name, member.last_name].filter(Boolean).join(' ') || email;
+  const unavailableSources: string[] = [];
+  // One unreadable source (a table not created yet in this environment, a slow query) must not blank the whole timeline.
+  const safe = async <T,>(name: string, run: Promise<T>, fallback: T): Promise<T> => {
+    try { return await run; } catch { unavailableSources.push(name); return fallback; }
+  };
   const entries: TimelineEntry[] = [];
   const add = (entry: Omit<TimelineEntry, 'source'> & { source?: TimelineEntry['source'] }) => entries.push({ source: 'idoc', ...entry });
 
-  const [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
-    client<Row[]>`select id, actor_id, action, reason, created_at from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code from auth_security_notification_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, purpose, created_at, expires_at from account_tokens where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, purpose, created_at, attempt_count from email_otp_codes where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, authenticated_at, revoked_at, revoke_reason, device_label from auth_sessions where user_id = ${userId} and (authenticated_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or revoked_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by authenticated_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, event, outcome, detail, occurred_at from user_activity_events where user_id = ${userId} and occurred_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by occurred_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, source, amount_cents, currency, paid_at, administrator_id from payments where profile_id = ${profileId} and paid_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by paid_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select r.id, s.title, r.registered_at, r.canceled_at from seminar_registrations r join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and (r.registered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or r.canceled_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by r.registered_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select a.id, a.actor_id, a.action, a.reason, a.created_at, a.entity_id, s.title from audit_log a join seminar_registrations r on a.entity_type = 'seminar_registration' and a.entity_id = r.id::text join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and a.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by a.created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select m.id, c.category, c.subject, m.created_at from support_messages m join support_conversations c on c.id = m.conversation_id where m.author_user_id = ${userId} and m.author_side = 'member' and m.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by m.created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select terms_accepted_at, privacy_accepted_at from onboarding_consents where profile_id = ${profileId}`,
+  const [audit, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
+    safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Email queue', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Account emails', client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Security notices', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code from auth_security_notification_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Sign-in links', client<Row[]>`select id, purpose, created_at, expires_at from account_tokens where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Verification codes', client<Row[]>`select id, purpose, created_at, attempt_count from email_otp_codes where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Member activity log', client<Row[]>`select id, event, outcome, detail, occurred_at from user_activity_events where user_id = ${userId} and occurred_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by occurred_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Payments', client<Row[]>`select id, source, amount_cents, currency, paid_at, administrator_id, reason from payments where profile_id = ${profileId} and paid_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by paid_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Seminar registrations', client<Row[]>`select r.id, s.title, r.registered_at, r.canceled_at from seminar_registrations r join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and (r.registered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or r.canceled_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by r.registered_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Seminar changes', client<Row[]>`select a.id, a.actor_id, a.action, a.reason, a.created_at, a.entity_id, s.title from audit_log a join seminar_registrations r on a.entity_type = 'seminar_registration' and a.entity_id = r.id::text join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and a.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by a.created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Support messages', client<Row[]>`select m.id, c.category, c.subject, m.created_at from support_messages m join support_conversations c on c.id = m.conversation_id where m.author_user_id = ${userId} and m.author_side = 'member' and m.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by m.created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Consent', client<Row[]>`select terms_accepted_at, privacy_accepted_at from onboarding_consents where profile_id = ${profileId}`, [] as Row[]),
     brevoEvents(email, range.fromKey, range.toKey),
   ]);
 
-  for (const row of audit) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string))) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
     add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: `${label} queued` });
@@ -108,10 +116,6 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   }
   for (const row of tokens) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: `Link valid until ${iso(row.expires_at).replace('T', ' ').slice(0, 16)} UTC`, id: `token-${row.id}`, title: row.purpose === 'migration_activation' ? 'Activation link issued' : 'Password-reset link issued' });
   for (const row of otps) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: Number(row.attempt_count) > 0 ? `${row.attempt_count} code attempt(s)` : undefined, id: `otp-${row.id}`, title: `Verification code emailed (${String(row.purpose).replace(/_/g, ' ')})` });
-  for (const row of sessions) {
-    add({ actor: 'user', at: iso(row.authenticated_at), category: 'Sign-in', detail: text(row.device_label), id: `session-${row.id}-in`, title: 'Signed in' });
-    if (row.revoked_at) add({ actor: 'server', at: iso(row.revoked_at), category: 'Sign-in', detail: text(row.device_label), id: `session-${row.id}-out`, title: `Session ended (${SESSION_REVOKE_LABELS[String(row.revoke_reason)] ?? String(row.revoke_reason ?? 'ended').replace(/_/g, ' ')})` });
-  }
   for (const row of activity) {
     const detail = (row.detail ?? {}) as Record<string, unknown>;
     const parts = [row.outcome ? OUTCOME_LABELS[String(row.outcome)] ?? String(row.outcome).replace(/_/g, ' ') : null,
@@ -124,7 +128,7 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   }
   for (const row of payments) {
     const stripe = String(row.source).startsWith('stripe_') && row.source !== 'stripe_manual';
-    add({ actor: stripe ? 'server' : 'administrator', at: iso(row.paid_at), category: 'Billing', detail: String(row.source).replace(/_/g, ' '), id: `payment-${row.id}`, title: `Payment of ${euro(row.amount_cents, row.currency)} recorded` });
+    add({ actor: stripe ? 'server' : 'administrator', at: iso(row.paid_at), category: 'Billing', detail: [String(row.source).replace(/_/g, ' '), text(row.reason)].filter(Boolean).join(' · '), id: `payment-${row.id}`, title: `Payment of ${euro(row.amount_cents, row.currency)} recorded` });
   }
   // Registration actions come from the audit trail, which says whether the member or an administrator did it. A registration with no
   // audit row for its creation or cancellation (older records) falls back to the registration's own timestamps, attributed to the member.
@@ -145,7 +149,9 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   }
   (brevo ?? []).forEach((event, index) => entries.push(brevoEntry(event, index)));
 
+  const milestones = accountMilestones({ accountState: String(member.account_state), emailVerifiedAt: member.email_verified_at ? iso(member.email_verified_at) : null, legacyWpUserId: (member.legacy_wp_user_id as number | null) ?? null, profileCreatedAt: iso(member.profile_created), userCreatedAt: iso(member.user_created) });
+  entries.push(...milestones);
   const sorted = sortTimeline(withinRange(entries, fromIso, toIso), 'asc');
-  const truncated = [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, seminarAudit, messages].some((rows) => rows.length >= ROW_LIMIT);
-  return { entries: sorted, from: range.fromKey, member: { email, name, profileId, userId }, providerAvailable: brevo !== null, to: range.toKey, truncated };
+  const truncated = [audit, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages].some((rows) => rows.length >= ROW_LIMIT);
+  return { accountStatus: ACCOUNT_STATE_LABELS[String(member.account_state)] ?? String(member.account_state), entries: sorted, from: range.fromKey, member: { email, name, profileId, userId }, milestones, providerAvailable: brevo !== null, to: range.toKey, truncated, unavailableSources: [...new Set(unavailableSources)] };
 }

@@ -69,6 +69,25 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
           {data ? <p className="text-sm text-muted-foreground">{data.member.email}</p> : null}
         </div>
 
+        {data ? (
+          <section aria-label="Account history" className="rounded-lg border p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gold">Account history</h3>
+              <span className="rounded-full border px-2 py-0.5 text-xs">{data.accountStatus}</span>
+              <span className="text-xs text-muted-foreground">Always shown, whatever the date range.</span>
+            </div>
+            <ol className="mt-3 space-y-2">
+              {data.milestones.map((milestone) => (
+                <li className="grid grid-cols-[9rem_8.5rem_1fr] items-start gap-3 text-sm" key={milestone.id}>
+                  <span className="font-mono text-muted-foreground">{formatTableDate(milestone.at)}{milestone.id === 'milestone-registered-old-site' ? '' : ` ${time(milestone.at)}`}</span>
+                  <span className={`w-fit rounded-full border px-2 py-0.5 text-xs ${ACTOR_CLASS[milestone.actor]}`}>{TIMELINE_ACTOR_LABELS[milestone.actor]}</span>
+                  <span><span className="font-medium">{milestone.title}</span>{milestone.detail ? <span className="ml-2 text-xs text-muted-foreground">{milestone.detail}</span> : null}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
           <DateRangeFilter from={range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange({ from, to })} to={range.to ?? data?.to} />
           <Button onClick={() => setRange({})} size="sm" type="button" variant="outline">Last 30 days</Button>
@@ -88,6 +107,7 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
 
         {state.status === 'error' ? <p className="rounded-lg border border-red-400/50 bg-red-950/30 p-4 text-sm text-red-200" role="alert">{state.message}</p> : null}
         {data && !data.providerAvailable ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">Brevo’s delivery log could not be read, so email deliveries, opens and clicks are missing from this timeline. Everything recorded by IDOC itself is shown.</p> : null}
+        {data && data.unavailableSources.length > 0 ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">Some sources could not be read and are missing from this timeline: {data.unavailableSources.join(', ')}. Everything else is shown. If this persists, an administrator should check that the latest database migration has been applied in this environment.</p> : null}
         {data?.truncated ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">Some sources hit the 500-row limit for this range; narrow the date range to see everything.</p> : null}
 
         {state.status === 'loading' ? (

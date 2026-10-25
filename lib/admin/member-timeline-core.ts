@@ -47,6 +47,11 @@ export function auditActor(actorId: number | null, memberUserId: number, action?
 }
 
 const AUDIT_LABELS: Record<string, string> = {
+  'account.onboarding.completed': 'Finished onboarding',
+  'account.session.signed_in': 'Signed in',
+  'account.session.signed_out': 'Signed out',
+  'member.marketing_preference.changed': 'Changed their email-update preference',
+  'member.profile.created': 'Created their member profile',
   'account.migration_activation.completed': 'Account activated',
   'account.migration_activation.delivery_queued': 'Activation email queued',
   'account.migration_activation.delivery_succeeded': 'Activation email handed to Brevo',
@@ -107,4 +112,35 @@ export function sortTimeline(entries: TimelineEntry[], direction: 'asc' | 'desc'
 /** Keeps only events inside the requested range (inclusive ISO bounds), however many timestamps the source record carries. */
 export function withinRange(entries: TimelineEntry[], fromIso: string, toIso: string): TimelineEntry[] {
   return entries.filter((entry) => entry.at >= fromIso && entry.at <= toIso);
+}
+
+/** Audit rows that repeat a fact another source already shows in more detail (the payment row carries the amount; the email-queue
+ * rows carry queued/sent/failed), so the timeline does not list the same event twice. */
+export function auditDuplicatesAnotherSource(action: string): boolean {
+  return action === 'admin.payment.recorded' || /^account\.[a-z_]+\.delivery_(queued|succeeded)$/.test(action);
+}
+
+export const ACCOUNT_STATE_LABELS: Record<string, string> = {
+  active: 'Active',
+  deleted: 'Deleted',
+  migrated_pending: 'Imported from the old site, not yet activated',
+  onboarding: 'Signed up, finishing onboarding',
+  suspended: 'Suspended',
+  unverified: 'Email not yet verified',
+};
+
+/** The account's own life story, shown in the drawer's Account history panel whether or not it falls inside the date range.
+ * For an imported member `users.created_at` is the date they registered on the old site (the import preserves it), and the profile's
+ * `created_at` is when the import ran; for everyone else `users.created_at` is when they signed up here. */
+export function accountMilestones(input: { accountState: string; emailVerifiedAt: string | null; legacyWpUserId: number | null; profileCreatedAt: string; userCreatedAt: string }): TimelineEntry[] {
+  const entries: TimelineEntry[] = [];
+  const base = { category: 'Account', source: 'idoc' as const };
+  if (input.legacyWpUserId !== null) {
+    entries.push({ ...base, actor: 'user', at: input.userCreatedAt, detail: 'Date from the old site (time of day not recorded)', id: 'milestone-registered-old-site', title: 'Registered on the old site' });
+    entries.push({ ...base, actor: 'administrator', at: input.profileCreatedAt, detail: `Old-site user #${input.legacyWpUserId}`, id: 'milestone-imported', title: 'Imported into the new site' });
+  } else {
+    entries.push({ ...base, actor: 'user', at: input.userCreatedAt, id: 'milestone-created', title: 'Created their account on the new site' });
+  }
+  if (input.emailVerifiedAt) entries.push({ ...base, actor: 'user', at: input.emailVerifiedAt, id: 'milestone-email-verified', title: 'Verified their email address' });
+  return sortTimeline(entries, 'asc');
 }

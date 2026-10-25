@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { auditActor, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -92,4 +92,34 @@ test('duplicate-click detection compares activity detail regardless of the key o
   assert.notEqual(canonicalActivityDetail(sent), canonicalActivityDetail({ ...stored, signedIn: true }));
   assert.equal(canonicalActivityDetail(null), canonicalActivityDetail(undefined));
   assert.match(readFileSync('lib/activity/user-activity.ts', 'utf8'), /canonicalActivityDetail\(row\.detail/);
+});
+
+test('an imported member shows when they registered on the old site and when they were imported; a new member shows when they signed up', () => {
+  const imported = accountMilestones({ accountState: 'migrated_pending', emailVerifiedAt: null, legacyWpUserId: 592, profileCreatedAt: '2026-10-23T22:07:15.363Z', userCreatedAt: '2025-10-21T00:00:00.000Z' });
+  assert.deepEqual(imported.map((entry) => [entry.title, entry.at, entry.actor]), [
+    ['Registered on the old site', '2025-10-21T00:00:00.000Z', 'user'],
+    ['Imported into the new site', '2026-10-23T22:07:15.363Z', 'administrator'],
+  ]);
+  assert.match(imported[1].detail ?? '', /#592/);
+  const fresh = accountMilestones({ accountState: 'active', emailVerifiedAt: '2026-10-24T20:50:39.635Z', legacyWpUserId: null, profileCreatedAt: '2026-10-24T20:51:28.653Z', userCreatedAt: '2026-10-24T20:50:39.926Z' });
+  assert.deepEqual(fresh.map((entry) => entry.title), ['Verified their email address', 'Created their account on the new site']);
+  assert.ok(fresh.every((entry) => entry.actor === 'user'));
+});
+
+test('audit rows that repeat another source are skipped so events are not listed twice', () => {
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded'), true);
+  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued'), true);
+  assert.equal(auditDuplicatesAnotherSource('account.password_reset.delivery_succeeded'), true);
+  assert.equal(auditDuplicatesAnotherSource('account.session.signed_in'), false);
+  assert.equal(auditTitle('account.session.signed_in'), 'Signed in');
+});
+
+test('each timeline source fails on its own instead of blanking the timeline, and the drawer says what is missing', () => {
+  const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
+  assert.match(data, /const safe = async/);
+  assert.equal((data.match(/safe\('/g) ?? []).length, 12);
+  assert.match(data, /unavailableSources/);
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /Some sources could not be read/);
+  assert.match(drawer, /Account history/);
 });
