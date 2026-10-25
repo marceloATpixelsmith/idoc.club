@@ -1,7 +1,7 @@
 'use client';
 
 import Script from 'next/script';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
 import './turnstile-widget.css';
 
@@ -44,6 +44,10 @@ export function TurnstileWidget({
   const widgetIdRef = useRef<string | null>(null);
   const tokenIssuedRef = useRef(false);
   const challengeVisibleRef = useRef(false);
+  // Set by Cloudflare's own before/after-interactive callbacks. This is the authoritative signal that
+  // a challenge needs the visitor; the DOM sniffing in updateChallengeVisibility is only a fallback,
+  // so a missed iframe never leaves a required challenge hidden behind the 0-height wrapper.
+  const interactiveRef = useRef(false);
   // Lazily checks window.turnstile at mount time as a fast path, but the real fix below is using
   // next/script's onReady callback rather than onLoad. onLoad fires exactly once per script src,
   // globally across the whole app -- so on a client-side (soft) navigation to a second page whose
@@ -57,6 +61,10 @@ export function TurnstileWidget({
   // widget the script is ready, whether that happens at mount or shortly after.
   const [scriptLoaded, setScriptLoaded] = useState(() => typeof window !== 'undefined' && !!window.turnstile);
   const [failed, setFailed] = useState(false);
+  // Bumped by a manual retry so the mount effect re-renders the widget AND re-arms the bounded
+  // token watchdog; calling renderWidget() alone would leave a spent watchdog unable to resurface a
+  // second stall.
+  const [retryEpoch, bumpRetryEpoch] = useReducer((epoch: number) => epoch + 1, 0);
   const [challengeVisible, setChallengeVisible] = useState(false);
 
   // Removes any existing widget from the container before rendering a fresh one, so retry() can
@@ -73,8 +81,9 @@ export function TurnstileWidget({
       return styles.display !== 'none' && styles.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     });
 
-    challengeVisibleRef.current = hasVisibleContent;
-    setChallengeVisible(hasVisibleContent);
+    const visible = hasVisibleContent || interactiveRef.current;
+    challengeVisibleRef.current = visible;
+    setChallengeVisible(visible);
   }, []);
 
   function renderWidget() {
@@ -84,16 +93,29 @@ export function TurnstileWidget({
       widgetIdRef.current = null;
     }
     tokenIssuedRef.current = false;
+    interactiveRef.current = false;
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         action,
         appearance: 'interaction-only',
         callback: (token: string) => {
           tokenIssuedRef.current = token.length > 0;
+          if (token.length > 0) setFailed(false);
+          interactiveRef.current = false;
+          updateChallengeVisibility();
           onVerify?.(token);
+        },
+        'after-interactive-callback': () => {
+          interactiveRef.current = false;
+          updateChallengeVisibility();
+        },
+        'before-interactive-callback': () => {
+          interactiveRef.current = true;
+          updateChallengeVisibility();
         },
         'error-callback': () => setFailed(true),
         'expired-callback': () => onVerify?.(''),
+        'unsupported-callback': () => setFailed(true),
         sitekey: siteKey,
         size: 'flexible',
         theme,
@@ -114,12 +136,19 @@ export function TurnstileWidget({
     renderWidget();
     let attempts = 1;
     const watchdog = window.setInterval(() => {
-      if (tokenIssuedRef.current || attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
+      if (tokenIssuedRef.current) {
         window.clearInterval(watchdog);
         return;
       }
-      // Never reset a challenge the visitor is currently looking at or solving.
+      // Never reset or flag a challenge the visitor is currently looking at or solving.
       if (challengeVisibleRef.current) return;
+      if (attempts >= TOKEN_WATCHDOG_ATTEMPTS) {
+        // Out of automatic retries with no token: never stay silently hidden and disabled; show the
+        // widget area and the retry message so the member has a visible way forward.
+        window.clearInterval(watchdog);
+        setFailed(true);
+        return;
+      }
       attempts += 1;
       renderWidget();
     }, TOKEN_WATCHDOG_MS);
@@ -139,7 +168,7 @@ export function TurnstileWidget({
       resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- changing callback identity must not reset a solved challenge.
-  }, [action, scriptLoaded, siteKey, theme, updateChallengeVisibility]);
+  }, [action, retryEpoch, scriptLoaded, siteKey, theme, updateChallengeVisibility]);
 
   // The Cloudflare script sometimes never fires onLoad/onError at all (blocked by a
   // network filter or extension rather than a request that fails outright), which would
@@ -174,7 +203,8 @@ export function TurnstileWidget({
   // typed email first (the only field this widget's form ever has) so the reload doesn't cost it.
   function retry() {
     if (window.turnstile) {
-      renderWidget();
+      setFailed(false);
+      bumpRetryEpoch();
       return;
     }
     saveFormValuesForRetryReload(containerRef.current?.closest('form') ?? null);
