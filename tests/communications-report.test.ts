@@ -108,3 +108,13 @@ test('admin menu order: Members, Support inbox, Communications, then Seminars, R
   assert.deepEqual(order, [...order].sort((left, right) => left - right));
   assert.ok(order.at(-1)! < navigation.indexOf('const SUPER_ADMIN_ITEMS'));
 });
+
+test('the Communications page has one tab per section and a delivery-issues list of non-delivered emails', () => {
+  const page = readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8');
+  const tabs = readFileSync('app/(dashboard)/admin/communications/communications-tabs.tsx', 'utf8');
+  for (const value of ['system', 'renewal', 'upcoming', 'issues']) assert.match(tabs, new RegExp(`<TabsTrigger value="${value}"`));
+  assert.match(page, /DeliveryIssuesTable/);
+  assert.doesNotMatch(page, /min-w-full/);
+  const data = readFileSync('lib/notifications/communications-report-data.ts', 'utf8');
+  assert.match(data, /brevo !== 'failed' && brevo !== 'not_found'/);
+});
