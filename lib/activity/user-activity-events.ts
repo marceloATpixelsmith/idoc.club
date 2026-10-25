@@ -4,12 +4,12 @@
 // that already hold it.
 
 export const USER_ACTIVITY_EVENTS = {
-  activation_link_opened: 'Opened their activation link',
-  activation_submitted: 'Submitted the activation form',
-  email_link_clicked: 'Clicked a link in an email',
-  password_reset_link_opened: 'Opened their password-reset link',
+  activation_link_opened: 'Opened the activation link from their email',
+  activation_submitted: 'Submitted the activation form (choosing a password)',
+  email_link_clicked: 'Clicked a button in an email and reached our site',
+  password_reset_link_opened: 'Opened the password-reset link from their email',
   password_reset_submitted: 'Submitted the password-reset form',
-  sign_in_password_failed: 'Sign-in attempt failed',
+  sign_in_password_failed: 'Tried to sign in and was refused',
 } as const;
 export type UserActivityEvent = keyof typeof USER_ACTIVITY_EVENTS;
 

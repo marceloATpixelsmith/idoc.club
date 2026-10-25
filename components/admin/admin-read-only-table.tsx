@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  type ColumnDef, type ColumnFiltersState, type ColumnOrderState, type SortingState, type VisibilityState,
+  type ColumnDef, type ColumnFiltersState, type ColumnOrderState, type PaginationState, type SortingState, type VisibilityState,
   getCoreRowModel, getFilteredRowModel, getPaginationRowModel,
   getSortedRowModel, useReactTable,
 } from '@tanstack/react-table';
@@ -9,6 +9,8 @@ import { X } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
+import { persistTablePreferences } from '@/components/admin/table-preference-sync';
+import type { AdminTableIdentifier, TablePreferenceState } from '@/lib/admin/table-preferences';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableActionsRow } from '@/components/data-table/data-table-actions-row';
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header';
@@ -24,6 +26,14 @@ import { formatTableDate } from '@/lib/format';
 export type ReadOnlyRow = { id: string; link?: string; [key: string]: string | undefined };
 type DateFilterValue = { from?: string; to?: string };
 const VIEW_CHANGE_SKELETON_MS = 400;
+const SAVE_DELAY_MS = 500;
+const PAGE_SIZES = [10, 25, 50, 100];
+
+/** Reads a saved JSON view value back defensively: anything malformed or naming a column this table does not have is ignored. */
+function readSavedJson<T>(value: unknown, accept: (parsed: unknown) => T | null): T | null {
+  if (typeof value !== 'string') return null;
+  try { return accept(JSON.parse(value)); } catch { return null; }
+}
 
 // Any ISO timestamp cell (created/sent/detected...) is shown as dd/mm/yyyy; the raw value stays in
 // the row for filtering, sorting, and export.
@@ -33,7 +43,7 @@ function formatReadOnlyCell(value: string | undefined) {
 }
 
 export function AdminReadOnlyTable({
-  bulkActions, columns: definitions, dateColumn, empty, filterColumns, rows, searchLabel, statusColumn, tableType,
+  bulkActions, columns: definitions, dateColumn, empty, filterColumns, initialPreferences, preferenceKey, rows, searchLabel, statusColumn, tableType,
 }: {
   /** Extra items for the selection bar (rendered after Export), given the selected rows and a way to clear the selection. */
   bulkActions?: (context: { clearSelection: () => void; selected: ReadOnlyRow[] }) => ReactNode;
@@ -49,12 +59,23 @@ export function AdminReadOnlyTable({
   statusColumn?: string;
   /** Selected-row CSV export is served by `/api/admin/export/selected-reports`; a table without a server export omits `tableType` and the Export action. */
   tableType?: 'notifications' | 'reconciliation';
+  /** Where this table's view (search, filters, sort, shown columns, page size) is saved for the signed-in administrator, like every admin table. */
+  preferenceKey?: AdminTableIdentifier;
+  /** The administrator's saved view, loaded on the server so a refresh restores it. */
+  initialPreferences?: TablePreferenceState | null;
 }) {
-  const [search, setSearch] = useState('');
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
+  const saved = initialPreferences ?? {};
+  const columnIds = definitions.map(({ id }) => id);
+  const [search, setSearch] = useState(typeof saved.q === 'string' ? saved.q : '');
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() => readSavedJson(saved.filters, (parsed) => Array.isArray(parsed)
+    ? parsed.filter((item): item is { id: string; value: unknown } => Boolean(item) && typeof item === 'object' && columnIds.includes((item as { id?: string }).id ?? '') && ((Array.isArray((item as { value?: unknown }).value) && ((item as { value: unknown[] }).value).every((entry) => typeof entry === 'string')) || (typeof (item as { value?: unknown }).value === 'object' && (item as { value?: unknown }).value !== null && !Array.isArray((item as { value?: unknown }).value))))
+    : null) ?? []);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => Array.isArray(saved.columns) ? Object.fromEntries(columnIds.filter((id) => !(saved.columns as string[]).includes(id)).map((id) => [id, false])) : {});
+  const [sorting, setSorting] = useState<SortingState>(() => readSavedJson(saved.sort, (parsed) => Array.isArray(parsed)
+    ? parsed.filter((item): item is { desc: boolean; id: string } => Boolean(item) && typeof item === 'object' && columnIds.includes((item as { id?: string }).id ?? '') && typeof (item as { desc?: unknown }).desc === 'boolean')
+    : null) ?? []);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(typeof saved.columnOrder === 'string' ? saved.columnOrder.split(',').filter(Boolean) : []);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: typeof saved.pageSize === 'number' && PAGE_SIZES.includes(saved.pageSize) ? saved.pageSize : 25 });
   const [exportNotice, setExportNotice] = useState('');
   const [dateDraftActive, setDateDraftActive] = useState(false);
   const [dateResetSignal, setDateResetSignal] = useState(0);
@@ -105,14 +126,33 @@ export function AdminReadOnlyTable({
     getCoreRowModel: getCoreRowModel(), getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(), getSortedRowModel: getSortedRowModel(),
     globalFilterFn: (row, _id, value) => definitions.some(({ id }) => String(row.original[id] ?? '').toLowerCase().includes(String(value).toLowerCase())),
-    initialState: { pagination: { pageIndex: 0, pageSize: 25 } },
     onColumnFiltersChange: (updater) => { flashSkeleton(); setColumnFilters(updater); },
     onColumnOrderChange: setColumnOrder,
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
     onGlobalFilterChange: (updater) => { flashSkeleton(); setSearch(updater); },
     onSortingChange: (updater) => { flashSkeleton(); setSorting(updater); },
-    state: { columnFilters, columnOrder, columnVisibility, globalFilter: search, sorting },
+    state: { columnFilters, columnOrder, columnVisibility, globalFilter: search, pagination, sorting },
   });
+  // Save the view for this administrator whenever it changes (not the page number), so a refresh restores it, like every admin table.
+  const firstSave = useRef(true);
+  useEffect(() => {
+    if (!preferenceKey) return;
+    if (firstSave.current) { firstSave.current = false; return; }
+    const timer = setTimeout(() => {
+      const preferences: TablePreferenceState = {};
+      if (search) preferences.q = search;
+      if (columnFilters.length > 0) preferences.filters = JSON.stringify(columnFilters);
+      if (sorting.length > 0) preferences.sort = JSON.stringify(sorting);
+      const shown = columnIds.filter((id) => columnVisibility[id] !== false);
+      if (shown.length !== columnIds.length) preferences.columns = shown;
+      if (columnOrder.length > 0) preferences.columnOrder = columnOrder.join(',');
+      if (pagination.pageSize !== 25) preferences.pageSize = pagination.pageSize;
+      void persistTablePreferences(preferenceKey, preferences).catch(() => undefined);
+    }, SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- columnIds is derived from the stable column definitions.
+  }, [columnFilters, columnOrder, columnVisibility, pagination.pageSize, preferenceKey, search, sorting]);
   const selected = table.getSelectedRowModel().rows.map(({ original }) => original);
   const actionBarVisibility = useActionBarVisibility(selected.length);
   function exportSelected() {
