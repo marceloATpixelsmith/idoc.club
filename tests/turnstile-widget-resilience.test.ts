@@ -45,7 +45,8 @@ test('the script tag has a fixed, unchanging src -- never a cache-busted or Reac
 
 test('retry only reloads the script tag as a last resort: if Turnstile already loaded once (window.turnstile exists), retry calls render() again in place and never touches the <Script> element at all', () => {
   const retryBody = widget.slice(widget.indexOf('function retry()'), widget.indexOf('if (!siteKey) return null;'));
-  assert.match(retryBody, /if \(window\.turnstile\) \{\s*renderWidget\(\);\s*return;\s*\}/);
+  assert.match(retryBody, /if \(window\.turnstile\) \{\s*setFailed\(false\);\s*bumpRetryEpoch\(\);\s*return;\s*\}/);
+  assert.match(widget, /\[action, retryEpoch, scriptLoaded, siteKey, theme, updateChallengeVisibility\]/);
 });
 
 test('retry only forces a page reload when the script genuinely never loaded at all, and saves the member\'s typed email first so the reload does not cost it', () => {
@@ -87,7 +88,19 @@ test('Turnstile visibility is observed asynchronously and observers are cleaned 
 test('visible challenges and Turnstile errors preserve layout space', () => {
   assert.match(widget, /style=\{challengeVisible \|\| failed \? undefined/);
   assert.match(widget, /getBoundingClientRect\(\)/);
-  assert.match(widget, /setChallengeVisible\(hasVisibleContent\)/);
+  assert.match(widget, /setChallengeVisible\(visible\)/);
+});
+
+test('a required interactive challenge is shown via Cloudflare\'s own callbacks, and a tokenless widget never stays hidden', () => {
+  assert.match(widget, /'before-interactive-callback'/);
+  assert.match(widget, /'after-interactive-callback'/);
+  assert.match(widget, /hasVisibleContent \|\| interactiveRef\.current/);
+  assert.match(widget, /attempts >= TOKEN_WATCHDOG_ATTEMPTS\) \{[\s\S]*?setFailed\(true\)/);
+  assert.ok(
+    widget.indexOf('challengeVisibleRef.current) return') < widget.indexOf('attempts >= TOKEN_WATCHDOG_ATTEMPTS'),
+    'an on-screen challenge is exempt before retries are declared exhausted'
+  );
+  assert.match(widget, /if \(token\.length > 0\) setFailed\(false\)/);
 });
 
 test('a widget that rendered but issued no token (e.g. after a server-action redirect) is re-rendered in place a bounded number of times, and a missed onReady is recovered by polling window.turnstile', () => {
