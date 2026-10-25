@@ -34,6 +34,8 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const isSuperAdmin = actor.roles.includes('super_admin');
   const { profileId: profileIdParam, tab, timeline: timelineParam } = await searchParams;
   const timelineProfileId = timelineParam && /^\d{1,10}$/.test(timelineParam) ? Number(timelineParam) : null;
+  // The Member timeline drawer keeps its filters per administrator, like every table (never in the URL).
+  const timelinePreferences = timelineProfileId ? await getTablePreferences('member_timeline') : null;
   // Filters, sort, columns, and pagination all come from the database, never the URL -- see
   // components/admin/table-preference-sync.tsx and docs/07 for why. `profileId` is the one
   // deliberate exception: opening a specific member's detail panel is exactly the short-lived,
@@ -68,6 +70,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   }
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const hasValidProfileId = Boolean(profileId && Number.isInteger(profileId));
+  const notificationPreferences = hasValidProfileId ? await getTablePreferences('member_notifications') : null;
   // getPrivateMember, listAuditHistory and the Stripe payment query all depend only on profileId (the
   // payment query filters on the same profile id `selected.profile.id` resolves to), not on each other;
   // once `selected` resolves, the remaining detail-panel queries depend only on `selected`, not on each
@@ -102,7 +105,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <h1 className="text-3xl font-semibold text-gold">Members</h1>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
     <MembersTable initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
-    {timelineProfileId ? <MemberTimelineDrawer key={`timeline-${timelineProfileId}`} profileId={timelineProfileId} /> : null}
+    {timelineProfileId ? <MemberTimelineDrawer initialPreferences={timelinePreferences} key={`timeline-${timelineProfileId}`} profileId={timelineProfileId} /> : null}
     {selected && (
       <MemberDetailSheet
         key={selected.profile.id}
@@ -113,6 +116,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         initialTab={tab}
         isSuperAdmin={isSuperAdmin}
         notificationHistory={notificationHistory}
+        notificationPreferences={notificationPreferences}
         paymentHistory={paymentHistory}
         seminarHistory={seminarHistory}
         selected={selected}

@@ -20,6 +20,7 @@ import { ExtendExpirationForm } from './extend-expiration-form';
 import { ManualPaymentForm } from '../payments/manual-payment-form';
 import { MembershipRefundForm } from '../payments/refund-form';
 import { formatTableDate } from '@/lib/format';
+import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 
 type Selected = NonNullable<Awaited<ReturnType<typeof getPrivateMember>>>;
 type ActiveRole = Awaited<ReturnType<typeof listActiveRoles>>[number];
@@ -62,6 +63,7 @@ export function MemberDetailSheet({
   initialTab,
   isSuperAdmin,
   notificationHistory,
+  notificationPreferences,
   paymentHistory,
   seminarHistory,
   selected,
@@ -74,6 +76,7 @@ export function MemberDetailSheet({
   initialTab?: string;
   isSuperAdmin: boolean;
   notificationHistory: ReadOnlyRow[];
+  notificationPreferences?: TablePreferenceState | null;
   paymentHistory: PaymentHistoryEntry[];
   seminarHistory: SeminarHistoryEntry[];
   selected: Selected;
@@ -195,6 +198,8 @@ export function MemberDetailSheet({
               <AdminReadOnlyTable
                 columns={[{ id: 'kind', label: 'Kind' }, { id: 'created', label: 'Created' }, { id: 'sent', label: 'Sent' }, { id: 'attempts', label: 'Attempts' }, { id: 'lastError', label: 'Last error' }, { id: 'status', label: 'Status' }]}
                 empty="No notifications on file for this member."
+                initialPreferences={notificationPreferences}
+                preferenceKey="member_notifications"
                 rows={notificationHistory}
                 searchLabel="Search notification history"
                 statusColumn="status"

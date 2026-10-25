@@ -1,6 +1,7 @@
 import { CommunicationsTabs } from './communications-tabs';
 import { DeliveryIssuesTable, SentNoticesTable, UpcomingNoticesTable } from './communications-tables';
 import { AdminFormSection } from '@/components/admin/admin-form-section';
+import { getTablePreferences } from '@/lib/admin/table-preferences';
 import type { ReactNode } from 'react';
 import { RecipientCount, type CountRecipient } from './recipient-count';
 import { getCommunicationsReport, UPCOMING_DAYS, type IssueBucket, type IssueRow } from '@/lib/notifications/communications-report-data';
@@ -58,6 +59,8 @@ const queueLabel = (status: 'failed' | 'pending' | 'sent') => (status === 'sent'
 
 export default async function CommunicationsPage() {
   const report = await getCommunicationsReport();
+  // Each table's view (search, filters, sort, columns, page size) is saved per administrator, like every admin table.
+  const [renewalPreferences, upcomingPreferences, issuePreferences] = await Promise.all([getTablePreferences('communications_renewal_notices'), getTablePreferences('communications_upcoming_notices'), getTablePreferences('communications_delivery_issues')]);
   const issueCounts = { renewal: report.issueRows.filter((row) => row.group === 'Renewal notice').length, system: report.issueRows.filter((row) => row.group === 'System email').length };
   return <main className="flex-1 py-8 px-5 lg:px-8">
     <h1 className="text-3xl font-semibold text-gold">Communications</h1>
@@ -70,15 +73,15 @@ export default async function CommunicationsPage() {
       renewal: <>
         <CountsSection caption="Renewal notice totals by type for the last 7 days" description="Renewal, expiration and grace reminders, over the last 7 days." issues={report.issueRows.filter((row) => row.group === 'Renewal notice')} summary={summaryOf(report.renewalTotals, report.brevoAvailable)} title="Renewal notices sent, last 7 days" totals={report.renewalTotals} />
         <AdminFormSection description="Every renewal notice sent or queued in the last 7 days, one row per email." title="Renewal notice list">
-          <SentNoticesTable rows={report.renewalRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, id: `sent-${index}`, link: row.profileId ? `/admin/members?timeline=${row.profileId}` : undefined, member: row.member, notice: row.label, queue: queueLabel(row.status), sent: row.sentAt?.toISOString() }))} />
+          <SentNoticesTable initialPreferences={renewalPreferences} rows={report.renewalRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, id: `sent-${index}`, link: row.profileId ? `/admin/members?timeline=${row.profileId}` : undefined, member: row.member, notice: row.label, queue: queueLabel(row.status), sent: row.sentAt?.toISOString() }))} />
         </AdminFormSection>
       </>,
       upcoming: <AdminFormSection description={`Notices the daily scan has not queued yet, by the date it will queue them. A member already inside a notice window goes out on the next scan. Showing the next ${UPCOMING_DAYS} days.`} title="Renewal notices going out soon">
-        <UpcomingNoticesTable rows={report.upcoming.map((row, index) => ({ email: row.email, goesOut: `${row.sendOn}T00:00:00.000Z`, id: `upcoming-${index}`, member: row.member, notice: row.label, target: isoToDisplay(row.targetDate) }))} />
+        <UpcomingNoticesTable initialPreferences={upcomingPreferences} rows={report.upcoming.map((row, index) => ({ email: row.email, goesOut: `${row.sendOn}T00:00:00.000Z`, id: `upcoming-${index}`, member: row.member, notice: row.label, target: isoToDisplay(row.targetDate) }))} />
       </AdminFormSection>,
       issues: <AdminFormSection description="Every email from the last 7 days that Brevo did not confirm as delivered (bounced or blocked, missing from Brevo's log), plus emails still queued or given up on. Use the address to look the message up in Brevo's transactional log." title="Emails to investigate">
         {report.brevoAvailable && report.issueRows.length === 0 ? <p className="rounded-lg border border-emerald-400/40 bg-emerald-950/20 p-4 text-sm text-emerald-200" role="status">Every email sent in this period was confirmed as delivered by Brevo.</p> : null}
-        <DeliveryIssuesTable rows={report.issueRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, group: row.group, id: `issue-${index}`, link: row.profileId ? `/admin/members?timeline=${row.profileId}` : undefined, member: row.member, notice: row.label, queue: queueLabel(row.status), sent: row.sentAt?.toISOString() }))} />
+        <DeliveryIssuesTable initialPreferences={issuePreferences} rows={report.issueRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, group: row.group, id: `issue-${index}`, link: row.profileId ? `/admin/members?timeline=${row.profileId}` : undefined, member: row.member, notice: row.label, queue: queueLabel(row.status), sent: row.sentAt?.toISOString() }))} />
       </AdminFormSection>,
     }} /></div>
   </main>;

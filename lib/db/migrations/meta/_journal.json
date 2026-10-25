@@ -603,6 +603,13 @@
       "when": 1792940000000,
       "tag": "0085_user_activity_events",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1792960000000,
+      "tag": "0086_member_timeline_table_preference",
+      "breakpoints": true
     }
   ]
 }
