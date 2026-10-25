@@ -1,10 +1,13 @@
+import { headers } from 'next/headers';
+import { rawCanonicalUserId } from '@/lib/auth/session';
+import { deferAdminNotification, notifyTechnicalError, pathWithoutQuery } from '@/lib/notifications/admin-event-alerts';
 import { currentRequestId } from '@/lib/observability/request-id';
 
 // Accepts a best-effort crash report from a client error boundary and logs it server-side, so a
 // browser error can carry a server-generated correlation reference without sending its diagnostics
 // through this endpoint. No authorization boundary: the whole point is that it must work for anonymous visitors and
 // for sessions broken badly enough that authenticated calls themselves might fail. Never touches
-// the database or any privileged data — logging only.
+// privileged data; the only database access is the best-effort Technical Support notification below.
 export async function POST() {
   // The request body is deliberately never read or parsed: client-controlled error text, stacks,
   // URLs, and digests can contain credentials or personal data, and this endpoint is anonymous, so
@@ -12,5 +15,19 @@ export async function POST() {
   // reportClientError(); this endpoint exists only to mint the server-side request/correlation
   // reference used on that Sentry event.
   const requestId = await currentRequestId();
+  // Tell the Technical Support assignees that a visitor hit an error screen. Only server-known facts are used (the page the
+  // request came from, the signed-in account, the correlation reference) -- the anonymous request body is still never read.
+  // Delivery runs after the response so the correlation reference (and the browser's Sentry report that waits on it) is never delayed.
+  try {
+    const requestHeaders = await headers();
+    const report = {
+      context: [['Note', 'Reported by the browser error screen. If a server error caused it, a separate email with the stack trace is sent from the server.']] as const,
+      path: pathWithoutQuery(requestHeaders.get('referer')), requestId, source: 'browser',
+      user: await rawCanonicalUserId().then((id) => (id ? { id } : null)), userAgent: requestHeaders.get('user-agent'),
+    };
+    deferAdminNotification(() => notifyTechnicalError(report));
+  } catch {
+    // Reporting must still return the correlation reference.
+  }
   return Response.json({ requestId }, { headers: { 'Cache-Control': 'no-store' } });
 }

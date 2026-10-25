@@ -79,6 +79,37 @@ export async function installTurnstileStub(page: Page, options: { failing?: bool
   }));
 }
 
+/** A controllable stand-in for Cloudflare's api.js that records every render() call instead of
+ * resolving it, so a test can play the part of Cloudflare: report an interactive challenge, report
+ * unsupported, solve, or say nothing at all (a widget that never produces a token). Unlike
+ * installTurnstileStub it never answers on its own, which is what exposes the paths the immediate-pass
+ * stub can never reach. Tokens it hands out are `e2e-pass:<action>`, the shape the server-side
+ * stand-in accepts, so the app's real hostname/action verification still executes on submit. */
+export async function installControllableTurnstile(page: Page) {
+  await page.route('https://challenges.cloudflare.com/**', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'window.__tsRenders=[];window.turnstile={render:function(el,o){window.__tsRenders.push(o);return "e2e-widget-"+window.__tsRenders.length},reset:function(){},remove:function(){}};',
+  }));
+}
+
+/** Plays Cloudflare's side of the most recent render() call. */
+export async function turnstileEvent(
+  page: Page,
+  event: 'before-interactive-callback' | 'after-interactive-callback' | 'unsupported-callback' | 'error-callback' | 'solve',
+) {
+  await page.evaluate((name) => {
+    const w = window as unknown as { __tsRenders: Array<Record<string, (...args: unknown[]) => void> & { action: string }> };
+    const options = w.__tsRenders[w.__tsRenders.length - 1];
+    if (name === 'solve') options.callback('e2e-pass:' + options.action);
+    else options[name]();
+  }, event);
+}
+
+export async function turnstileRenderCount(page: Page) {
+  // 0 until the stand-in script itself has loaded (window.__tsRenders does not exist yet).
+  return page.evaluate(() => ((window as unknown as { __tsRenders?: unknown[] }).__tsRenders ?? []).length);
+}
+
 export async function startSignupEmail(page: Page, email: string) {
   await page.goto('/sign-up');
   await page.getByLabel('Email Address').fill(email);

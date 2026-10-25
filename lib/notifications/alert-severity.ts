@@ -42,6 +42,14 @@ export const ALERT_SEVERITY = {
   // itself evidence of an attack -- but the operations team should always see it happen, not only
   // the affected account owner (who gets their own, separate notification).
   'administrator.authority_force_revoked': 'high',
+  // Category-routed administrator notifications (lib/notifications/admin-event-notifications.ts): a seminar
+  // registration is routine activity for the Seminars assignees, while an application error or a failed/declined
+  // payment needs the Technical Support / Billing assignees to look.
+  // A scheduled (cron/QStash) job returned a failure status; emailed to the operations recipient.
+  'operations.job_failed': 'high',
+  'admin.seminar_registration': 'informational',
+  'admin.technical_error': 'high',
+  'admin.billing_payment_issue': 'high',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;

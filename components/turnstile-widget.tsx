@@ -3,6 +3,7 @@
 import Script from 'next/script';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { saveFormValuesForRetryReload } from '@/lib/auth/turnstile-retry-restore';
+import { reportTurnstileFailure, type TurnstileFailureStage } from '@/lib/observability/turnstile-signal';
 import './turnstile-widget.css';
 
 declare global {
@@ -67,6 +68,13 @@ export function TurnstileWidget({
   const [retryEpoch, bumpRetryEpoch] = useReducer((epoch: number) => epoch + 1, 0);
   const [challengeVisible, setChallengeVisible] = useState(false);
 
+  // Every state that leaves the gated Sign In button disabled goes through here, so it is both shown
+  // to the visitor and reported (once per page load, categorical only) for operators.
+  function fail(stage: TurnstileFailureStage, errorCode?: unknown) {
+    reportTurnstileFailure(stage, action, errorCode);
+    setFailed(true);
+  }
+
   // Removes any existing widget from the container before rendering a fresh one, so retry() can
   // always call this safely regardless of whether a widget already occupies the container --
   // calling turnstile.render() a second time into the same container without first removing the
@@ -113,9 +121,9 @@ export function TurnstileWidget({
           interactiveRef.current = true;
           updateChallengeVisibility();
         },
-        'error-callback': () => setFailed(true),
+        'error-callback': (errorCode?: unknown) => fail('widget_error', errorCode),
         'expired-callback': () => onVerify?.(''),
-        'unsupported-callback': () => setFailed(true),
+        'unsupported-callback': () => fail('unsupported_browser'),
         sitekey: siteKey,
         size: 'flexible',
         theme,
@@ -123,14 +131,14 @@ export function TurnstileWidget({
       setFailed(false);
       window.requestAnimationFrame(updateChallengeVisibility);
     } catch {
-      setFailed(true);
+      fail('render_failed');
     }
   }
 
   useEffect(() => {
     if (!scriptLoaded || !siteKey) return undefined;
     if (!window.turnstile) {
-      setFailed(true);
+      fail('script_not_loaded');
       return undefined;
     }
     renderWidget();
@@ -146,7 +154,7 @@ export function TurnstileWidget({
         // Out of automatic retries with no token: never stay silently hidden and disabled; show the
         // widget area and the retry message so the member has a visible way forward.
         window.clearInterval(watchdog);
-        setFailed(true);
+        fail('no_token_after_retries');
         return;
       }
       attempts += 1;
@@ -181,7 +189,7 @@ export function TurnstileWidget({
     const poll = window.setInterval(() => {
       if (window.turnstile) setScriptLoaded(true);
     }, 250);
-    const timer = window.setTimeout(() => setFailed(true), SCRIPT_LOAD_TIMEOUT_MS);
+    const timer = window.setTimeout(() => fail('script_not_loaded'), SCRIPT_LOAD_TIMEOUT_MS);
     return () => {
       window.clearInterval(poll);
       window.clearTimeout(timer);
@@ -219,7 +227,7 @@ export function TurnstileWidget({
       style={challengeVisible || failed ? undefined : { height: 0, minHeight: 0, margin: '-8px 0', padding: 0 }}
     >
       <Script
-        onError={() => setFailed(true)}
+        onError={() => fail('script_not_loaded')}
         onReady={() => setScriptLoaded(true)}
         src={SCRIPT_SRC}
         strategy="afterInteractive"

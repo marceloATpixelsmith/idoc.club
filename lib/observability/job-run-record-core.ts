@@ -22,3 +22,8 @@ export function vercelCronJobFromUrl(url: string): string | null {
 export function runSucceeded(status: number): boolean {
   return Number.isInteger(status) && status >= 200 && status < 300;
 }
+
+/** Alert on the first failure, then again at the 5th, 25th and 100th consecutive failure -- never on every retry of a job that stays broken. */
+export function shouldAlertJobFailure(consecutiveFailures: number): boolean {
+  return [1, 5, 25, 100].includes(consecutiveFailures);
+}
