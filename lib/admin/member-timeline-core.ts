@@ -37,8 +37,11 @@ export function timelineRange(from: string | null | undefined, to: string | null
   return { from: new Date(`${fromKey}T00:00:00Z`), fromKey, to: new Date(Date.parse(`${toKey}T00:00:00Z`) + DAY_MS - 1), toKey };
 }
 
-/** Who performed an audit-log action on this member's account. */
-export function auditActor(actorId: number | null, memberUserId: number): TimelineActor {
+/** Who performed an audit-log action on this member's account. A `member.*` action is the member acting through the site (the row
+ * has no actor id because the request was theirs), an `admin.*` action is an administrator, anything else follows the actor id. */
+export function auditActor(actorId: number | null, memberUserId: number, action?: string): TimelineActor {
+  if (action?.startsWith('member.')) return 'user';
+  if (action?.startsWith('admin.')) return 'administrator';
   if (actorId === null) return 'server';
   return actorId === memberUserId ? 'user' : 'administrator';
 }
@@ -52,6 +55,13 @@ const AUDIT_LABELS: Record<string, string> = {
   'account.password_reset.delivery_queued': 'Password-reset email queued',
   'account.password_reset.delivery_succeeded': 'Password-reset email handed to Brevo',
   'auth.legacy_password.breach_check_unavailable': 'Old password accepted; breach check unavailable',
+  'admin.seminar_registration.approval_status_changed': 'FEI approval status changed',
+  'admin.seminar_registration.created': 'Registered for a seminar (by an administrator)',
+  'admin.seminar_registration.details_updated': 'Seminar registration details updated',
+  'admin.seminar_registration.payment_marked_paid': 'Seminar payment marked as paid',
+  'admin.seminar_registration.status_changed': 'Seminar registration status changed',
+  'member.seminar_registration.canceled': 'Canceled a seminar registration',
+  'member.seminar_registration.registered': 'Registered for a seminar',
 };
 
 export function auditTitle(action: string): string {
@@ -92,4 +102,9 @@ export function safeLink(link: string | undefined): string | undefined {
 export function sortTimeline(entries: TimelineEntry[], direction: 'asc' | 'desc' = 'asc'): TimelineEntry[] {
   const sign = direction === 'asc' ? 1 : -1;
   return [...entries].sort((left, right) => sign * (Date.parse(left.at) - Date.parse(right.at)) || left.id.localeCompare(right.id));
+}
+
+/** Keeps only events inside the requested range (inclusive ISO bounds), however many timestamps the source record carries. */
+export function withinRange(entries: TimelineEntry[], fromIso: string, toIso: string): TimelineEntry[] {
+  return entries.filter((entry) => entry.at >= fromIso && entry.at <= toIso);
 }

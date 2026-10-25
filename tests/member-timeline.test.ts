@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { auditActor, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange } from '../lib/admin/member-timeline-core.ts';
+import { auditActor, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -19,6 +19,8 @@ test('every row says who did it: the member, the server, or an administrator', (
   assert.equal(auditActor(414, 414), 'user');
   assert.equal(auditActor(1, 414), 'administrator');
   assert.equal(auditActor(null, 414), 'server');
+  assert.equal(auditActor(null, 414, 'member.seminar_registration.registered'), 'user');
+  assert.equal(auditActor(1, 414, 'admin.seminar_registration.created'), 'administrator');
   assert.equal(auditTitle('account.migration_activation.completed'), 'Account activated');
   assert.equal(auditTitle('membership.extended'), 'Membership extended');
 });
@@ -74,4 +76,10 @@ test('every non-delivered count on the Communications dashboard opens its addres
   for (const bucket of ['bounced', 'notInBrevo', 'pending', 'failedToSend']) assert.match(page, new RegExp(`'${bucket}'`));
   assert.equal((page.match(/<RecipientCount /g) ?? []).length, 6);
   assert.match(readFileSync('app/(dashboard)/admin/communications/recipient-count.tsx', 'utf8'), /\/admin\/members\?timeline=\$\{recipient\.profileId\}/);
+});
+
+test('events outside the requested range are dropped even when their record is selected by another timestamp', () => {
+  const entries = ['2026-10-01T10:00:00.000Z', '2026-10-10T10:00:00.000Z', '2026-10-20T10:00:00.000Z'].map((at) => ({ actor: 'user' as const, at, category: 'x', id: at, source: 'idoc' as const, title: at }));
+  assert.deepEqual(withinRange(entries, '2026-10-05T00:00:00.000Z', '2026-10-15T23:59:59.999Z').map((entry) => entry.at), ['2026-10-10T10:00:00.000Z']);
+  assert.match(readFileSync('lib/admin/member-timeline.ts', 'utf8'), /withinRange\(entries, fromIso, toIso\)/);
 });

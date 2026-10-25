@@ -7,7 +7,7 @@ import { EMAIL_KIND_LABELS } from '@/lib/notifications/communications-report';
 import { USER_ACTIVITY_EVENTS, type UserActivityEvent } from '@/lib/activity/user-activity-events';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
-import { auditActor, auditTitle, brevoEntry, sortTimeline, timelineRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
+import { auditActor, auditTitle, brevoEntry, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
 
 const ROW_LIMIT = 500;
 const BREVO_PAGE_SIZE = 500;
@@ -69,23 +69,24 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const entries: TimelineEntry[] = [];
   const add = (entry: Omit<TimelineEntry, 'source'> & { source?: TimelineEntry['source'] }) => entries.push({ source: 'idoc', ...entry });
 
-  const [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, messages, consent, brevo] = await Promise.all([
+  const [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
     client<Row[]>`select id, actor_id, action, reason, created_at from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
-    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code from auth_security_notification_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
+    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
+    client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
+    client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code from auth_security_notification_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`,
     client<Row[]>`select id, purpose, created_at, expires_at from account_tokens where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`,
     client<Row[]>`select id, purpose, created_at, attempt_count from email_otp_codes where user_id = ${userId} and created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by created_at limit ${ROW_LIMIT}`,
     client<Row[]>`select id, authenticated_at, revoked_at, revoke_reason, device_label from auth_sessions where user_id = ${userId} and (authenticated_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or revoked_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by authenticated_at limit ${ROW_LIMIT}`,
     client<Row[]>`select id, event, outcome, detail, occurred_at from user_activity_events where user_id = ${userId} and occurred_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by occurred_at limit ${ROW_LIMIT}`,
     client<Row[]>`select id, source, amount_cents, currency, paid_at, administrator_id from payments where profile_id = ${profileId} and paid_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by paid_at limit ${ROW_LIMIT}`,
     client<Row[]>`select r.id, s.title, r.registered_at, r.canceled_at from seminar_registrations r join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and (r.registered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or r.canceled_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by r.registered_at limit ${ROW_LIMIT}`,
+    client<Row[]>`select a.id, a.actor_id, a.action, a.reason, a.created_at, a.entity_id, s.title from audit_log a join seminar_registrations r on a.entity_type = 'seminar_registration' and a.entity_id = r.id::text join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and a.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by a.created_at limit ${ROW_LIMIT}`,
     client<Row[]>`select m.id, c.category, c.subject, m.created_at from support_messages m join support_conversations c on c.id = m.conversation_id where m.author_user_id = ${userId} and m.author_side = 'member' and m.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by m.created_at limit ${ROW_LIMIT}`,
     client<Row[]>`select terms_accepted_at, privacy_accepted_at from onboarding_consents where profile_id = ${profileId}`,
     brevoEvents(email, range.fromKey, range.toKey),
   ]);
 
-  for (const row of audit) add({ actor: auditActor(row.actor_id as number | null, userId), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+  for (const row of audit) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
     add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: `${label} queued` });
@@ -125,9 +126,15 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
     const stripe = String(row.source).startsWith('stripe_') && row.source !== 'stripe_manual';
     add({ actor: stripe ? 'server' : 'administrator', at: iso(row.paid_at), category: 'Billing', detail: String(row.source).replace(/_/g, ' '), id: `payment-${row.id}`, title: `Payment of ${euro(row.amount_cents, row.currency)} recorded` });
   }
+  // Registration actions come from the audit trail, which says whether the member or an administrator did it. A registration with no
+  // audit row for its creation or cancellation (older records) falls back to the registration's own timestamps, attributed to the member.
+  const audited = new Set(seminarAudit.map((row) => `${row.entity_id}:${row.action}`));
+  for (const row of seminarAudit) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Seminar', detail: [row.title, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `seminar-audit-${row.id}`, title: auditTitle(row.action as string) });
   for (const row of seminars) {
-    if (row.registered_at) add({ actor: 'user', at: iso(row.registered_at), category: 'Seminar', id: `seminar-${row.id}-reg`, title: `Registered for ${row.title}` });
-    if (row.canceled_at) add({ actor: 'user', at: iso(row.canceled_at), category: 'Seminar', id: `seminar-${row.id}-cancel`, title: `Registration canceled for ${row.title}` });
+    const hasCreateAudit = ['member.seminar_registration.registered', 'admin.seminar_registration.created'].some((action) => audited.has(`${row.id}:${action}`));
+    const hasCancelAudit = ['member.seminar_registration.canceled', 'admin.seminar_registration.status_changed'].some((action) => audited.has(`${row.id}:${action}`));
+    if (row.registered_at && !hasCreateAudit) add({ actor: 'user', at: iso(row.registered_at), category: 'Seminar', detail: String(row.title), id: `seminar-${row.id}-reg`, title: 'Registered for a seminar' });
+    if (row.canceled_at && !hasCancelAudit) add({ actor: 'user', at: iso(row.canceled_at), category: 'Seminar', detail: String(row.title), id: `seminar-${row.id}-cancel`, title: 'Seminar registration canceled' });
   }
   for (const row of messages) add({ actor: 'user', at: iso(row.created_at), category: 'Support', detail: String(row.subject), id: `support-${row.id}`, title: 'Sent a support message' });
   for (const row of consent) {
@@ -138,7 +145,7 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   }
   (brevo ?? []).forEach((event, index) => entries.push(brevoEntry(event, index)));
 
-  const sorted = sortTimeline(entries, 'asc');
-  const truncated = [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, messages].some((rows) => rows.length >= ROW_LIMIT);
+  const sorted = sortTimeline(withinRange(entries, fromIso, toIso), 'asc');
+  const truncated = [audit, notices, deliveries, securityNotices, tokens, otps, sessions, activity, payments, seminars, seminarAudit, messages].some((rows) => rows.length >= ROW_LIMIT);
   return { entries: sorted, from: range.fromKey, member: { email, name, profileId, userId }, providerAvailable: brevo !== null, to: range.toKey, truncated };
 }
