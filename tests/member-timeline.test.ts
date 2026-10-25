@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -158,4 +158,18 @@ test('a sign-in shows the device it came from, taken from the session recorded a
   const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
   assert.match(data, /deviceAt\(at\)/);
   assert.match(data, /safe\('Devices'/);
+});
+
+test('clearing the date filter means all dates, and Brevo is only asked for the window it keeps', () => {
+  const all = timelineRange(null, null, now, true);
+  assert.equal(all.fromKey, '2000-01-01');
+  assert.equal(all.toKey, '2026-10-25');
+  assert.equal(timelineRange('2020-01-01', '2026-10-25', now).fromKey, '2026-09-26');
+  assert.equal(brevoWindowStart('2000-01-01', '2026-10-25', now), '2026-07-27');
+  assert.equal(brevoWindowStart('2026-10-01', '2026-10-25', now), '2026-10-01');
+  assert.equal(brevoWindowStart('2024-01-01', '2024-02-01', now), null);
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /setRange\(from \|\| to \? \{ from, to \} : \{ all: true \}\)/);
+  assert.match(drawer, /Showing all dates/);
+  assert.match(readFileSync('app/api/admin/members/[profileId]/timeline/route.ts', 'utf8'), /get\('all'\) === '1'/);
 });

@@ -22,7 +22,8 @@ type State = { status: 'error'; message: string } | { status: 'loading' } | { da
  * own, or an administrator. A separate drawer from the member form (docs/29); the date range lives in this component's state,
  * never in the URL. */
 export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
-  const [range, setRange] = useState<{ from?: string; to?: string }>({});
+  // Empty = the default last 30 days; `all` = the date filter was cleared, so no date limit.
+  const [range, setRange] = useState<{ all?: boolean; from?: string; to?: string }>({});
   const [shown, setShown] = useState<Record<TimelineActor, boolean>>({ administrator: true, server: true, user: true });
   const [newestFirst, setNewestFirst] = useState(false);
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -31,6 +32,7 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
     const controller = new AbortController();
     setState({ status: 'loading' });
     const query = new URLSearchParams();
+    if (range.all) query.set('all', '1');
     if (range.from) query.set('from', range.from);
     if (range.to) query.set('to', range.to);
     fetch(`/api/admin/members/${profileId}/timeline?${query.toString()}`, { signal: controller.signal })
@@ -89,8 +91,9 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-          <DateRangeFilter from={range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange({ from, to })} to={range.to ?? data?.to} />
+          <DateRangeFilter from={range.all ? undefined : range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange(from || to ? { from, to } : { all: true })} to={range.all ? undefined : range.to ?? data?.to} />
           <Button onClick={() => setRange({})} size="sm" type="button" variant="outline">Last 30 days</Button>
+          {range.all ? <span className="text-sm text-muted-foreground">Showing all dates</span> : null}
           <Button onClick={() => setNewestFirst((value) => !value)} size="sm" type="button" variant="outline">{newestFirst ? 'Newest first' : 'Oldest first'}</Button>
           <div className="flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Who did it">
             {ACTORS.map((actor) => (

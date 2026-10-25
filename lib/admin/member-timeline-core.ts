@@ -24,8 +24,10 @@ const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Inclusive UTC day range: `from` 00:00:00 to the end of `to`. Defaults to the last 30 days; anything invalid, reversed or
  * longer than a year falls back to the default so a hand-edited request can never ask for an unbounded scan. */
-export function timelineRange(from: string | null | undefined, to: string | null | undefined, now: Date = new Date()): { from: Date; fromKey: string; to: Date; toKey: string } {
+export function timelineRange(from: string | null | undefined, to: string | null | undefined, now: Date = new Date(), all = false): { from: Date; fromKey: string; to: Date; toKey: string } {
   const todayKey = now.toISOString().slice(0, 10);
+  // "All dates" (the date filter cleared) reaches back past any account; each source is still capped by its row limit.
+  if (all) return { from: new Date('2000-01-01T00:00:00Z'), fromKey: '2000-01-01', to: new Date(Date.parse(`${todayKey}T00:00:00Z`) + DAY_MS - 1), toKey: todayKey };
   const valid = (value: string | null | undefined): value is string => Boolean(value && DATE_KEY.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
   let toKey = valid(to) ? to : todayKey;
   let fromKey = valid(from) ? from : new Date(Date.parse(`${toKey}T00:00:00Z`) - (DEFAULT_RANGE_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
@@ -35,6 +37,15 @@ export function timelineRange(from: string | null | undefined, to: string | null
     fromKey = new Date(Date.parse(`${toKey}T00:00:00Z`) - (DEFAULT_RANGE_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
   }
   return { from: new Date(`${fromKey}T00:00:00Z`), fromKey, to: new Date(Date.parse(`${toKey}T00:00:00Z`) + DAY_MS - 1), toKey };
+}
+
+/** Brevo's event log only reaches back a limited time, so its query starts no earlier than this many days ago; null when the whole
+ * range is older (nothing to ask for). */
+export const BREVO_WINDOW_DAYS = 90;
+export function brevoWindowStart(fromKey: string, toKey: string, now: Date = new Date()): string | null {
+  const earliest = new Date(Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`) - BREVO_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
+  const start = fromKey > earliest ? fromKey : earliest;
+  return start > toKey ? null : start;
 }
 
 /** Who performed an audit-log action on this member's account. A `member.*` action is the member acting through the site (the row

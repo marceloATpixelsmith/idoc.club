@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const profileId = Number((await params).profileId);
   if (!Number.isInteger(profileId) || profileId <= 0) return Response.json({ error: 'Not found' }, { headers, status: 404 });
   try {
-    const timeline = await getMemberTimeline(profileId, request.nextUrl.searchParams.get('from'), request.nextUrl.searchParams.get('to'));
+    const timeline = await getMemberTimeline(profileId, request.nextUrl.searchParams.get('from'), request.nextUrl.searchParams.get('to'), request.nextUrl.searchParams.get('all') === '1');
     return timeline ? Response.json(timeline, { headers }) : Response.json({ error: 'Not found' }, { headers, status: 404 });
   } catch {
     return Response.json({ error: 'The timeline could not be loaded.' }, { headers, status: 500 });

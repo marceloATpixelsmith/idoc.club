@@ -7,7 +7,7 @@ import { EMAIL_KIND_LABELS } from '@/lib/notifications/communications-report';
 import { USER_ACTIVITY_EVENTS, type UserActivityEvent } from '@/lib/activity/user-activity-events';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
-import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, emailStepTitles, errorCodeLabel, otpPurposeLabel, securityNoticeLabel, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
+import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, otpPurposeLabel, securityNoticeLabel, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
 
 const ROW_LIMIT = 500;
 const BREVO_PAGE_SIZE = 500;
@@ -61,10 +61,10 @@ async function brevoEvents(email: string, fromKey: string, toKey: string): Promi
 
 /** One member's history from start to finish, drawn from our own records and Brevo's delivery log, each row labelled
  * with who did it. Administrator-only; read-only. */
-export async function getMemberTimeline(profileId: number, fromParam?: string | null, toParam?: string | null): Promise<MemberTimeline | null> {
+export async function getMemberTimeline(profileId: number, fromParam?: string | null, toParam?: string | null, allDates = false): Promise<MemberTimeline | null> {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const range = timelineRange(fromParam, toParam);
+  const range = timelineRange(fromParam, toParam, new Date(), allDates);
   const fromIso = range.from.toISOString();
   const toIso = range.to.toISOString();
 
@@ -95,7 +95,7 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
     safe('Seminar changes', client<Row[]>`select a.id, a.actor_id, a.action, a.reason, a.created_at, a.entity_id, s.title from audit_log a join seminar_registrations r on a.entity_type = 'seminar_registration' and a.entity_id = r.id::text join seminars s on s.id = r.seminar_id where r.profile_id = ${profileId} and a.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by a.created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Support messages', client<Row[]>`select m.id, c.category, c.subject, m.created_at from support_messages m join support_conversations c on c.id = m.conversation_id where m.author_user_id = ${userId} and m.author_side = 'member' and m.created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz order by m.created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Consent', client<Row[]>`select terms_accepted_at, privacy_accepted_at from onboarding_consents where profile_id = ${profileId}`, [] as Row[]),
-    brevoEvents(email, range.fromKey, range.toKey),
+    (() => { const start = brevoWindowStart(range.fromKey, range.toKey); return start ? brevoEvents(email, start, range.toKey) : Promise.resolve([] as BrevoTimelineEvent[]); })(),
   ]);
 
   const loaded = { accountEmails: !unavailableSources.includes('Account emails'), payments: !unavailableSources.includes('Payments') };
