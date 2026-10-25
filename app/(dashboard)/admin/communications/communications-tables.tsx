@@ -30,3 +30,17 @@ export function UpcomingNoticesTable({ rows }: { rows: ReadOnlyRow[] }) {
     />
   );
 }
+
+export function DeliveryIssuesTable({ rows }: { rows: ReadOnlyRow[] }) {
+  return (
+    <AdminReadOnlyTable
+      columns={[{ id: 'sent', label: 'Sent' }, { id: 'group', label: 'Group' }, { id: 'notice', label: 'Email type' }, { id: 'member', label: 'Member' }, { id: 'email', label: 'Email' }, { id: 'queue', label: 'Queue' }, { id: 'brevo', label: 'Brevo log' }]}
+      dateColumn="sent"
+      empty="Every email in this period was confirmed as delivered."
+      filterColumns={['group', 'notice', 'brevo']}
+      rows={rows}
+      searchLabel="Search delivery issues"
+      statusColumn="queue"
+    />
+  );
+}
