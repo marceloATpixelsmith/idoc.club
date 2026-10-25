@@ -2,6 +2,7 @@ import 'server-only';
 import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import type Stripe from 'stripe';
+import { deferAdminNotification, notifyCheckoutStartFailure } from '@/lib/notifications/admin-event-alerts';
 import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { resolveOrCreateBillingAccount } from '@/lib/payments/checkout';
@@ -69,7 +70,9 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
     const deliveryOwner = seminarCheckoutDeliveryOwner(baseUrl);
     const checkoutKind = deliveryOwner === 'staging' ? 'seminar_registration_staging' : 'seminar_registration';
     const cycle = new Date(row.registered_at).getTime();
-    const session = await stripe.checkout.sessions.create({
+    let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
+    try {
+    session = await stripe.checkout.sessions.create({
       cancel_url: `${baseUrl}/api/ui/flash/seminar-checkout/canceled/${row.seminar_id}`,
       customer: customerId,
       line_items: [{ price_data: { currency: 'eur', product_data: { name: row.title }, unit_amount: row.price_cents }, quantity: 1 }],
@@ -81,6 +84,11 @@ export async function createSeminarCheckoutSession(registrationIdValue: unknown,
         ...(email?.startsWith('stripe-e2e-') && email.endsWith('@example.test') ? { testRun: email } : {}) } },
       success_url: `${baseUrl}/seminars?view=my`,
     }, { idempotencyKey: `idoc-seminar-checkout-${registrationId}-${cycle}` });
+    } catch (error) {
+      // Stripe could not create the payment page: tell the Billing assignees, then fail the member's request as before.
+      deferAdminNotification(() => notifyCheckoutStartFailure({ error, extra: [['Seminar', row.title]], kind: 'seminar', profileId: row.profile_id, registrationId }));
+      throw error;
+    }
     if (!session.url) throw new Error('Stripe did not return a Checkout Session URL.');
     await sql`update seminar_registrations set stripe_checkout_session_id=${session.id},checkout_status='open',
       checkout_created_at=now(),expected_amount_cents=${row.price_cents},currency='EUR',payment_status='pending',payment_status_updated_at=now(),updated_at=now()
