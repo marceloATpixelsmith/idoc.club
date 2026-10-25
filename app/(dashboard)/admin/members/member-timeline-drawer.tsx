@@ -5,7 +5,7 @@ import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { Button } from '@/components/ui/button';
 import type { MemberTimeline } from '@/lib/admin/member-timeline';
-import { TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
+import { formatTimelineTime, TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
 import { formatTableDate } from '@/lib/format';
 
 const ACTOR_CLASS: Record<TimelineActor, string> = {
@@ -14,7 +14,7 @@ const ACTOR_CLASS: Record<TimelineActor, string> = {
   user: 'border-sky-400/50 bg-sky-950/30 text-sky-200',
 };
 const ACTORS: TimelineActor[] = ['user', 'server', 'administrator'];
-const time = (iso: string) => iso.slice(11, 19);
+const time = formatTimelineTime;
 
 type State = { status: 'error'; message: string } | { status: 'loading' } | { data: MemberTimeline; status: 'ready' };
 
@@ -78,7 +78,7 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
             </div>
             <ol className="mt-3 space-y-2">
               {data.milestones.map((milestone) => (
-                <li className="grid grid-cols-[9rem_8.5rem_1fr] items-start gap-3 text-sm" key={milestone.id}>
+                <li className="grid grid-cols-[13rem_8.5rem_1fr] items-start gap-3 text-sm" key={milestone.id}>
                   <span className="font-mono text-muted-foreground">{formatTableDate(milestone.at)}{milestone.id === 'milestone-registered-old-site' ? '' : ` ${time(milestone.at)}`}</span>
                   <span className={`w-fit rounded-full border px-2 py-0.5 text-xs ${ACTOR_CLASS[milestone.actor]}`}>{TIMELINE_ACTOR_LABELS[milestone.actor]}</span>
                   <span><span className="font-medium">{milestone.title}</span>{milestone.detail ? <span className="ml-2 text-xs text-muted-foreground">{milestone.detail}</span> : null}</span>
@@ -103,7 +103,7 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground">Times are UTC. <strong>Member</strong> rows are things the member did (opening an email, clicking a link, signing in). <strong>Server</strong> rows are what the system did on its own (queuing and sending emails, issuing links, recording payments). <strong>Administrator</strong> rows are changes an administrator made. “via Brevo” rows come from Brevo’s delivery log.</p>
+        <p className="text-sm text-muted-foreground">Times are UTC, to the millisecond. <strong>Member</strong> rows are things the member did (signing in, opening or clicking an email, filling in a form). <strong>Server</strong> rows are what the system did on its own (queuing and sending emails, creating links, recording payments). <strong>Administrator</strong> rows are changes an administrator made. “via Brevo” rows come from Brevo, our email service, which reports what happened to each email after we sent it.</p>
 
         {state.status === 'error' ? <p className="rounded-lg border border-red-400/50 bg-red-950/30 p-4 text-sm text-red-200" role="alert">{state.message}</p> : null}
         {data && !data.providerAvailable ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">Brevo’s delivery log could not be read, so email deliveries, opens and clicks are missing from this timeline. Everything recorded by IDOC itself is shown.</p> : null}
@@ -121,7 +121,7 @@ export function MemberTimelineDrawer({ profileId }: { profileId: number }) {
                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-gold">{formatTableDate(`${group.day}T00:00:00.000Z`)}</h3>
                 <ol className="space-y-2">
                   {group.items.map((entry) => (
-                    <li className="grid grid-cols-[5.5rem_8.5rem_1fr] items-start gap-3 rounded-lg border p-3 text-sm" key={entry.id}>
+                    <li className="grid grid-cols-[7rem_8.5rem_1fr] items-start gap-3 rounded-lg border p-3 text-sm" key={entry.id}>
                       <span className="font-mono text-muted-foreground">{time(entry.at)}</span>
                       <span className={`w-fit rounded-full border px-2 py-0.5 text-xs ${ACTOR_CLASS[entry.actor]}`}>{TIMELINE_ACTOR_LABELS[entry.actor]}{entry.source === 'brevo' ? ' · via Brevo' : ''}</span>
                       <span>

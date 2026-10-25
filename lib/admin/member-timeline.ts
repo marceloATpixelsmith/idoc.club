@@ -7,16 +7,19 @@ import { EMAIL_KIND_LABELS } from '@/lib/notifications/communications-report';
 import { USER_ACTIVITY_EVENTS, type UserActivityEvent } from '@/lib/activity/user-activity-events';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
-import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
+import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, emailStepTitles, errorCodeLabel, otpPurposeLabel, securityNoticeLabel, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
 
 const ROW_LIMIT = 500;
 const BREVO_PAGE_SIZE = 500;
 const BREVO_MAX_PAGES = 4;
 const OUTCOME_LABELS: Record<string, string> = {
-  already_used: 'link already used', breached_password: 'password rejected as breached', expired: 'link expired', rejected: 'rejected', success: 'succeeded', valid: 'link still valid',
+  already_used: 'the link had already been used', breached_password: 'the password was rejected because it appears in a data breach', expired: 'the link had expired', rejected: 'it was rejected', success: 'it worked', valid: 'the link was still valid',
 };
-const SESSION_REVOKE_LABELS: Record<string, string> = { logout: 'signed out', user_logout: 'signed out' };
-
+const SIGN_IN_REFUSAL_LABELS: Record<string, string> = { account_not_eligible: 'the account is not allowed to sign in right now', wrong_password: 'wrong password' };
+const PAYMENT_SOURCE_LABELS: Record<string, string> = {
+  bank_transfer: 'bank transfer', cash: 'cash', complimentary: 'complimentary (free) grant', legacy_import: 'imported from the old site',
+  stripe_manual: 'Stripe, entered by an administrator', stripe_one_time: 'Stripe, one-time payment', stripe_recurring: 'Stripe, recurring subscription',
+};
 type Row = Record<string, unknown>;
 const iso = (value: unknown): string => new Date(value as string | Date).toISOString();
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
@@ -78,8 +81,9 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const entries: TimelineEntry[] = [];
   const add = (entry: Omit<TimelineEntry, 'source'> & { source?: TimelineEntry['source'] }) => entries.push({ source: 'idoc', ...entry });
 
-  const [audit, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
+  const [audit, devices, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
     safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Devices', client<Row[]>`select authenticated_at, device_label from auth_sessions where user_id = ${userId} and authenticated_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and device_label is not null order by authenticated_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Email queue', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Account emails', client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Security notices', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code from auth_security_notification_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
@@ -95,41 +99,50 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   ]);
 
   const loaded = { accountEmails: !unavailableSources.includes('Account emails'), payments: !unavailableSources.includes('Payments') };
-  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded))) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Account', detail: text(row.reason), id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+  // A sign-in's browser and device come from the session record created at the same moment (within a few seconds).
+  const deviceAt = (at: string) => devices.find((device) => Math.abs(Date.parse(iso(device.authenticated_at)) - Date.parse(at)) < 5000)?.device_label as string | undefined;
+  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded))) {
+    const at = iso(row.created_at);
+    add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at, category: String(row.action).startsWith('account.session') ? 'Sign-in' : 'Account', detail: [row.action === 'account.session.signed_in' ? deviceAt(at) : undefined, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+  }
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: `${label} queued` });
-    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `notice-${row.id}-sent`, title: `${label} sent to Brevo` });
-    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: text(row.last_error_code), id: `notice-${row.id}-dead`, title: `${label} failed; the server gave up` });
+    const step = emailStepTitles(label);
+    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: step.queued });
+    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `notice-${row.id}-sent`, title: step.sent });
+    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `notice-${row.id}-dead`, title: step.failed });
   }
   for (const row of deliveries) {
     const label = EMAIL_KIND_LABELS[`account.${row.purpose}`] ?? `${row.purpose} email`;
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `delivery-${row.id}-queued`, title: `${label} queued` });
-    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `delivery-${row.id}-sent`, title: `${label} sent to Brevo` });
-    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: text(row.last_error_code), id: `delivery-${row.id}-dead`, title: `${label} failed; the server gave up` });
-    if (row.terminal_at) add({ actor: 'server', at: iso(row.terminal_at), category: 'Email', detail: text(row.terminal_reason), id: `delivery-${row.id}-terminal`, title: `${label} cancelled before sending` });
+    const step = emailStepTitles(label);
+    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `delivery-${row.id}-queued`, title: step.queued });
+    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `delivery-${row.id}-sent`, title: step.sent });
+    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `delivery-${row.id}-dead`, title: step.failed });
+    if (row.terminal_at) add({ actor: 'server', at: iso(row.terminal_at), category: 'Email', detail: errorCodeLabel(text(row.terminal_reason)), id: `delivery-${row.id}-terminal`, title: step.cancelled });
   }
   for (const row of securityNotices) {
-    const label = `Security notice: ${String(row.kind).replace(/_/g, ' ')}`;
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `security-${row.id}-queued`, title: `${label} queued` });
-    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `security-${row.id}-sent`, title: `${label} sent to Brevo` });
-    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: text(row.last_error_code), id: `security-${row.id}-dead`, title: `${label} failed; the server gave up` });
+    const step = emailStepTitles(securityNoticeLabel(String(row.kind)));
+    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `security-${row.id}-queued`, title: step.queued });
+    if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `security-${row.id}-sent`, title: step.sent });
+    if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `security-${row.id}-dead`, title: step.failed });
   }
-  for (const row of tokens) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: `Link valid until ${iso(row.expires_at).replace('T', ' ').slice(0, 16)} UTC`, id: `token-${row.id}`, title: row.purpose === 'migration_activation' ? 'Activation link issued' : 'Password-reset link issued' });
-  for (const row of otps) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: Number(row.attempt_count) > 0 ? `${row.attempt_count} code attempt(s)` : undefined, id: `otp-${row.id}`, title: `Verification code emailed (${String(row.purpose).replace(/_/g, ' ')})` });
+  for (const row of tokens) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: `The link in the email works until ${iso(row.expires_at).replace('T', ' ').slice(0, 16)} UTC`, id: `token-${row.id}`, title: row.purpose === 'migration_activation' ? 'Created an activation link for them' : 'Created a password-reset link for them' });
+  for (const row of otps) add({ actor: 'server', at: iso(row.created_at), category: 'Sign-in', detail: Number(row.attempt_count) > 0 ? `They typed a code ${row.attempt_count} time${Number(row.attempt_count) === 1 ? '' : 's'}` : undefined, id: `otp-${row.id}`, title: `Emailed them a ${otpPurposeLabel(String(row.purpose))}` });
   for (const row of activity) {
     const detail = (row.detail ?? {}) as Record<string, unknown>;
     const parts = [row.outcome ? OUTCOME_LABELS[String(row.outcome)] ?? String(row.outcome).replace(/_/g, ' ') : null,
-      detail.kind ? `notice: ${EMAIL_KIND_LABELS[String(detail.kind)] ?? detail.kind}` : null,
-      detail.signedIn === false ? 'not signed in' : detail.signedIn === true ? 'already signed in' : null,
-      detail.browser === 'scanner' ? 'looks like an automated link checker' : null,
-      detail.host ? `reached ${detail.host}` : null,
-      detail.reason ? String(detail.reason).replace(/_/g, ' ') : null].filter(Boolean);
-    add({ actor: 'user', at: iso(row.occurred_at), category: String(row.event).startsWith('sign_in') ? 'Sign-in' : 'Email', detail: parts.join(' · ') || undefined, id: `activity-${row.id}`, title: USER_ACTIVITY_EVENTS[row.event as UserActivityEvent] ?? String(row.event) });
+      detail.kind ? `from the email: ${EMAIL_KIND_LABELS[String(detail.kind)] ?? String(detail.kind).replace(/[._]/g, ' ')}` : null,
+      detail.signedIn === false ? 'they were not signed in' : detail.signedIn === true ? 'they were already signed in' : null,
+      detail.browser === 'scanner' ? 'looks like an automated link checker, not a person' : null,
+      detail.host ? `on ${detail.host}` : null,
+      detail.reason ? SIGN_IN_REFUSAL_LABELS[String(detail.reason)] ?? String(detail.reason).replace(/_/g, ' ') : null].filter(Boolean);
+    const sentence = parts.join(' · ');
+    add({ actor: 'user', at: iso(row.occurred_at), category: String(row.event).startsWith('sign_in') ? 'Sign-in' : 'Email', detail: sentence ? sentence.charAt(0).toUpperCase() + sentence.slice(1) : undefined, id: `activity-${row.id}`, title: USER_ACTIVITY_EVENTS[row.event as UserActivityEvent] ?? String(row.event) });
   }
   for (const row of payments) {
     const stripe = String(row.source).startsWith('stripe_') && row.source !== 'stripe_manual';
-    add({ actor: stripe ? 'server' : 'administrator', at: iso(row.paid_at), category: 'Billing', detail: [String(row.source).replace(/_/g, ' '), text(row.reason)].filter(Boolean).join(' · '), id: `payment-${row.id}`, title: `Payment of ${euro(row.amount_cents, row.currency)} recorded` });
+    const how = PAYMENT_SOURCE_LABELS[String(row.source)] ?? String(row.source).replace(/_/g, ' ');
+    add({ actor: stripe ? 'server' : 'administrator', at: iso(row.paid_at), category: 'Billing', detail: [`Paid by ${how}`, text(row.reason) ? `Note: ${text(row.reason)}` : null].filter(Boolean).join(' · '), id: `payment-${row.id}`, title: stripe ? `A payment of ${euro(row.amount_cents, row.currency)} was received and recorded` : `An administrator recorded a payment of ${euro(row.amount_cents, row.currency)}` });
   }
   // Registration actions come from the audit trail, which says whether the member or an administrator did it. A registration with no
   // audit row for its creation or cancellation (older records) falls back to the registration's own timestamps, attributed to the member.
@@ -139,9 +152,9 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
     const hasCreateAudit = ['member.seminar_registration.registered', 'admin.seminar_registration.created'].some((action) => audited.has(`${row.id}:${action}`));
     const hasCancelAudit = ['member.seminar_registration.canceled', 'admin.seminar_registration.status_changed'].some((action) => audited.has(`${row.id}:${action}`));
     if (row.registered_at && !hasCreateAudit) add({ actor: 'user', at: iso(row.registered_at), category: 'Seminar', detail: String(row.title), id: `seminar-${row.id}-reg`, title: 'Registered for a seminar' });
-    if (row.canceled_at && !hasCancelAudit) add({ actor: 'user', at: iso(row.canceled_at), category: 'Seminar', detail: String(row.title), id: `seminar-${row.id}-cancel`, title: 'Seminar registration canceled' });
+    if (row.canceled_at && !hasCancelAudit) add({ actor: 'user', at: iso(row.canceled_at), category: 'Seminar', detail: String(row.title), id: `seminar-${row.id}-cancel`, title: 'Canceled their seminar registration' });
   }
-  for (const row of messages) add({ actor: 'user', at: iso(row.created_at), category: 'Support', detail: String(row.subject), id: `support-${row.id}`, title: 'Sent a support message' });
+  for (const row of messages) add({ actor: 'user', at: iso(row.created_at), category: 'Support', detail: String(row.subject), id: `support-${row.id}`, title: 'Sent a message in a support conversation' });
   for (const row of consent) {
     for (const [key, label] of [['terms_accepted_at', 'Accepted the terms'], ['privacy_accepted_at', 'Accepted the privacy policy']] as const) {
       const at = row[key] ? iso(row[key]) : null;

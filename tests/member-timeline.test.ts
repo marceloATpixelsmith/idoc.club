@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -21,8 +21,9 @@ test('every row says who did it: the member, the server, or an administrator', (
   assert.equal(auditActor(null, 414), 'server');
   assert.equal(auditActor(null, 414, 'member.seminar_registration.registered'), 'user');
   assert.equal(auditActor(1, 414, 'admin.seminar_registration.created'), 'administrator');
-  assert.equal(auditTitle('account.migration_activation.completed'), 'Account activated');
-  assert.equal(auditTitle('membership.extended'), 'Membership extended');
+  assert.equal(auditTitle('account.migration_activation.completed'), 'Activated their account by choosing a new password');
+  assert.equal(auditTitle('account.migration_activation.completed'), 'Activated their account by choosing a new password');
+  assert.equal(auditTitle('some.new_internal_event'), 'System record: some new internal event');
 });
 
 test('Brevo opens and clicks are the member; deliveries and bounces are the mail system; link tokens are dropped', () => {
@@ -102,7 +103,8 @@ test('an imported member shows when they registered on the old site and when the
   ]);
   assert.match(imported[1].detail ?? '', /#592/);
   const fresh = accountMilestones({ accountState: 'active', emailVerifiedAt: '2026-10-24T20:50:39.635Z', legacyWpUserId: null, profileCreatedAt: '2026-10-24T20:51:28.653Z', userCreatedAt: '2026-10-24T20:50:39.926Z' });
-  assert.deepEqual(fresh.map((entry) => entry.title), ['Verified their email address', 'Created their account on the new site']);
+  assert.deepEqual(fresh.map((entry) => entry.title), ['Created their account on the new site']);
+  assert.match(fresh[0].detail ?? '', /verified as part of signing up/);
   assert.ok(fresh.every((entry) => entry.actor === 'user'));
 });
 
@@ -120,9 +122,40 @@ test('audit rows that repeat another source are skipped only when that source wa
 test('each timeline source fails on its own instead of blanking the timeline, and the drawer says what is missing', () => {
   const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
   assert.match(data, /const safe = async/);
-  assert.equal((data.match(/safe\('/g) ?? []).length, 12);
+  assert.equal((data.match(/safe\('/g) ?? []).length, 13);
   assert.match(data, /unavailableSources/);
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /Some sources could not be read/);
   assert.match(drawer, /Account history/);
+});
+
+test('timeline times show milliseconds so events in the same second keep their order', () => {
+  assert.equal(formatTimelineTime('2026-10-24T20:50:39.926Z'), '20:50:39.926');
+  const close = [{ at: '2026-10-24T20:50:39.987Z', id: 'b' }, { at: '2026-10-24T20:50:39.926Z', id: 'z' }].map((e) => ({ ...e, actor: 'server' as const, category: 'x', source: 'idoc' as const, title: e.id }));
+  assert.deepEqual(sortTimeline(close).map((entry) => entry.id), ['z', 'b']);
+});
+
+test('wording is plain English: no raw event codes or provider jargon in titles', () => {
+  const at = '2026-10-24T07:43:37.000Z';
+  assert.match(brevoEntry({ at, event: 'loadedByProxy', subject: 'Your IDOC sign-in code' }, 0).title, /mail app automatically loaded/);
+  assert.match(brevoEntry({ at, event: 'loadedByProxy' }, 1).detail ?? '', /does not prove they read it/);
+  assert.equal(brevoEntry({ at, event: 'loadedByProxy' }, 2).actor, 'user');
+  for (const event of ['requests', 'delivered', 'opened', 'clicks', 'hardBounces', 'softBounces', 'blocked', 'invalid', 'deferred', 'spam', 'unsubscribed', 'error', 'uniqueOpened']) {
+    assert.doesNotMatch(brevoEntry({ at, event, subject: 'Hello' }, 3).title, /hardBounces|softBounces|loadedByProxy|uniqueOpened|requests\b/, event);
+  }
+  assert.equal(auditTitle('account.session.signed_in'), 'Signed in');
+  assert.equal(emailStepTitles('Renewal reminder').sent, 'Email handed to our email service (Brevo): Renewal reminder');
+  assert.equal(securityNoticeLabel('new_sign_in'), 'Security alert email (new sign-in)');
+  assert.equal(otpPurposeLabel('login_verification'), 'sign-in code');
+  assert.match(errorCodeLabel('member_launch_hold') ?? '', /switched off/);
+  assert.equal(errorCodeLabel(undefined), undefined);
+  for (const action of ['account.onboarding.completed', 'member.profile.created', 'admin.payment.recorded', 'admin.role.granted', 'auth.mfa.recovery_code.used', 'support.conversation.closed']) {
+    assert.doesNotMatch(auditTitle(action), /[._]/, action);
+  }
+});
+
+test('a sign-in shows the device it came from, taken from the session recorded at the same moment', () => {
+  const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
+  assert.match(data, /deviceAt\(at\)/);
+  assert.match(data, /safe\('Devices'/);
 });
