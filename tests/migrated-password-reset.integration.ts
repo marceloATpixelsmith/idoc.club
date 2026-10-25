@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import test, { after, beforeEach } from 'node:test';
+import { signIn } from '../app/(login)/actions.ts';
 import { resendPasswordResetOtp, startPasswordReset } from '../app/(login)/recover-password/actions.ts';
+import { startPendingLogin } from '../lib/auth/pending-login.ts';
+import { getPendingPrimaryAuth } from '../lib/auth/mfa/pending-primary-auth.ts';
 import { getPendingPasswordReset } from '../lib/auth/pending-password-reset.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { comparePasswords } from '../lib/auth/session.ts';
@@ -157,4 +160,34 @@ test('Resend on the verification screen queues a fresh activation link for an im
   assert.equal((await queued(active.id, 'migration_activation')).length, 0);
   assert.deepEqual(await pressResend('nobody-at-all@example.test'), neutral);
   assert.equal((await sql`select count(*)::int as n from idoc.account_delivery_outbox where user_id is distinct from ${imported.id}`)[0].n, 0);
+});
+
+test('an imported member with an administrator grant can go from Forgot password to the forced authenticator setup with no operator help', async () => {
+  const user = await importedMember(24);
+  const grantor = await createUser('active');
+  await sql`insert into idoc.application_roles (user_id, role, granted_by) values (${user.id}, 'administrator', ${grantor.id})`;
+
+  await submitReset(user.email);
+  const [outbox] = await queued(user.id, 'migration_activation');
+  const raw = decryptDeliveryPayload(outbox.encrypted_payload, outbox.key_version).token;
+  assert.equal((await consumeAccountToken(raw, 'migration_activation', NEW_PASSWORD)).status, 'success');
+
+  const cookies = new TestCookies();
+  const csrf_token = await issueTestCsrfToken(cookies, null);
+  const login = new FormData();
+  login.set('csrf_token', csrf_token);
+  login.set('email', user.email);
+  login.set('password', NEW_PASSWORD);
+  const outcome = await withTestRequestCookies(cookies, async () => {
+    await startPendingLogin(user.email);
+    let redirectedTo = '';
+    try { await signIn({}, login); } catch (error) {
+      assert.ok(String(error).includes('NEXT_REDIRECT'), String(error));
+      redirectedTo = String((error as { digest?: string }).digest ?? error);
+    }
+    return { pending: await getPendingPrimaryAuth(), redirectedTo };
+  });
+  assert.match(outcome.redirectedTo, /\/mfa/, 'the administrator is sent to the authenticator step, not signed in');
+  assert.equal(outcome.pending?.stage, 'enrollment', 'with no authenticator on file, setup is forced');
+  assert.equal((await sql`select count(*)::int as n from idoc.auth_sessions where user_id=${user.id}`)[0].n, 0, 'no session exists until setup is finished');
 });
