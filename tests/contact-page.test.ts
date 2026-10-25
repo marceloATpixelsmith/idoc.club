@@ -34,7 +34,7 @@ test('TurnstileWidget imports its own containment stylesheet, so its layout beha
   assert.match(widgetCss, /\.idoc-auth-turnstile__retry \{/);
 });
 
-test('TurnstileWidget accepts an optional theme override, defaulting to the canonical light theme every existing auth call site relies on', () => {
-  assert.match(widget, /theme = 'light'/);
+test('TurnstileWidget accepts an optional theme override, defaulting to the dark theme every existing auth call site relies on', () => {
+  assert.match(widget, /theme = 'dark'/);
   assert.match(widget, /theme\?: 'dark' \| 'light'/);
 });
