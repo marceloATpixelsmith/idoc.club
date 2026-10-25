@@ -2,7 +2,8 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { cronJobRuns } from '@/lib/db/schema';
-import { runSucceeded, validJobName, type JobRunSource } from './job-run-record-core';
+import { notifyJobFailure } from './job-failure-alert';
+import { runSucceeded, shouldAlertJobFailure, validJobName, type JobRunSource } from './job-run-record-core';
 
 const RECORD_TIMEOUT_MS = 2000;
 
@@ -25,10 +26,15 @@ export async function recordJobRun(job: string, source: JobRunSource, status: nu
         failuresTotal: ok ? sql`${cronJobRuns.failuresTotal}` : sql`${cronJobRuns.failuresTotal} + 1`,
         consecutiveFailures: ok ? 0 : sql`${cronJobRuns.consecutiveFailures} + 1`,
       },
-    });
+    }).returning({ consecutiveFailures: cronJobRuns.consecutiveFailures, failuresTotal: cronJobRuns.failuresTotal, lastSuccessAt: cronJobRuns.lastSuccessAt, runsTotal: cronJobRuns.runsTotal });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await Promise.race([write.then(() => undefined), new Promise<void>((resolve) => { timer = setTimeout(resolve, RECORD_TIMEOUT_MS); })]);
+      const recorded = await Promise.race([write, new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), RECORD_TIMEOUT_MS); })]);
+      // Email IDOC_ADMIN_NOTIFICATION_EMAIL as soon as a job starts failing (and again if it keeps failing), not only when someone reads the monitor.
+      const row = recorded?.[0];
+      if (!ok && row && shouldAlertJobFailure(row.consecutiveFailures)) {
+        await notifyJobFailure({ consecutiveFailures: row.consecutiveFailures, failuresTotal: row.failuresTotal, job, lastSuccessAt: row.lastSuccessAt, runsTotal: row.runsTotal, source, status });
+      }
     } finally {
       clearTimeout(timer);
     }

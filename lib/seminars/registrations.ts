@@ -8,6 +8,7 @@ import { client } from '@/lib/db/drizzle';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { requireAdministrator } from '@/lib/membership/authorization';
 import { isEntitled } from '@/lib/membership/entitlement';
+import { deferAdminNotification, notifySeminarRegistration } from '@/lib/notifications/admin-event-alerts';
 import { escapeHtml, IDOC_EMAIL_ICONS, idocEmailFeiLogoUrl } from '@/lib/notifications/email-template';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
@@ -111,7 +112,7 @@ export async function createAdminSeminarRegistration(fields: {
   if (markPaid && !paymentReference) throw new SeminarRegistrationError(`Enter the ${seminarPaymentReferenceLabel(paymentMethod.data)}.`);
   const directDelivery = isStagingSeminarDirectDelivery();
 
-  return client.begin(async (sql) => {
+  const created = await client.begin(async (sql) => {
     const seminar = await requireSeminarOpenForRegistration(sql, seminarId.data);
     // Registration Status on create: non-FEI seminars are always Confirmed; FEI seminars take any FEI status.
     const requestedApproval = typeof fields.approvalStatus === 'string' && fields.approvalStatus !== '' ? fields.approvalStatus : initialApprovalStatus(seminar.is_fei);
@@ -174,6 +175,9 @@ export async function createAdminSeminarRegistration(fields: {
        ${JSON.stringify({ approvalStatus, paymentMethod: paymentMethod.data, profileId: member.id, seminarId: seminarId.data })}::jsonb)`;
     return { registrationId };
   });
+  // After commit, tell the administrators assigned to the Seminars support category (best-effort, never fails the registration).
+  deferAdminNotification(() => notifySeminarRegistration(created.registrationId, 'administrator'));
+  return created;
 }
 
 function validatePaymentMethod(rows: { canonical_id: string }[], value: unknown): string {
@@ -373,6 +377,7 @@ async function registerOwnProfileForSeminar(
     }
     return { paymentMethod, registrationId };
   });
+  deferAdminNotification(() => notifySeminarRegistration(outcome.registrationId, 'member'));
   return outcome;
 }
 

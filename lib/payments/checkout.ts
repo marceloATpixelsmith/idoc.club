@@ -3,6 +3,7 @@ import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
+import { deferAdminNotification, notifyCheckoutStartFailure } from '@/lib/notifications/admin-event-alerts';
 import { client, db } from '@/lib/db/drizzle';
 import { billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
@@ -132,5 +133,7 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
     return session.url;
   });
   if (typeof result === 'string') return result;
+  // Stripe could not create the payment page: tell the Billing assignees, then fail the member's request as before.
+  deferAdminNotification(() => notifyCheckoutStartFailure({ error: result.error, extra: [['Payment type', mode === 'subscription' ? 'Recurring annual membership' : 'One-time membership fee']], kind: 'membership', profileId: profile.id }));
   throw result.error;
 }

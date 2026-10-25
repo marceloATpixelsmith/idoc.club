@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { getStripeServerClient } from '@/lib/payments/stripe-client';
 import { processStripeEvent } from '@/lib/payments/webhook-handlers';
 import { processStagingSeminarConfirmationBatch } from '@/lib/notifications/renewal-notices';
+import { deferAdminNotification, notifyBillingStripeEvent } from '@/lib/notifications/admin-event-alerts';
 import { logError } from '@/lib/observability/logger';
 import { stripeWebhookSecretForServer } from '@/lib/runtime/configuration';
 
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
     // Rethrow so the route still returns 5xx and Stripe retries the delivery.
     throw error;
   }
+
+  // A payment that failed, was declined or otherwise did not succeed: tell the administrators assigned to the Billing
+  // support category. Duplicate deliveries (Stripe retries) are skipped so one event sends one notification.
+  if (status !== 'duplicate') deferAdminNotification(() => notifyBillingStripeEvent(event));
 
   // Staging and production share Postgres, but only production runs the scheduled notification cron.
   // Stripe seminar confirmations use a staging-only queue kind, so drain that queue here only after
