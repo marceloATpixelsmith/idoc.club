@@ -5,11 +5,11 @@ import test from 'node:test';
 const widget = readFileSync('components/turnstile-widget.tsx', 'utf8');
 
 test('a script load failure (blocked/offline) is caught and surfaces a fallback, rather than leaving the widget silently absent forever', () => {
-  assert.match(widget, /onError=\{?\(\) => setFailed\(true\)/);
+  assert.match(widget, /onError=\{\(\) => fail\('script_not_loaded'\)/);
 });
 
 test('a Turnstile render-time error is caught via error-callback, not left to fail silently', () => {
-  assert.match(widget, /'error-callback': \(\) => setFailed\(true\)/);
+  assert.match(widget, /'error-callback': \(errorCode\?: unknown\) => fail\('widget_error', errorCode\)/);
 });
 
 test('an expired token clears the parent form state instead of leaving a stale token that will only fail on submit', () => {
@@ -18,7 +18,7 @@ test('an expired token clears the parent form state instead of leaving a stale t
 
 test('a script that never fires onLoad or onError at all (silently dropped by a network filter) still times out into the fallback', () => {
   assert.match(widget, /SCRIPT_LOAD_TIMEOUT_MS/);
-  assert.match(widget, /window\.setTimeout\(\(\) => setFailed\(true\), SCRIPT_LOAD_TIMEOUT_MS\)/);
+  assert.match(widget, /window\.setTimeout\(\(\) => fail\('script_not_loaded'\), SCRIPT_LOAD_TIMEOUT_MS\)/);
 });
 
 test('scriptLoaded is initialized from whether window.turnstile already exists at mount time, as a fast path for a second widget instance mounted after a client-side navigation where the script is already resident', () => {
@@ -95,7 +95,7 @@ test('a required interactive challenge is shown via Cloudflare\'s own callbacks,
   assert.match(widget, /'before-interactive-callback'/);
   assert.match(widget, /'after-interactive-callback'/);
   assert.match(widget, /hasVisibleContent \|\| interactiveRef\.current/);
-  assert.match(widget, /attempts >= TOKEN_WATCHDOG_ATTEMPTS\) \{[\s\S]*?setFailed\(true\)/);
+  assert.match(widget, /attempts >= TOKEN_WATCHDOG_ATTEMPTS\) \{[\s\S]*?fail\('no_token_after_retries'\)/);
   assert.ok(
     widget.indexOf('challengeVisibleRef.current) return') < widget.indexOf('attempts >= TOKEN_WATCHDOG_ATTEMPTS'),
     'an on-screen challenge is exempt before retries are declared exhausted'
@@ -115,4 +115,12 @@ test('a widget that rendered but issued no token (e.g. after a server-action red
 test('the token watchdog waits longer than Cloudflare\'s built-in 8 second widget retry', () => {
   const match = widget.match(/const TOKEN_WATCHDOG_MS = ([0-9_]+);/);
   assert.ok(match && Number(match[1].replace(/_/g, '')) > 8000);
+});
+
+test('every state that leaves Sign In disabled is reported through one categorical channel, and never through the emailing /api/client-error route', () => {
+  for (const stage of ['script_not_loaded', 'render_failed', 'widget_error', 'unsupported_browser', 'no_token_after_retries']) {
+    assert.match(widget, new RegExp(`fail\\('${stage}'`));
+  }
+  assert.match(widget, /reportTurnstileFailure\(stage, action, errorCode\);\s*setFailed\(true\)/);
+  assert.doesNotMatch(widget, /client-error|reportClientError/);
 });

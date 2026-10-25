@@ -594,6 +594,8 @@ searchable `idoc_request_id` tag and `idoc.request_id` context. The existing occ
 reference and its direct browser-SDK capture, while the route continues to receive `{}` and never an
 exception message or stack.
 
+**Turnstile sign-in blockers.** Sign In is disabled until Cloudflare Turnstile returns a token, and a disabled button makes no request, so a visitor stuck at that step leaves nothing in any server log. The widget therefore reports each blocking state to Sentry as a **warning** with the fixed message `Turnstile widget did not produce a token`, tagged `turnstile_stage` (`script_not_loaded`, `render_failed`, `widget_error`, `unsupported_browser`, `no_token_after_retries`), `turnstile_action` (the flow, for example `sign-in`) and, for `widget_error`, `turnstile_error_code` (Cloudflare's numeric code; see Cloudflare's Turnstile error-code list). Sentry attaches the visitor's browser, OS and device itself. To investigate a report of "I can't sign in", filter Sentry by `turnstile_stage` and compare browsers; a spike in `no_token_after_retries` means widgets are loading but not completing, and `script_not_loaded` points at blockers, networks or the Cloudflare dashboard's hostname allow-list. Each stage is sent once per page load, nothing visitor-entered is included, and the emailing `/api/client-error` route is not used. A challenge being shown is normal and is deliberately not reported. To check the real interactive challenge by hand or on a schedule, run `pnpm test:turnstile-live` (real Cloudflare script and Cloudflare's published force-interactive test key; needs outbound access, not a PR check).
+
 Configure the following in Vercel, with Preview values scoped to the `staging` branch where
 appropriate:
 
