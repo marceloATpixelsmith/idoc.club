@@ -64,6 +64,9 @@ test('a challenge the visitor is solving is never flagged as failed, however lon
 });
 
 test('a widget that never produces a token surfaces the retry message instead of staying hidden, and "try again" re-arms the watchdog', async ({ page }) => {
+  // Operator reporting goes to Sentry directly; the emailing /api/client-error route must never be hit.
+  const clientErrorRequests: string[] = [];
+  page.on('request', (request) => { if (request.url().includes('/api/client-error')) clientErrorRequests.push(request.url()); });
   await openSignIn(page);
   await page.getByLabel('Email Address').fill(uniqueEmail('turnstile-stalled'));
   await expect(page.getByRole('alert').filter({ hasText: ALERT })).toHaveCount(0);
@@ -85,6 +88,7 @@ test('a widget that never produces a token surfaces the retry message instead of
   await turnstileEvent(page, 'solve');
   await expect(page.getByRole('alert').filter({ hasText: ALERT })).toHaveCount(0);
   await expect(signIn(page)).toBeEnabled();
+  expect(clientErrorRequests).toEqual([]);
 });
 
 test('a browser Cloudflare reports as unsupported, or a render error, shows the retry message immediately', async ({ page }) => {
