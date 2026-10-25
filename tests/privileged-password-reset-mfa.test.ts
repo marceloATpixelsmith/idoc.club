@@ -9,10 +9,13 @@ const pending = readFileSync('lib/auth/pending-password-reset.ts', 'utf8');
 const types = readFileSync('lib/auth/mfa/types.ts', 'utf8');
 
 test('privileged password reset uses authoritative grants and canonical purpose-bound TOTP', () => {
-  assert.match(actions, /authoritativeMfaRole\(user\.id\)/);
+  assert.match(actions, /authoritativeMfaRole\(userId\)/);
+  assert.match(actions, /getActiveTotp\(String\(userId\), MFA_APPLICATION_ID\)/);
   assert.match(actions, /purpose: 'password-reset'/);
   assert.match(types, /'password-reset'/);
-  assert.ok(actions.indexOf("role === 'admin'") < actions.indexOf("issueEmailOtp(email, 'password_reset'"));
+  // An administrator with an active authenticator is routed to TOTP before any emailed code can be issued;
+  // one with no authenticator falls through to the emailed code (covered by migrated-password-reset.integration.ts).
+  assert.ok(actions.indexOf('resetRequiresTotp(user.id)') < actions.indexOf("issueEmailOtp(email, 'password_reset'"));
   assert.doesNotMatch(actions, /users\.role/);
 });
 
@@ -27,9 +30,9 @@ test('anonymous recovery keeps one neutral verification surface for every unreso
   assert.match(page, /if \(pending\.stage === 'authorized'\) return <PasswordStep/);
   assert.match(page, /return <OtpStep pendingCsrfNonce=\{pending\.csrfNonce\} \/>/);
   assert.doesNotMatch(page, /TotpStep|missing-factor|Additional recovery required|authenticator/);
-  assert.match(otpStep, /Enter the 6-digit verification code for this recovery request/);
+  assert.match(otpStep, /we have emailed it either a 6-digit code/);
   assert.match(otpStep, /authenticator app/);
-  assert.match(otpStep, /code sent to your email/);
+  assert.match(otpStep, /open it instead/);
   assert.doesNotMatch(otpStep, /We sent a 6-digit code to/);
 });
 

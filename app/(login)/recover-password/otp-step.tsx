@@ -7,7 +7,7 @@ export function OtpStep({ pendingCsrfNonce }: { pendingCsrfNonce: string }) {
   return (
     <OtpEntryStep
       cancelAction={cancelPasswordReset}
-      description={<>Enter the 6-digit verification code for this recovery request. If your account uses an authenticator app, use its current code; otherwise use the code sent to your email.</>}
+      description={<>If this email belongs to an account, we have emailed it either a 6-digit code to enter below or a link to set your password; if you received a link, open it instead. If your account uses an authenticator app, use its current code.</>}
       pendingCsrfNonce={pendingCsrfNonce}
       resendAction={resendPasswordResetOtp}
       title="Verify your identity"
