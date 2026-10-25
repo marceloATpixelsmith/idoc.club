@@ -12,6 +12,7 @@ import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_E
 import { sendTransactionalEmail } from './brevo-transactional';
 import { emailButton, emailInfoCard, emailInfoRow, emailNoticeCard, escapeHtml, IDOC_EMAIL_ICONS, renderTransactionalEmail } from './email-template';
 import { processDeliveryBatch } from './account-delivery-worker-core';
+import { emailActionUrl } from './email-links';
 import { formatDate } from '@/lib/format';
 
 export const RENEWAL_NOTICE_BATCH_LIMIT = 20;
@@ -187,7 +188,7 @@ export async function enqueueRenewalNotices(today: string = todayIso()) {
   return { blocked: 0, expirationReminders, graceExpired, graceReminders, nonRecurringGrace, renewalReminders };
 }
 
-export async function renderNotice(kind: string, payload: NoticePayload): Promise<{ html: string; subject: string }> {
+export async function renderNotice(kind: string, payload: NoticePayload, context: { notificationId?: number } = {}): Promise<{ html: string; subject: string }> {
   if (kind === 'seminar.registration_created' || kind === STAGING_SEMINAR_CONFIRMATION_KIND) {
     // Registration confirmations retain their detailed seminar-specific design while sharing the
     // same outer IDOC brand shell used by every transactional email.
@@ -231,9 +232,9 @@ export async function renderNotice(kind: string, payload: NoticePayload): Promis
   // Notification delivery must not depend on privileged runtime configuration just to render an
   // email. Production/staging use BASE_URL when present; isolated workers/tests retain a safe,
   // absolute public fallback rather than failing the delivery before the provider call.
-  const membershipUrl = process.env.BASE_URL?.trim()
-    ? new URL('/dashboard/membership', process.env.BASE_URL).toString()
-    : 'https://idoc.club/dashboard/membership';
+  // The button points at an identifying /l/ link when the notice belongs to a stored notification (docs/05): the click is
+  // recorded against this member and then forwarded to the membership page, even if they are not signed in.
+  const membershipUrl = emailActionUrl({ notificationId: context.notificationId, slot: 'membership' });
   const amount = `€${((payload.amountCents ?? 0) / 100).toFixed(2)}`;
 
   const membershipIntro = (message: string) =>
@@ -415,7 +416,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
   try {
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
-    const { html, subject } = await renderNotice(record.kind, record.payload);
+    const { html, subject } = await renderNotice(record.kind, record.payload, { notificationId: record.id });
     await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
@@ -454,7 +455,7 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
   try {
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
-    const { html, subject } = await renderNotice(record.kind, record.payload);
+    const { html, subject } = await renderNotice(record.kind, record.payload, { notificationId: record.id });
     await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),

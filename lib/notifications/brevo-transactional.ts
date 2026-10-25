@@ -2,6 +2,7 @@ import 'server-only';
 import { assertTransactionalEmailAllowed } from '@/lib/runtime/member-launch-hold';
 import { brevoApiKeyForServer, brevoFromEmailForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
+import { assertEmailLinksCanonical } from './email-link-policy.ts';
 
 export interface TransactionalEmail {
   html: string;
@@ -16,6 +17,8 @@ export interface TransactionalEmail {
  * `AbortSignal.timeout(ms)` to bound delivery. */
 export async function sendTransactionalEmail(message: TransactionalEmail, options: { allowLiveAuthE2eOtp?: boolean; authenticationEmail?: boolean; signal?: AbortSignal } = {}) {
   assertTransactionalEmailAllowed('email.transactional', message.to, options.allowLiveAuthE2eOtp, options.authenticationEmail);
+  // Every message, whichever builder made it, must link only to idoc.club when sent from Production.
+  assertEmailLinksCanonical(message.html);
   const apiKey = brevoApiKeyForServer();
   const fromEmail = brevoFromEmailForServer();
   const response = await tracedFetch('brevo', 'https://api.brevo.com/v3/smtp/email', {

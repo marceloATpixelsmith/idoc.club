@@ -106,6 +106,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/admin/export/seminar-registrations/route.ts': 'requireAdministrator',
   'app/api/admin/export/selected-reports/route.ts': 'requireAdministrator',
   'app/api/admin/live-auth-results/[runId]/route.ts': 'requireSuperAdmin',
+  'app/api/admin/members/[profileId]/timeline/route.ts': 'requireAdministrator',
   'app/api/admin/table-preferences/[table]/route.ts': 'authenticated-admin-csrf-owner-boundary',
   'app/api/admin/tiptap-image/route.ts': 'authenticated-admin-csrf-boundary',
   'app/api/auth/google/callback/route.ts': 'oauth-state-provider-validation',

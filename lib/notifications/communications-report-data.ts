@@ -19,9 +19,10 @@ const BREVO_EVENTS: BrevoEventName[] = ['delivered', 'hardBounces', 'softBounces
 const BREVO_PAGE_SIZE = 500;
 const BREVO_MAX_PAGES = 10;
 
-export type SentRow = { brevo: BrevoCheck | null; email: string | null; kind: string; label: string; member: string; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
+export type SentRow = { brevo: BrevoCheck | null; email: string | null; kind: string; label: string; member: string; profileId: number | null; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
 /** One email that is not a confirmed delivery: bounced/blocked, missing from Brevo's log, still queued, or given up on. */
-export type IssueRow = { brevo: BrevoCheck | null; email: string | null; group: 'Renewal notice' | 'System email'; kind: string; label: string; member: string; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
+export type IssueBucket = 'bounced' | 'failedToSend' | 'notInBrevo' | 'pending';
+export type IssueRow = { brevo: BrevoCheck | null; bucket: IssueBucket; email: string | null; group: 'Renewal notice' | 'System email'; kind: string; label: string; member: string; profileId: number | null; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
 export type UpcomingNotice = { email: string; kind: string; label: string; member: string; sendOn: string; targetDate: string };
 export type CommunicationsReport = {
   brevoAvailable: boolean;
@@ -34,7 +35,7 @@ export type CommunicationsReport = {
   upcoming: UpcomingNotice[];
 };
 
-type OutboxRow = { dead_lettered_at: Date | string | null; email: string | null; first_name: string | null; id: number; kind: string; last_name: string | null; sent_at: Date | string | null };
+type OutboxRow = { dead_lettered_at: Date | string | null; email: string | null; first_name: string | null; id: number; kind: string; last_name: string | null; profile_id: number | null; sent_at: Date | string | null };
 
 /** Delivery results from Brevo's transactional log for the window, or null when it cannot be read (no key, network, non-2xx). */
 async function fetchBrevoEvents(from: Date, to: Date): Promise<BrevoLogEvent[] | null> {
@@ -85,12 +86,12 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
   const horizon = new Date(now.getTime() + UPCOMING_DAYS * 86_400_000).toISOString().slice(0, 10);
 
   const [outbox, accountDeliveries, upcoming, events] = await Promise.all([
-    client<OutboxRow[]>`select o.id, o.kind, o.sent_at, o.dead_lettered_at, case when o.kind = 'administrator.profile_changed' then ${adminAlertRecipient}::text else coalesce(o.payload->>'to', u.email) end as email, p.first_name, p.last_name
+    client<OutboxRow[]>`select o.id, o.kind, o.sent_at, o.dead_lettered_at, case when o.kind = 'administrator.profile_changed' then ${adminAlertRecipient}::text else coalesce(o.payload->>'to', u.email) end as email, p.first_name, p.last_name, o.profile_id
       from notification_outbox o left join profiles p on p.id = o.profile_id left join users u on u.id = p.user_id
       where o.kind not like 'stripe.%' and (o.sent_at >= ${fromIso}::timestamptz or (o.sent_at is null and o.created_at >= ${fromIso}::timestamptz))`,
-    client<{ dead_lettered_at: Date | null; email: string | null; id: number; purpose: string; sent_at: Date | string | null; terminal_at: Date | string | null }[]>`
-      select d.id, d.purpose, d.sent_at, d.dead_lettered_at, d.terminal_at, u.email
-      from account_delivery_outbox d left join users u on u.id = d.user_id
+    client<{ dead_lettered_at: Date | null; email: string | null; id: number; profile_id: number | null; purpose: string; sent_at: Date | string | null; terminal_at: Date | string | null }[]>`
+      select d.id, d.purpose, d.sent_at, d.dead_lettered_at, d.terminal_at, u.email, pr.id as profile_id
+      from account_delivery_outbox d left join users u on u.id = d.user_id left join profiles pr on pr.user_id = d.user_id
       where d.terminal_at is null and (d.sent_at >= ${fromIso}::timestamptz or (d.sent_at is null and d.created_at >= ${fromIso}::timestamptz))`,
     client<{ email: string; first_name: string | null; kind: string; last_name: string | null; target_date: string }[]>`
       select * from (
@@ -119,9 +120,9 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
     fetchBrevoEvents(from, now),
   ]);
 
-  const emails: (OutboxEmail & { label: string; member: string })[] = [
-    ...outbox.map((row) => ({ deadLettered: row.dead_lettered_at !== null, email: row.email, id: `n${row.id}`, kind: row.kind, label: emailKindLabel(row.kind), member: memberName(row.first_name, row.last_name), sentAt: toDate(row.sent_at) })),
-    ...accountDeliveries.map((row) => ({ deadLettered: row.dead_lettered_at !== null, email: row.email, id: `a${row.id}`, kind: `account.${row.purpose}`, label: emailKindLabel(`account.${row.purpose}`), member: '—', sentAt: toDate(row.sent_at) })),
+  const emails: (OutboxEmail & { label: string; member: string; profileId: number | null })[] = [
+    ...outbox.map((row) => ({ deadLettered: row.dead_lettered_at !== null, email: row.email, id: `n${row.id}`, kind: row.kind, label: emailKindLabel(row.kind), member: memberName(row.first_name, row.last_name), profileId: row.kind === 'administrator.profile_changed' ? null : row.profile_id, sentAt: toDate(row.sent_at) })),
+    ...accountDeliveries.map((row) => ({ deadLettered: row.dead_lettered_at !== null, email: row.email, id: `a${row.id}`, kind: `account.${row.purpose}`, label: emailKindLabel(`account.${row.purpose}`), member: '—', profileId: row.profile_id, sentAt: toDate(row.sent_at) })),
   ];
   const checks = checkAgainstBrevoLog(emails.filter((row) => row.sentAt).map((row) => ({ email: row.email, id: row.id, sentAt: row.sentAt as Date })), events);
   const isRenewal = (kind: string) => (RENEWAL_NOTICE_KINDS as readonly string[]).includes(kind);
@@ -129,7 +130,7 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
   const systemEmails = emails.filter((row) => !isRenewal(row.kind));
 
   const renewalRows: SentRow[] = renewalEmails.map((row) => ({
-    brevo: row.sentAt ? checks.get(row.id) ?? 'not_found' : null, email: row.email, kind: row.kind, label: row.label, member: row.member, sentAt: row.sentAt,
+    brevo: row.sentAt ? checks.get(row.id) ?? 'not_found' : null, email: row.email, kind: row.kind, label: row.label, member: row.member, profileId: row.profileId, sentAt: row.sentAt,
     status: (row.sentAt ? 'sent' : row.deadLettered ? 'failed' : 'pending') as SentRow['status'],
   })).sort((left, right) => (right.sentAt?.getTime() ?? 0) - (left.sentAt?.getTime() ?? 0));
 
@@ -137,7 +138,9 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
   const issueRows: IssueRow[] = emails.flatMap((row) => {
     const brevo = row.sentAt ? checks.get(row.id) ?? 'not_found' : null;
     if (row.sentAt && brevo !== 'failed' && brevo !== 'not_found') return [];
-    return [{ brevo, email: row.email, group: isRenewal(row.kind) ? 'Renewal notice' as const : 'System email' as const, kind: row.kind, label: row.label, member: row.member, sentAt: row.sentAt, status: (row.sentAt ? 'sent' : row.deadLettered ? 'failed' : 'pending') as IssueRow['status'] }];
+    const status = (row.sentAt ? 'sent' : row.deadLettered ? 'failed' : 'pending') as IssueRow['status'];
+    const bucket: IssueBucket = status === 'sent' ? (brevo === 'failed' ? 'bounced' : 'notInBrevo') : status === 'pending' ? 'pending' : 'failedToSend';
+    return [{ brevo, bucket, email: row.email, group: isRenewal(row.kind) ? 'Renewal notice' as const : 'System email' as const, kind: row.kind, label: row.label, member: row.member, profileId: row.profileId, sentAt: row.sentAt, status }];
   }).sort((left, right) => (right.sentAt?.getTime() ?? Infinity) - (left.sentAt?.getTime() ?? Infinity));
 
   const noticeDays: Record<string, number> = { 'membership.expiration_reminder': NON_RENEWAL_EXPIRATION_NOTICE_DAYS, 'membership.grace_reminder': GRACE_REMINDER_DAYS_BEFORE_END, 'membership.renewal_reminder': AUTO_RENEWAL_NOTICE_DAYS };
