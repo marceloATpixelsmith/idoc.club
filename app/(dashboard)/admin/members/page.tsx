@@ -5,6 +5,7 @@ import { listActiveRoles } from '@/lib/membership/role-grants';
 import { getUserAccountState } from '@/lib/membership/account-suspension';
 import { listAdminSeminarHistoryForMember } from '@/lib/seminars/registrations';
 import { MembersTable } from './members-table';
+import { MemberTimelineDrawer } from './member-timeline-drawer';
 import { MemberDetailSheet } from './member-detail-sheet';
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { client } from '@/lib/db/drizzle';
@@ -27,11 +28,12 @@ function notificationOutcome(row: { deadLetteredAt: Date | null; lastErrorCode: 
   return 'Pending';
 }
 
-export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; tab?: string }> }) {
+export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ profileId?: string; tab?: string; timeline?: string }> }) {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const isSuperAdmin = actor.roles.includes('super_admin');
-  const { profileId: profileIdParam, tab } = await searchParams;
+  const { profileId: profileIdParam, tab, timeline: timelineParam } = await searchParams;
+  const timelineProfileId = timelineParam && /^\d{1,10}$/.test(timelineParam) ? Number(timelineParam) : null;
   // Filters, sort, columns, and pagination all come from the database, never the URL -- see
   // components/admin/table-preference-sync.tsx and docs/07 for why. `profileId` is the one
   // deliberate exception: opening a specific member's detail panel is exactly the short-lived,
@@ -100,6 +102,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <h1 className="text-3xl font-semibold text-gold">Members</h1>
     {filterError && <p className="mt-4 rounded-md border border-red-500 p-3 text-sm text-red-600" role="alert">{filterError}</p>}
     <MembersTable initialColumnOrder={typeof savedPreferences?.columnOrder === 'string' ? savedPreferences.columnOrder : undefined} initialVisibleColumns={visibleColumns} filters={listing.filters} pageSize={listing.pageSize} rows={listing.rows} total={listing.total} />
+    {timelineProfileId ? <MemberTimelineDrawer key={`timeline-${timelineProfileId}`} profileId={timelineProfileId} /> : null}
     {selected && (
       <MemberDetailSheet
         key={selected.profile.id}

@@ -905,6 +905,20 @@ export const reconciliationRuns = idocSchema.table('reconciliation_runs', {
   check('reconciliation_runs_status_check', sql`${table.status} in ('completed', 'failed')`),
 ]);
 
+/** Member activity the server records at the moments no other table captures: an email link being opened, an
+ * activation/reset link landing and what became of it, a failed sign-in. Read only by the administrator Member
+ * timeline (docs/05, docs/07). Rows hold a closed event name, a coarse outcome and a small allowlisted detail object --
+ * never a password, token, address or free text -- and are purged with the retention job. */
+export const userActivityEvents = idocSchema.table('user_activity_events', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  event: varchar('event', { length: 60 }).notNull(),
+  outcome: varchar('outcome', { length: 40 }),
+  detail: jsonb('detail'),
+  requestId: varchar('request_id', { length: 64 }),
+}, (table) => [index('user_activity_events_user_time_idx').on(table.userId, table.occurredAt)]);
+
 /** One row per (job, timer) holding that job's most recent run, so the owner's cron monitor can prove every scheduled job is
  * running without reading provider logs. Written best-effort after each run (a failed write never affects the job); holds only
  * the job's fixed name, the timer system, timestamps, an HTTP status and counters: never request or response content. */
