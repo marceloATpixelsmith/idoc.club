@@ -20,10 +20,13 @@ const BREVO_PAGE_SIZE = 500;
 const BREVO_MAX_PAGES = 10;
 
 export type SentRow = { brevo: BrevoCheck | null; email: string | null; kind: string; label: string; member: string; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
+/** One email that is not a confirmed delivery: bounced/blocked, missing from Brevo's log, still queued, or given up on. */
+export type IssueRow = { brevo: BrevoCheck | null; email: string | null; group: 'Renewal notice' | 'System email'; kind: string; label: string; member: string; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
 export type UpcomingNotice = { email: string; kind: string; label: string; member: string; sendOn: string; targetDate: string };
 export type CommunicationsReport = {
   brevoAvailable: boolean;
   from: Date;
+  issueRows: IssueRow[];
   renewalRows: SentRow[];
   renewalTotals: KindTotals[];
   systemTotals: KindTotals[];
@@ -130,6 +133,13 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
     status: (row.sentAt ? 'sent' : row.deadLettered ? 'failed' : 'pending') as SentRow['status'],
   })).sort((left, right) => (right.sentAt?.getTime() ?? 0) - (left.sentAt?.getTime() ?? 0));
 
+  // Everything that is not a confirmed delivery, so an administrator can see which addresses to investigate.
+  const issueRows: IssueRow[] = emails.flatMap((row) => {
+    const brevo = row.sentAt ? checks.get(row.id) ?? 'not_found' : null;
+    if (row.sentAt && brevo !== 'failed' && brevo !== 'not_found') return [];
+    return [{ brevo, email: row.email, group: isRenewal(row.kind) ? 'Renewal notice' as const : 'System email' as const, kind: row.kind, label: row.label, member: row.member, sentAt: row.sentAt, status: (row.sentAt ? 'sent' : row.deadLettered ? 'failed' : 'pending') as IssueRow['status'] }];
+  }).sort((left, right) => (right.sentAt?.getTime() ?? Infinity) - (left.sentAt?.getTime() ?? Infinity));
+
   const noticeDays: Record<string, number> = { 'membership.expiration_reminder': NON_RENEWAL_EXPIRATION_NOTICE_DAYS, 'membership.grace_reminder': GRACE_REMINDER_DAYS_BEFORE_END, 'membership.renewal_reminder': AUTO_RENEWAL_NOTICE_DAYS };
   const upcomingNotices: UpcomingNotice[] = upcoming
     .map((row) => ({ email: row.email, kind: row.kind, label: emailKindLabel(row.kind), member: memberName(row.first_name, row.last_name), sendOn: noticeSendDate(row.target_date, noticeDays[row.kind] ?? 0, today), targetDate: row.target_date }))
@@ -137,7 +147,7 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
     .sort((left, right) => left.sendOn.localeCompare(right.sendOn) || left.member.localeCompare(right.member));
 
   return {
-    brevoAvailable: events !== null, from, renewalRows,
+    brevoAvailable: events !== null, from, issueRows, renewalRows,
     renewalTotals: totalsByKind(renewalEmails, checks), systemTotals: totalsByKind(systemEmails, checks), to: now, upcoming: upcomingNotices,
   };
 }
