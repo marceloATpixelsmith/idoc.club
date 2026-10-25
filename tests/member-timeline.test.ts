@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
+import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
 import { auditActor, auditTitle, brevoEntry, safeLink, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
@@ -82,4 +82,14 @@ test('events outside the requested range are dropped even when their record is s
   const entries = ['2026-10-01T10:00:00.000Z', '2026-10-10T10:00:00.000Z', '2026-10-20T10:00:00.000Z'].map((at) => ({ actor: 'user' as const, at, category: 'x', id: at, source: 'idoc' as const, title: at }));
   assert.deepEqual(withinRange(entries, '2026-10-05T00:00:00.000Z', '2026-10-15T23:59:59.999Z').map((entry) => entry.at), ['2026-10-10T10:00:00.000Z']);
   assert.match(readFileSync('lib/admin/member-timeline.ts', 'utf8'), /withinRange\(entries, fromIso, toIso\)/);
+});
+
+test('duplicate-click detection compares activity detail regardless of the key order the database returns', () => {
+  const sent = sanitizeActivityDetail({ browser: 'browser', host: 'idoc.club', kind: 'membership.grace_reminder', signedIn: false, slot: 'membership' });
+  const stored = { slot: 'membership', host: 'idoc.club', kind: 'membership.grace_reminder', browser: 'browser', signedIn: false }; // jsonb reorders keys
+  assert.notEqual(JSON.stringify(sent), JSON.stringify(stored));
+  assert.equal(canonicalActivityDetail(sent), canonicalActivityDetail(stored));
+  assert.notEqual(canonicalActivityDetail(sent), canonicalActivityDetail({ ...stored, signedIn: true }));
+  assert.equal(canonicalActivityDetail(null), canonicalActivityDetail(undefined));
+  assert.match(readFileSync('lib/activity/user-activity.ts', 'utf8'), /canonicalActivityDetail\(row\.detail/);
 });

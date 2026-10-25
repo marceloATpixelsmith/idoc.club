@@ -36,3 +36,10 @@ export function classifyUserAgent(userAgent: string | null | undefined): 'browse
   if (!value) return 'missing';
   return /bot|crawl|spider|preview|scanner|proofpoint|mimecast|barracuda|safelinks|urldefense|googleimageproxy|curl|python|java\/|go-http|node-fetch|headless/i.test(value) ? 'scanner' : 'browser';
 }
+
+/** A stable string for comparing two detail objects: the database stores detail as JSONB, which does not preserve key order, so
+ * a plain JSON.stringify of the stored and incoming objects can differ for identical values. */
+export function canonicalActivityDetail(detail: Record<string, unknown> | null | undefined): string {
+  if (!detail) return 'null';
+  return JSON.stringify(Object.entries(detail).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)));
+}

@@ -4,7 +4,7 @@ import { and, eq, gt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { userActivityEvents } from '@/lib/db/schema';
 import { currentRequestId } from '@/lib/observability/request-id';
-import { sanitizeActivityDetail, type UserActivityDetail, type UserActivityEvent } from './user-activity-events';
+import { canonicalActivityDetail, sanitizeActivityDetail, type UserActivityDetail, type UserActivityEvent } from './user-activity-events';
 
 const DEDUPE_WINDOW_MS = 60_000;
 
@@ -18,7 +18,7 @@ export async function recordUserActivity(userId: number, event: UserActivityEven
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
     const recent = await db.select({ detail: userActivityEvents.detail, outcome: userActivityEvents.outcome }).from(userActivityEvents)
       .where(and(eq(userActivityEvents.userId, userId), eq(userActivityEvents.event, event), gt(userActivityEvents.occurredAt, since)));
-    if (recent.some((row) => row.outcome === outcome && JSON.stringify(row.detail) === JSON.stringify(detail))) return;
+    if (recent.some((row) => row.outcome === outcome && canonicalActivityDetail(row.detail as Record<string, unknown> | null) === canonicalActivityDetail(detail))) return;
     await db.insert(userActivityEvents).values({
       detail,
       event,
