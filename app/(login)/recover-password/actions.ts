@@ -167,8 +167,9 @@ export const resendPasswordResetOtp = validatedAction(z.object({}), async (_data
         await requestAccountLink(pending.email, 'migration_activation', origin, { ...defaultTiming, sleep: async () => undefined });
       }
     }
-    await equalizeAnonymousResponse(startedAt, defaultTiming);
   }
+  // Every branch (eligible member, imported, TOTP-protected, unknown) takes the same minimum time.
+  await equalizeAnonymousResponse(startedAt, defaultTiming);
   return { success: 'If email verification is available for this account, a new code was sent.' };
 }, { skipCsrf: true });
 

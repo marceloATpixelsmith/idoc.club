@@ -63,4 +63,8 @@ test('password-reset resend preserves the resolved subject for delivery-failure 
   const resendBranch = actions.slice(actions.indexOf('export const resendPasswordResetOtp'));
   assert.match(resendBranch,
     /issueEmailOtp\(pending\.email, 'password_reset', \{ origin, userId: pending\.subjectId \}\)/);
+  // The response-time floor must run after every branch, including the one that issues the emailed code, so
+  // pressing Resend cannot reveal which addresses are eligible for email recovery.
+  assert.ok(resendBranch.lastIndexOf('equalizeAnonymousResponse(startedAt, defaultTiming)') >
+    resendBranch.indexOf('issueEmailOtp(pending.email'));
 });
