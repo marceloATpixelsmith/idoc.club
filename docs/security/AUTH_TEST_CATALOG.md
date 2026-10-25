@@ -616,7 +616,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** high
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-BOT-001, AUTH-BOT-002
-- **CI coverage:** mapped — `tests/turnstile-contract.test.ts`, `tests/turnstile-retry-restore.test.ts`, `tests/turnstile-widget-resilience.test.ts`, `tests/security-e2e/member-signup.spec.ts`
+- **CI coverage:** mapped — `tests/turnstile-contract.test.ts`, `tests/turnstile-retry-restore.test.ts`, `tests/turnstile-widget-resilience.test.ts`, `tests/security-e2e/member-signup.spec.ts`, `tests/security-e2e/turnstile-widget-behavior.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
 
 ### Preconditions

@@ -1135,7 +1135,8 @@
           "tests/turnstile-contract.test.ts",
           "tests/turnstile-retry-restore.test.ts",
           "tests/turnstile-widget-resilience.test.ts",
-          "tests/security-e2e/member-signup.spec.ts"
+          "tests/security-e2e/member-signup.spec.ts",
+          "tests/security-e2e/turnstile-widget-behavior.spec.ts"
         ],
         "rationale": ""
       },
