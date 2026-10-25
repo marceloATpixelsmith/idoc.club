@@ -109,13 +109,16 @@ test('an imported member shows when they registered on the old site and when the
 });
 
 test('audit rows that repeat another source are skipped only when that source was actually read', () => {
-  const both = { accountEmails: true, payments: true };
-  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', both), true);
+  const both = { accountEmails: true, paymentIds: new Set(['7']) };
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', both, '7'), true);
   assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued', both), true);
   assert.equal(auditDuplicatesAnotherSource('account.password_reset.delivery_succeeded', both), true);
   assert.equal(auditDuplicatesAnotherSource('account.session.signed_in', both), false);
-  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', { accountEmails: true, payments: false }), false);
-  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued', { accountEmails: false, payments: true }), false);
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', { accountEmails: true, paymentIds: null }, '7'), false);
+  // A backdated payment sits outside the range, so its audit row is the only evidence and must stay.
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', both, '8'), false);
+  assert.equal(auditDuplicatesAnotherSource('admin.payment.recorded', both, null), false);
+  assert.equal(auditDuplicatesAnotherSource('account.migration_activation.delivery_queued', { accountEmails: false, paymentIds: new Set() }), false);
   assert.equal(auditTitle('account.session.signed_in'), 'Signed in');
 });
 
