@@ -67,6 +67,7 @@ export default async function CommunicationsPage() {
         <UpcomingNoticesTable rows={report.upcoming.map((row, index) => ({ email: row.email, goesOut: `${row.sendOn}T00:00:00.000Z`, id: `upcoming-${index}`, member: row.member, notice: row.label, target: isoToDisplay(row.targetDate) }))} />
       </AdminFormSection>,
       issues: <AdminFormSection description="Every email from the last 7 days that Brevo did not confirm as delivered (bounced or blocked, missing from Brevo's log), plus emails still queued or given up on. Use the address to look the message up in Brevo's transactional log." title="Emails to investigate">
+        {report.brevoAvailable && report.issueRows.length === 0 ? <p className="rounded-lg border border-emerald-400/40 bg-emerald-950/20 p-4 text-sm text-emerald-200" role="status">Every email sent in this period was confirmed as delivered by Brevo.</p> : null}
         <DeliveryIssuesTable rows={report.issueRows.map((row, index) => ({ brevo: row.brevo ? BREVO_CHECK_LABELS[row.brevo] : undefined, email: row.email ?? undefined, group: row.group, id: `issue-${index}`, member: row.member, notice: row.label, queue: queueLabel(row.status), sent: row.sentAt?.toISOString() }))} />
       </AdminFormSection>,
     }} /></div>

@@ -36,7 +36,7 @@ export function DeliveryIssuesTable({ rows }: { rows: ReadOnlyRow[] }) {
     <AdminReadOnlyTable
       columns={[{ id: 'sent', label: 'Sent' }, { id: 'group', label: 'Group' }, { id: 'notice', label: 'Email type' }, { id: 'member', label: 'Member' }, { id: 'email', label: 'Email' }, { id: 'queue', label: 'Queue' }, { id: 'brevo', label: 'Brevo log' }]}
       dateColumn="sent"
-      empty="Every email in this period was confirmed as delivered."
+      empty="No matching delivery issues."
       filterColumns={['group', 'notice', 'brevo']}
       rows={rows}
       searchLabel="Search delivery issues"
