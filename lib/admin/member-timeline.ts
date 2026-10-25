@@ -108,21 +108,21 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
     const step = emailStepTitles(label);
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: step.queued });
+    if (!row.sent_at && !row.dead_lettered_at) add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `notice-${row.id}-queued`, title: step.queued });
     if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `notice-${row.id}-sent`, title: step.sent });
     if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `notice-${row.id}-dead`, title: step.failed });
   }
   for (const row of deliveries) {
     const label = EMAIL_KIND_LABELS[`account.${row.purpose}`] ?? `${row.purpose} email`;
     const step = emailStepTitles(label);
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `delivery-${row.id}-queued`, title: step.queued });
+    if (!row.sent_at && !row.dead_lettered_at && !row.terminal_at) add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `delivery-${row.id}-queued`, title: step.queued });
     if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `delivery-${row.id}-sent`, title: step.sent });
     if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `delivery-${row.id}-dead`, title: step.failed });
     if (row.terminal_at) add({ actor: 'server', at: iso(row.terminal_at), category: 'Email', detail: errorCodeLabel(text(row.terminal_reason)), id: `delivery-${row.id}-terminal`, title: step.cancelled });
   }
   for (const row of securityNotices) {
     const step = emailStepTitles(securityNoticeLabel(String(row.kind)));
-    add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `security-${row.id}-queued`, title: step.queued });
+    if (!row.sent_at && !row.dead_lettered_at) add({ actor: 'server', at: iso(row.created_at), category: 'Email', id: `security-${row.id}-queued`, title: step.queued });
     if (row.sent_at) add({ actor: 'server', at: iso(row.sent_at), category: 'Email', id: `security-${row.id}-sent`, title: step.sent });
     if (row.dead_lettered_at) add({ actor: 'server', at: iso(row.dead_lettered_at), category: 'Email', detail: errorCodeLabel(text(row.last_error_code)), id: `security-${row.id}-dead`, title: step.failed });
   }

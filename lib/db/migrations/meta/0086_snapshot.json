@@ -1,5 +1,5 @@
 {
-  "id": "cd0bac2a-3dd9-42ef-bafc-5d19d35e3109",
+  "id": "ac775d31-2ceb-41e6-82a2-6aa0aec9f45d",
   "prevId": "950b7264-89d8-44f1-9f43-b404d4a8d167",
   "version": "7",
   "dialect": "postgresql",
@@ -566,7 +566,7 @@
       "checkConstraints": {
         "administrator_table_preferences_identifier_check": {
           "name": "administrator_table_preferences_identifier_check",
-          "value": "\"idoc\".\"administrator_table_preferences\".\"table_identifier\" in ('memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline')"
+          "value": "\"idoc\".\"administrator_table_preferences\".\"table_identifier\" ~ '^[a-z][a-z_]{2,39}$'"
         }
       },
       "isRLSEnabled": false

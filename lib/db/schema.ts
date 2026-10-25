@@ -396,7 +396,7 @@ export const administratorTablePreferences = idocSchema.table('administrator_tab
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('administrator_table_preferences_user_table_unique').on(table.userId, table.tableIdentifier),
-  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} in ('memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline')`),
+  check('administrator_table_preferences_identifier_check', sql`${table.tableIdentifier} ~ '^[a-z][a-z_]{2,39}$'`),
 ]);
 
 /** Member-owned, immutable threaded support. Public UUIDs keep internal sequence IDs out of URLs. */

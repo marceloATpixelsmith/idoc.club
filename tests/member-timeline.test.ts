@@ -176,15 +176,16 @@ test('clearing the date filter means all dates, and Brevo is only asked for the 
 
 test('the timeline filters are saved per administrator like every table, never in the URL', () => {
   const preferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
-  assert.match(preferences, /ADMIN_TABLE_IDENTIFIERS = \[[^\]]*'member_timeline'\]/);
+  assert.match(preferences, /ADMIN_TABLE_IDENTIFIERS = \[[^\]]*'member_timeline'[^\]]*\]/);
+  for (const id of ['communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'reconciliation_findings', 'member_notifications']) assert.match(preferences, new RegExp(`${id}: readOnlyReportTable`));
   assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), to: date,[\s\S]*?\}\)\.strict\(\)/);
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /persistTablePreferences\('member_timeline'/);
   assert.match(drawer, /initialPreferences/);
   assert.doesNotMatch(drawer, /useSearchParams|router\./);
   assert.match(readFileSync('app/(dashboard)/admin/members/page.tsx', 'utf8'), /getTablePreferences\('member_timeline'\)/);
-  assert.match(readFileSync('lib/db/migrations/0086_member_timeline_table_preference.sql', 'utf8'), /'member_timeline'/);
-  assert.match(readFileSync('lib/db/schema.ts', 'utf8'), /'seminar_registrations', 'member_timeline'/);
+  assert.match(readFileSync('lib/db/migrations/0086_member_timeline_table_preference.sql', 'utf8'), /table_identifier ~ '\^\[a-z\]\[a-z_\]\{2,39\}\$'/);
+  assert.match(readFileSync('lib/db/schema.ts', 'utf8'), /table_identifier|tableIdentifier\}\s*~ '\^\[a-z\]\[a-z_\]\{2,39\}\$'/);
 });
 
 test('the timeline sorts through a standard Sort button, with no separate quick-range or order buttons', () => {
@@ -194,4 +195,26 @@ test('the timeline sorts through a standard Sort button, with no separate quick-
   assert.match(drawer, /Oldest first/);
   assert.match(drawer, /Newest first/);
   assert.doesNotMatch(drawer, /Last 30 days<\/Button>/);
+});
+
+test('only sent emails are listed; one that has not been sent yet shows a single waiting row', () => {
+  const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
+  assert.equal((data.match(/if \(!row\.sent_at && !row\.dead_lettered_at/g) ?? []).length, 3);
+  assert.equal(emailStepTitles('Renewal reminder').queued, 'Email waiting to be sent: Renewal reminder');
+});
+
+test('every read-only admin table saves its view per administrator (search, filters, sort, columns, page size), restored on refresh', () => {
+  const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
+  assert.match(table, /persistTablePreferences\(preferenceKey, preferences\)/);
+  for (const key of ['q', 'filters', 'sort', 'columns', 'columnOrder', 'pageSize']) assert.match(table, new RegExp(`preferences\\.${key} =`), key);
+  const comms = readFileSync('app/(dashboard)/admin/communications/communications-tables.tsx', 'utf8');
+  for (const id of ['communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues']) assert.match(comms, new RegExp(`preferenceKey="${id}"`));
+  assert.match(readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8'), /getTablePreferences\('communications_renewal_notices'\)/);
+  assert.match(readFileSync('app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'utf8'), /preferenceKey="reconciliation_findings"/);
+  assert.match(readFileSync('app/(dashboard)/admin/members/member-detail-sheet.tsx', 'utf8'), /preferenceKey="member_notifications"/);
+  // Every <AdminReadOnlyTable> in the admin must save its view: no table may be added without a preference key.
+  for (const file of ['app/(dashboard)/admin/communications/communications-tables.tsx', 'app/(dashboard)/admin/reconciliation/reconciliation-findings-table.tsx', 'app/(dashboard)/admin/members/member-detail-sheet.tsx']) {
+    const source = readFileSync(file, 'utf8');
+    assert.equal((source.match(/<AdminReadOnlyTable/g) ?? []).length, (source.match(/preferenceKey=/g) ?? []).length, file);
+  }
 });

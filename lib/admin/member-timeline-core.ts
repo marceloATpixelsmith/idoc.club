@@ -162,7 +162,7 @@ export function emailStepTitles(label: string): { cancelled: string; failed: str
   return {
     cancelled: `Email cancelled before it was sent: ${label}`,
     failed: `Email could not be sent and the server gave up: ${label}`,
-    queued: `Email queued for sending: ${label}`,
+    queued: `Email waiting to be sent: ${label}`,
     sent: `Email handed to our email service (Brevo): ${label}`,
   };
 }

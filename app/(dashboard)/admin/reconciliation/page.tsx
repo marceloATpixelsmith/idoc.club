@@ -5,6 +5,7 @@ import { count, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, reconciliationIgnores } from '@/lib/db/schema';
 import { getLastReconciliationRun, listReconciliationFindings, requireAccountAccess } from '@/lib/membership/data-access';
+import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { AuthorizationError, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 import { ignoreFindings, isIgnorableFinding, restoreIgnoredIssue } from '@/lib/payments/reconciliation-remediation';
 import { rehearsalReadStatus } from '@/lib/payments/rehearsal-read-client';
@@ -80,6 +81,7 @@ export default async function AdminReconciliationPage({ searchParams }: { search
   requireAdministrator(actor);
   const requestedPage = Number((await searchParams)?.ignoredPage);
   const ignoredPage = Number.isInteger(requestedPage) && requestedPage > 1 ? requestedPage : 1;
+  const reconciliationPreferences = await getTablePreferences('reconciliation_findings');
   const [lastRun, findings, ignored, [{ total: ignoredTotal }]] = await Promise.all([getLastReconciliationRun(), listReconciliationFindings(),
     db.select().from(reconciliationIgnores).orderBy(desc(reconciliationIgnores.ignoredAt), desc(reconciliationIgnores.id)).limit(IGNORED_PAGE_SIZE).offset((ignoredPage - 1) * IGNORED_PAGE_SIZE),
     db.select({ total: count() }).from(reconciliationIgnores)]);
@@ -128,6 +130,7 @@ export default async function AdminReconciliationPage({ searchParams }: { search
         findingsTable={
           <ReconciliationFindingsTable
             ignoreAction={ignoreSelected}
+            initialPreferences={reconciliationPreferences}
             rows={findings.map((finding) => ({
               id: String(finding.id), category: ['seminar_payment_conflict', 'refund_conflict', 'dispute', 'chargeback'].includes(finding.kind) ? 'Seminar' : 'Membership', kind: findingTypeLabel(finding),
               summary: finding.summary, stripeId: stripeIdForFinding(finding), member: finding.profileId ? 'View member' : '—',

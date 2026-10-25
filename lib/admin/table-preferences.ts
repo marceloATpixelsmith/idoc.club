@@ -12,7 +12,11 @@ import { SUPPORT_CATEGORIES, SUPPORT_STATUSES } from '@/lib/support/inbox';
 import { NEWS_AUDIENCES, NEWS_STATUSES, NEWS_TYPES } from '@/lib/news/articles';
 import { APPROVAL_STATUSES, PAYMENT_STATUSES, SEMINAR_STATUSES } from '@/lib/seminars/status';
 
-export const ADMIN_TABLE_IDENTIFIERS = ['memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline'] as const;
+// The database only checks the SHAPE of an identifier (migration 0086), so adding a saved view here never needs a migration; this list is the allow-list.
+export const ADMIN_TABLE_IDENTIFIERS = [
+  'memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline',
+  'communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'reconciliation_findings', 'member_notifications',
+] as const;
 export type AdminTableIdentifier = typeof ADMIN_TABLE_IDENTIFIERS[number];
 const identifierSchema = z.enum(ADMIN_TABLE_IDENTIFIERS);
 const text = (max = 200) => z.string().trim().max(max).optional();
@@ -38,6 +42,11 @@ const newsAccessFilter = multiToken(NEWS_AUDIENCES, 200).refine((value) => {
   return broad.length === 0 || (broad.length === 1 && selected.length === 1);
 }, 'Invalid access combination');
 
+// Every read-only report table (AdminReadOnlyTable) saves the same view: search text, column filters (JSON), sort (JSON), shown columns, column order and page size.
+const readOnlyReportTable = z.object({
+  columnOrder: text(800), columns: z.array(z.string().max(40)).max(30).optional(), filters: text(4000), pageSize, q: text(200), sort: text(1000),
+}).strict();
+
 const schemas = {
   memberships: z.object({
     columns: columns(['name', 'email', 'type', 'officialStatus', 'status', 'federation', 'country', 'region', 'expires', 'lastPayment', 'updated', 'actions']),
@@ -55,6 +64,11 @@ const schemas = {
   seminars: z.object({ columns: columns(['title', 'status', 'start', 'end', 'deadline', 'prices', 'registrations']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), membershipRequirement: text(30), page, pageSize, q: text(), sort: text(1000), status: multiToken(SEMINAR_STATUSES, 200), to: date }).strict(),
   seminar_registrations: z.object({ approvalStatus: multiToken(APPROVAL_STATUSES, 500), columns: columns(['registrant', 'seminar', 'approval', 'status', 'registered']), columnOrder: text(500), direction, filters: text(4000), from: date, joinOperator: z.enum(['and', 'or']).optional(), page, pageSize, paymentStatus: multiToken(PAYMENT_STATUSES, 500), q: text(), seminarId: z.string().trim().max(4000).refine((value) => value.split(',').every((item) => /^\d+$/.test(item.trim())), 'Invalid selection').optional(), sort: text(1000), to: date }).strict(),
   // The Member timeline drawer's own view: its date range (`all` = the filter was cleared), which actors are hidden, and the sort order.
+  communications_renewal_notices: readOnlyReportTable,
+  communications_upcoming_notices: readOnlyReportTable,
+  communications_delivery_issues: readOnlyReportTable,
+  reconciliation_findings: readOnlyReportTable,
+  member_notifications: readOnlyReportTable,
   member_timeline: z.object({
     all: z.literal('1').optional(), from: date, hide: multiToken(['user', 'server', 'administrator'], 60), newestFirst: z.literal('1').optional(), to: date,
   }).strict(),
