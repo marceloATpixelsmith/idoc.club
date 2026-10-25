@@ -88,13 +88,12 @@ test('canonical field and button geometry stays at the reference 48px height', (
   assert.match(authStyles, /border-radius: 10px/);
 });
 
-test('real Turnstile stays flexible and defaults to the canonical light theme for every canonical auth reference usage', () => {
+test('real Turnstile stays flexible and defaults to the dark theme for every canonical auth reference usage', () => {
   assert.match(turnstile, /size: 'flexible'/);
   // Every canonical auth reference call site (sign-up, sign-in, recover-password, MFA) never
-  // passes a theme prop, so this default is what they all actually render -- a caller outside that
-  // reference design (the public contact page, which never loads canonical-reference.css) may
-  // override it; see components/turnstile-widget.tsx's theme prop doc comment.
-  assert.match(turnstile, /theme = 'light'/);
+  // passes a theme prop, so this default is what they all actually render on the dark auth shell;
+  // see components/turnstile-widget.tsx's theme prop doc comment.
+  assert.match(turnstile, /theme = 'dark'/);
   assert.match(turnstile, /NEXT_PUBLIC_TURNSTILE_SITE_KEY/);
   assert.match(turnstile, /challenges\.cloudflare\.com\/turnstile/);
 });
