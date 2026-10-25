@@ -82,7 +82,7 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const add = (entry: Omit<TimelineEntry, 'source'> & { source?: TimelineEntry['source'] }) => entries.push({ source: 'idoc', ...entry });
 
   const [audit, devices, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
-    safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at, after_json #>> '{payment,id}' as payment_id from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Devices', client<Row[]>`select authenticated_at, device_label from auth_sessions where user_id = ${userId} and authenticated_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and device_label is not null order by authenticated_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Email queue', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Account emails', client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
@@ -98,10 +98,10 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
     (() => { const start = brevoWindowStart(range.fromKey, range.toKey); return start ? brevoEvents(email, start, range.toKey) : Promise.resolve([] as BrevoTimelineEvent[]); })(),
   ]);
 
-  const loaded = { accountEmails: !unavailableSources.includes('Account emails'), payments: !unavailableSources.includes('Payments') };
+  const loaded = { accountEmails: !unavailableSources.includes('Account emails'), paymentIds: unavailableSources.includes('Payments') ? null : new Set(payments.map((payment) => String(payment.id))) };
   // A sign-in's browser and device come from the session record created at the same moment (within a few seconds).
   const deviceAt = (at: string) => devices.find((device) => Math.abs(Date.parse(iso(device.authenticated_at)) - Date.parse(at)) < 5000)?.device_label as string | undefined;
-  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded))) {
+  for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded, entry.payment_id as string | null))) {
     const at = iso(row.created_at);
     add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at, category: String(row.action).startsWith('account.session') ? 'Sign-in' : 'Account', detail: [row.action === 'account.session.signed_in' ? deviceAt(at) : undefined, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `audit-${row.id}`, title: auditTitle(row.action as string) });
   }

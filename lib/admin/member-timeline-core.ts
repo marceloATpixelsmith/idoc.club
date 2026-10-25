@@ -211,8 +211,10 @@ export function withinRange(entries: TimelineEntry[], fromIso: string, toIso: st
 /** Audit rows that repeat a fact another source already shows in more detail (the payment row carries the amount; the email-queue
  * rows carry queued/sent/failed), so the timeline does not list the same event twice. A row is skipped only when the source that
  * replaces it was actually read; otherwise the audit entry stays as the evidence. */
-export function auditDuplicatesAnotherSource(action: string, loaded: { accountEmails: boolean; payments: boolean }): boolean {
-  if (action === 'admin.payment.recorded') return loaded.payments;
+export function auditDuplicatesAnotherSource(action: string, loaded: { accountEmails: boolean; paymentIds: ReadonlySet<string> | null }, paymentId?: string | null): boolean {
+  // A backdated payment is listed at its paid date, which can fall outside the range that still contains the audit row, so the
+  // audit row is dropped only when that exact payment is among the rows shown.
+  if (action === 'admin.payment.recorded') return Boolean(paymentId) && loaded.paymentIds !== null && loaded.paymentIds.has(String(paymentId));
   return loaded.accountEmails && /^account\.[a-z_]+\.delivery_(queued|succeeded)$/.test(action);
 }
 
