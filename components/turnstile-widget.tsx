@@ -29,15 +29,14 @@ const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render
 export function TurnstileWidget({
   action,
   onVerify,
-  theme = 'light',
+  theme = 'dark',
 }: {
   action: string;
   onVerify?: (token: string) => void;
-  /** The canonical auth reference (docs/13) forces every sign-in/sign-up/recovery usage to the
-   * light theme regardless of this app's own dark background -- see
-   * tests/canonical-auth-reference-adoption.test.ts and tests/turnstile-widget-resilience.test.ts,
-   * which pin that contract. A caller outside that reference design (e.g. the public contact page,
-   * which never loads components/auth/canonical-reference.css) may override it. */
+  /** Every auth page and the public contact page sit on this app's dark background, so the widget
+   * defaults to Cloudflare's dark theme; a white challenge on the dark auth shell looked broken. See
+   * tests/canonical-auth-reference-adoption.test.ts, tests/turnstile-widget-resilience.test.ts and
+   * tests/contact-page.test.ts, which pin it. A caller on a light surface may override it. */
   theme?: 'dark' | 'light';
 }) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
