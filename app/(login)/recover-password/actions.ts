@@ -26,6 +26,7 @@ import { mfaStore } from '@/lib/auth/mfa/store';
 import { CompromisedMfaKeyError, resolveMfaEncryptionKey, verifyActiveTotp } from '@/lib/auth/mfa/totp';
 import { auditCompromisedMfaKeyRejection } from '@/lib/auth/mfa/compromised-key-audit';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
+import { requestAccountLink } from '@/lib/membership/account-recovery';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
 
@@ -49,6 +50,14 @@ export const startPasswordReset = validatedAction(startResetSchema, async ({ ema
   }
   const [user] = await db.select({ accountState: users.accountState, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
   const eligible = user && ['active', 'onboarding'].includes(user.accountState);
+  // An imported (legacy) member has no usable password yet, so there is nothing to reset: the email
+  // link that sets their first password is the activation link. Without this they reached the code
+  // screen with no email ever sent. The screen they land on is identical to every other case.
+  // The helper's own timing pad is disabled so this branch is not slower than the others; the single
+  // equalizeAnonymousResponse below pads every outcome to the same duration.
+  if (user?.accountState === 'migrated_pending') {
+    await requestAccountLink(email, 'migration_activation', origin, { ...defaultTiming, sleep: async () => undefined });
+  }
   let continuation: Parameters<typeof startPendingPasswordReset>[0] = { email, stage: 'email-otp' };
   if (eligible) {
     const role = await authoritativeMfaRole(user.id);
