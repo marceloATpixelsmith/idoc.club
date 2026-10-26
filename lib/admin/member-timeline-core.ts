@@ -253,19 +253,6 @@ export function formatTimelineTime(iso: string): string {
   return iso.slice(11, 23);
 }
 
-export type TimelineSortKey = 'time' | 'type' | 'who';
-export const TIMELINE_SORT_LABELS: Record<TimelineSortKey, string> = { time: 'Time', type: 'Type', who: 'Who' };
-
-/** Sorts by the chosen column; rows that tie keep time order, so a column sort still reads as a story. */
-export function sortTimelineBy(entries: TimelineEntry[], key: TimelineSortKey, direction: 'asc' | 'desc' = 'asc'): TimelineEntry[] {
-  const sign = direction === 'asc' ? 1 : -1;
-  const value = (entry: TimelineEntry) => (key === 'who' ? TIMELINE_ACTOR_LABELS[entry.actor] : key === 'type' ? entry.category : '');
-  return [...entries].sort((left, right) => {
-    const byColumn = key === 'time' ? 0 : value(left).localeCompare(value(right));
-    return sign * (byColumn || Date.parse(left.at) - Date.parse(right.at)) || left.id.localeCompare(right.id);
-  });
-}
-
 const prettyRole = (role: string) => role.replace(/_/g, ' ');
 
 /** An administrator's action as one line: "<name> did something[: role] because <reason>", with the name, role and reason in bold. */
@@ -276,4 +263,22 @@ export function administratorSegments(input: { action: string; name: string | un
   if (input.role && /^admin\.role\./.test(input.action)) segments.push({ bold: true, text: prettyRole(input.role) });
   if (input.reason) segments.push({ text: ' because ' }, { bold: true, text: input.reason });
   return { segments, title: segments.map((segment) => segment.text).join('') };
+}
+
+export type TimelineSort = { desc: boolean; id: string };
+const SORT_COLUMNS = ['time', 'who', 'type'];
+
+/** The saved sort, restored. The current format is a JSON list of `{ id, desc }`; earlier saved views used a single column name in
+ * `sort` (`who` or `type`) plus `dir: 'desc'` or `newestFirst: '1'` for the order, so those are translated rather than lost. */
+export function restoreTimelineSorting(saved: { dir?: unknown; newestFirst?: unknown; sort?: unknown } | null | undefined): TimelineSort[] {
+  if (!saved) return [];
+  if (typeof saved.sort === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(saved.sort);
+      if (Array.isArray(parsed)) return parsed.filter((item): item is TimelineSort => Boolean(item) && typeof item === 'object' && SORT_COLUMNS.includes((item as { id?: string }).id ?? '') && typeof (item as { desc?: unknown }).desc === 'boolean');
+    } catch { /* an earlier format: a bare column name */ }
+  }
+  const desc = saved.dir === 'desc' || saved.newestFirst === '1';
+  const column = saved.sort === 'who' || saved.sort === 'type' ? saved.sort : 'time';
+  return column === 'time' && !desc ? [] : [{ desc, id: column }];
 }
