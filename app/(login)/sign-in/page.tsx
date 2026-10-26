@@ -6,7 +6,7 @@ import { readUiFlash } from '@/lib/ui/flash-state';
 import { FlashConsumer } from '@/components/ui/flash-banner';
 
 function signInFlashMessage(code: Awaited<ReturnType<typeof readUiFlash>>) {
-  if (code === 'google-link-required') return { error: 'That Google identity is not linked to this existing IDOC account. Sign in with your password first.' };
+  if (code === 'google-link-required') return { error: 'Google sign-in is not connected to your IDOC account yet. Sign in with your email and password this time, then open My Security and choose Connect Google under Google Sign-In. After that, the Google button will sign you in.' };
   if (code === 'google-auth-failed') return { error: 'Google authentication could not be completed. Please try again.' };
   if (code === 'google-unlink-failed') return { error: 'Your new password was saved, but Google could not be disconnected. Sign in with your new password and try disconnecting Google again.' };
   if (code === 'password-created') return { success: 'Your new password is ready. Sign in with it below.' };
