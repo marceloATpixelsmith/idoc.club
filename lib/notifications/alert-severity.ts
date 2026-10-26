@@ -50,6 +50,8 @@ export const ALERT_SEVERITY = {
   'admin.seminar_registration': 'informational',
   'admin.technical_error': 'high',
   'admin.billing_payment_issue': 'high',
+  // A support conversation was submitted, replied to, closed or reopened; routed to that category's assignees.
+  'admin.support_activity': 'informational',
 } as const satisfies Record<string, AlertSeverity>;
 
 export type AlertKind = keyof typeof ALERT_SEVERITY;

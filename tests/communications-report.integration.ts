@@ -28,7 +28,7 @@ test('the Communications report runs against PostgreSQL: weekly totals, renewal 
   assert.ok(report.upcoming.some((row) => row.kind === 'membership.expiration_reminder' && row.email === user.email));
 });
 
-test('the new-members summary runs against PostgreSQL and counts only the last seven days', async () => {
+test('the new-members summary runs against PostgreSQL and counts only genuine sign-ups from the last seven days', async () => {
   const admin = await adminUser();
   const recent = await createUser();
   await createProfile(recent.id);
@@ -36,6 +36,11 @@ test('the new-members summary runs against PostgreSQL and counts only the last s
   const oldProfile = await createProfile(old.id);
   await sql`update idoc.profiles set created_at = now() - interval '30 days' where id = ${oldProfile.id}`;
   await createMembership(oldProfile.id);
+  // A member created by the legacy WordPress import is not a new member, however recently the import ran.
+  const imported = await createUser();
+  const importedProfile = await createProfile(imported.id);
+  await sql`update idoc.profiles set legacy_wp_user_id = ${900_000 + importedProfile.id} where id = ${importedProfile.id}`;
+  await createMembership(importedProfile.id);
   const summary = await asAdmin(admin.id, () => listNewMembersLastWeek());
   assert.equal(summary.total, 1);
   assert.equal(summary.recent.length, 1);
