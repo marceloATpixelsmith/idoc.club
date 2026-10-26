@@ -12,10 +12,11 @@ import { emailButton, emailNoticeCard, escapeHtml, IDOC_EMAIL_COLORS, renderTran
 //   seminars          -> a member registers for (or is registered for) a seminar
 //   technical_support -> an application error a visitor or member ran into
 //   billing_membership-> a Stripe payment that failed, was declined or otherwise did not succeed
+//   any support category -> a support conversation was submitted, replied to, closed or reopened (matching its category)
 // Delivery is best-effort and bounded: it never throws and never delays or changes the user-facing action that
 // triggered it. When no administrator is assigned to the category it falls back to the operations mailbox.
 
-export type AdminNotificationCategory = 'billing_membership' | 'seminars' | 'technical_support';
+export type AdminNotificationCategory = 'billing_membership' | 'other' | 'seminars' | 'suggestion' | 'technical_support';
 export type DetailRow = readonly [label: string, value: string | number | null | undefined];
 
 // The structured logger requires a request context and a pre-registered event name; these notifications also fire from
@@ -27,14 +28,16 @@ function warn(event: string, meta: Record<string, string>) {
 const DELIVERY_TIMEOUT_MS = 5_000;
 const MAX_VALUE_LENGTH = 1_500;
 
-export async function listCategoryRecipientEmails(category: AdminNotificationCategory): Promise<string[]> {
-  const rows = await client<{ email: string }[]>`select distinct u.email from support_category_defaults d
+/** `excludeUserId` omits the administrator who performed the action, but never triggers the operations-mailbox fallback. */
+export async function listCategoryRecipientEmails(category: AdminNotificationCategory, excludeUserId?: number | null): Promise<string[]> {
+  const rows = await client<{ email: string; id: number }[]>`select distinct u.id,u.email from support_category_defaults d
     join users u on u.id=d.administrator_user_id and u.account_state='active'
     where d.category=${category}
       and exists(select 1 from application_roles r where r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin'))`;
-  const emails = rows.map((row) => row.email).filter(Boolean);
+  const emails = rows.filter((row) => row.id !== excludeUserId).map((row) => row.email).filter(Boolean);
+  if (rows.length > 0) return emails;
   const fallback = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL?.trim();
-  return emails.length > 0 ? emails : fallback ? [fallback] : [];
+  return fallback ? [fallback] : [];
 }
 
 function clip(value: string): string {
@@ -67,6 +70,8 @@ export interface AdminEventEmail {
   details: readonly DetailRow[];
   /** Extra titled blocks (for example a stack trace) rendered after the details table. */
   extraSections?: readonly { bodyHtml: string; title: string }[];
+  /** The administrator who caused the event; they are not emailed about their own action. */
+  excludeUserId?: number | null;
   footerNote?: string;
   heading: string;
   intro: string;
@@ -79,7 +84,7 @@ export interface AdminEventEmail {
 /** Sends one branded email to every recipient assigned to the category. Never throws; resolves to the number sent. */
 export async function sendAdminEventEmail(event: AdminEventEmail): Promise<number> {
   try {
-    const recipients = await listCategoryRecipientEmails(event.category);
+    const recipients = await listCategoryRecipientEmails(event.category, event.excludeUserId);
     if (recipients.length === 0) {
       warn('no_recipient', { category: event.category, kind: event.kind });
       return 0;
