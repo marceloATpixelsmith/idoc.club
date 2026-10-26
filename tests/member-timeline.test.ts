@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, administratorSegments, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, sortTimelineBy, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -30,7 +30,7 @@ test('Brevo opens and clicks are the member; deliveries and bounces are the mail
   const at = '2026-10-24T07:43:37.000Z';
   assert.equal(brevoEntry({ at, event: 'opened', subject: 'Activate your IDOC account' }, 0).actor, 'user');
   assert.equal(brevoEntry({ at, event: 'delivered', subject: 'x' }, 1).actor, 'server');
-  assert.equal(brevoEntry({ at, event: 'hardBounces', reason: 'mailbox full', subject: 'x' }, 2).detail, 'mailbox full');
+  assert.equal(brevoEntry({ at, event: 'hardBounces', reason: 'mailbox full', subject: 'x' }, 2).detail, 'The address does not exist or refuses mail · mailbox full');
   const click = brevoEntry({ at, event: 'clicks', link: 'https://idoc.club/activate?token=SECRETSECRETSECRET', subject: 'x' }, 3);
   assert.equal(click.actor, 'user');
   assert.equal(click.detail, 'https://idoc.club/activate');
@@ -140,14 +140,14 @@ test('timeline times show milliseconds so events in the same second keep their o
 
 test('wording is plain English: no raw event codes or provider jargon in titles', () => {
   const at = '2026-10-24T07:43:37.000Z';
-  assert.match(brevoEntry({ at, event: 'loadedByProxy', subject: 'Your IDOC sign-in code' }, 0).title, /mail app automatically loaded/);
-  assert.match(brevoEntry({ at, event: 'loadedByProxy' }, 1).detail ?? '', /does not prove they read it/);
+  assert.equal(brevoEntry({ at, event: 'loadedByProxy', subject: 'Your IDOC sign-in code' }, 0).title, 'Their mail app loaded: “Your IDOC sign-in code”');
+  assert.equal(brevoEntry({ at, event: 'loadedByProxy' }, 1).detail, undefined);
   assert.equal(brevoEntry({ at, event: 'loadedByProxy' }, 2).actor, 'user');
   for (const event of ['requests', 'delivered', 'opened', 'clicks', 'hardBounces', 'softBounces', 'blocked', 'invalid', 'deferred', 'spam', 'unsubscribed', 'error', 'uniqueOpened']) {
     assert.doesNotMatch(brevoEntry({ at, event, subject: 'Hello' }, 3).title, /hardBounces|softBounces|loadedByProxy|uniqueOpened|requests\b/, event);
   }
   assert.equal(auditTitle('account.session.signed_in'), 'Signed in');
-  assert.equal(emailStepTitles('Renewal reminder').sent, 'Email handed to our email service (Brevo): Renewal reminder');
+  assert.equal(emailStepTitles('Renewal reminder').sent, 'Sent to Brevo: Renewal reminder');
   assert.equal(securityNoticeLabel('new_sign_in'), 'Security alert email (new sign-in)');
   assert.equal(otpPurposeLabel('login_verification'), 'sign-in code');
   assert.match(errorCodeLabel('member_launch_hold') ?? '', /switched off/);
@@ -181,7 +181,7 @@ test('the timeline filters are saved per administrator like every table, never i
   const preferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
   assert.match(preferences, /ADMIN_TABLE_IDENTIFIERS = \[[^\]]*'member_timeline'[^\]]*\]/);
   for (const id of ['communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'reconciliation_findings', 'member_notifications']) assert.match(preferences, new RegExp(`${id}: readOnlyReportTable`));
-  assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), to: date,[\s\S]*?\}\)\.strict\(\)/);
+  assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), dir: direction, from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), sort: z\.enum\(\['time', 'type', 'who'\]\)\.optional\(\), to: date,[\s\S]*?\}\)\.strict\(\)/);
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /persistTablePreferences\('member_timeline'/);
   assert.match(drawer, /initialPreferences/);
@@ -195,15 +195,16 @@ test('the timeline sorts through a standard Sort button, with no separate quick-
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /ArrowDownUp/);
   assert.match(drawer, />\s*Sort\s*</);
-  assert.match(drawer, /Oldest first/);
-  assert.match(drawer, /Newest first/);
+  assert.match(drawer, /Sort by column/);
+  assert.doesNotMatch(drawer, /setNewestFirst/);
+  assert.doesNotMatch(drawer, /via Brevo/);
   assert.doesNotMatch(drawer, /Last 30 days<\/Button>/);
 });
 
 test('only sent emails are listed; one that has not been sent yet shows a single waiting row', () => {
   const data = readFileSync('lib/admin/member-timeline.ts', 'utf8');
   assert.equal((data.match(/if \(!row\.sent_at && !row\.dead_lettered_at/g) ?? []).length, 3);
-  assert.equal(emailStepTitles('Renewal reminder').queued, 'Email waiting to be sent: Renewal reminder');
+  assert.equal(emailStepTitles('Renewal reminder').queued, 'Waiting to be sent: Renewal reminder');
 });
 
 test('every read-only admin table saves its view per administrator (search, filters, sort, columns, page size), restored on refresh', () => {
@@ -220,4 +221,38 @@ test('every read-only admin table saves its view per administrator (search, filt
     const source = readFileSync(file, 'utf8');
     assert.equal((source.match(/<AdminReadOnlyTable/g) ?? []).length, (source.match(/preferenceKey=/g) ?? []).length, file);
   }
+});
+
+test('Brevo rows read "what happened: which email" and never say "our email service" or add a via-Brevo tag', () => {
+  const at = '2026-10-24T07:43:37.000Z';
+  const titles = ['requests', 'delivered', 'opened', 'clicks', 'hardBounces', 'softBounces', 'blocked', 'invalid', 'deferred', 'spam', 'unsubscribed', 'error'].map((event) => brevoEntry({ at, event, subject: 'Hello' }, 0).title);
+  for (const title of titles) assert.match(title, /^[^:]+: “Hello”$/, title);
+  assert.equal(brevoEntry({ at, event: 'requests', subject: 'Hello' }, 0).title, 'Brevo accepted: “Hello”');
+  assert.equal(brevoEntry({ at, event: 'opened', subject: 'Hello' }, 0).title, 'Opened: “Hello”');
+  assert.ok(titles.every((title) => !/email service|via Brevo/i.test(title)));
+});
+
+test('sorting by a column keeps ties in time order, in either direction', () => {
+  const entry = (id: string, at: string, actor: 'administrator' | 'server' | 'user', category: string) => ({ actor, at, category, id, source: 'idoc' as const, title: id });
+  const rows = [entry('a', '2026-10-24T10:00:00.000Z', 'server', 'Email'), entry('b', '2026-10-24T09:00:00.000Z', 'user', 'Billing'), entry('c', '2026-10-24T08:00:00.000Z', 'server', 'Account'), entry('d', '2026-10-24T07:00:00.000Z', 'administrator', 'Email')];
+  assert.deepEqual(sortTimelineBy(rows, 'time').map((row) => row.id), ['d', 'c', 'b', 'a']);
+  assert.deepEqual(sortTimelineBy(rows, 'time', 'desc').map((row) => row.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(sortTimelineBy(rows, 'who').map((row) => row.id), ['d', 'b', 'c', 'a']);
+  assert.deepEqual(sortTimelineBy(rows, 'type').map((row) => row.id), ['c', 'b', 'd', 'a']);
+  assert.deepEqual(sortTimelineBy(rows, 'type', 'desc').map((row) => row.id), ['a', 'd', 'b', 'c']);
+});
+
+test('an administrator action is one line: name, what they did, role and reason in bold', () => {
+  const granted = administratorSegments({ action: 'admin.role.granted', name: 'Marcelo Lopes', reason: 'he is one', role: 'super_admin' });
+  assert.equal(granted.title, 'Marcelo Lopes assigned role: super admin because he is one');
+  assert.deepEqual(granted.segments.filter((segment) => segment.bold).map((segment) => segment.text), ['Marcelo Lopes', 'super admin', 'he is one']);
+  assert.equal(administratorSegments({ action: 'admin.role.revoked', name: 'Ana', role: 'editor' }).title, 'Ana removed role: editor');
+  assert.equal(administratorSegments({ action: 'admin.profile.updated', name: undefined }).title, 'An administrator edited their profile');
+});
+
+test('the timeline has a Type column of icons after Who, and column headings', () => {
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /TYPE_ICONS/);
+  assert.match(drawer, /What happened/);
+  assert.match(drawer, /\['type', 'Type'\]/);
 });

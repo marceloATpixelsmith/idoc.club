@@ -7,7 +7,7 @@ import { EMAIL_KIND_LABELS } from '@/lib/notifications/communications-report';
 import { USER_ACTIVITY_EVENTS, type UserActivityEvent } from '@/lib/activity/user-activity-events';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
-import { ACCOUNT_STATE_LABELS, accountMilestones, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, otpPurposeLabel, securityNoticeLabel, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
+import { ACCOUNT_STATE_LABELS, accountMilestones, administratorSegments, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, otpPurposeLabel, securityNoticeLabel, sortTimeline, timelineRange, withinRange, type BrevoTimelineEvent, type TimelineEntry } from './member-timeline-core';
 
 const ROW_LIMIT = 500;
 const BREVO_PAGE_SIZE = 500;
@@ -82,7 +82,7 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const add = (entry: Omit<TimelineEntry, 'source'> & { source?: TimelineEntry['source'] }) => entries.push({ source: 'idoc', ...entry });
 
   const [audit, devices, notices, deliveries, securityNotices, tokens, otps, activity, payments, seminars, seminarAudit, messages, consent, brevo] = await Promise.all([
-    safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at, after_json #>> '{payment,id}' as payment_id from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
+    safe('Audit trail', client<Row[]>`select id, actor_id, action, reason, created_at, after_json #>> '{payment,id}' as payment_id, coalesce(after_json ->> 'role', before_json ->> 'role') as role_name from audit_log where created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and ((entity_type = 'user' and entity_id = ${String(userId)}) or (entity_type = 'profile' and entity_id = ${String(profileId)}) or actor_id = ${userId}) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Devices', client<Row[]>`select authenticated_at, device_label from auth_sessions where user_id = ${userId} and authenticated_at between ${fromIso}::timestamptz and ${toIso}::timestamptz and device_label is not null order by authenticated_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Email queue', client<Row[]>`select id, kind, created_at, sent_at, dead_lettered_at, last_error_code, attempt_count from notification_outbox where profile_id = ${profileId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
     safe('Account emails', client<Row[]>`select id, purpose, created_at, sent_at, dead_lettered_at, terminal_at, terminal_reason, last_error_code from account_delivery_outbox where user_id = ${userId} and (created_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or sent_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or dead_lettered_at between ${fromIso}::timestamptz and ${toIso}::timestamptz or terminal_at between ${fromIso}::timestamptz and ${toIso}::timestamptz) order by created_at limit ${ROW_LIMIT}`, [] as Row[]),
@@ -101,9 +101,23 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   const loaded = { accountEmails: !unavailableSources.includes('Account emails'), paymentIds: unavailableSources.includes('Payments') ? null : new Set(payments.map((payment) => String(payment.id))) };
   // A sign-in's browser and device come from the session record created at the same moment (within a few seconds).
   const deviceAt = (at: string) => devices.find((device) => Math.abs(Date.parse(iso(device.authenticated_at)) - Date.parse(at)) < 5000)?.device_label as string | undefined;
+  // Administrator rows name the administrator, so look their names up once (a failed lookup just falls back to "An administrator").
+  const adminIds = [...new Set([...audit, ...seminarAudit].filter((row) => auditActor(row.actor_id as number | null, userId, row.action as string) === 'administrator' && typeof row.actor_id === 'number').map((row) => row.actor_id as number))];
+  const adminNames = new Map<number, string>();
+  if (adminIds.length > 0) {
+    try {
+      const people = await client<Row[]>`select u.id, u.email, p.first_name, p.last_name from users u left join profiles p on p.user_id = u.id where u.id = any(${adminIds})`;
+      for (const person of people) adminNames.set(person.id as number, [person.first_name, person.last_name].filter(Boolean).join(' ') || String(person.email));
+    } catch { /* names are a convenience */ }
+  }
+  const adminLine = (row: Row, withRole: boolean) => {
+    const line = administratorSegments({ action: row.action as string, name: adminNames.get(row.actor_id as number), reason: text(row.reason), role: withRole ? text(row.role_name) : undefined });
+    return { segments: line.segments, title: line.title };
+  };
   for (const row of audit.filter((entry) => !auditDuplicatesAnotherSource(entry.action as string, loaded, entry.payment_id as string | null))) {
     const at = iso(row.created_at);
-    add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at, category: String(row.action).startsWith('account.session') ? 'Sign-in' : 'Account', detail: [row.action === 'account.session.signed_in' ? deviceAt(at) : undefined, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `audit-${row.id}`, title: auditTitle(row.action as string) });
+    const byAdministrator = auditActor(row.actor_id as number | null, userId, row.action as string) === 'administrator';
+    add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at, category: String(row.action).startsWith('account.session') ? 'Sign-in' : 'Account', detail: byAdministrator ? undefined : [row.action === 'account.session.signed_in' ? deviceAt(at) : undefined, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `audit-${row.id}`, ...(byAdministrator ? adminLine(row, true) : { title: auditTitle(row.action as string) }) });
   }
   for (const row of notices) {
     const label = EMAIL_KIND_LABELS[row.kind as string] ?? (row.kind as string);
@@ -147,7 +161,10 @@ export async function getMemberTimeline(profileId: number, fromParam?: string | 
   // Registration actions come from the audit trail, which says whether the member or an administrator did it. A registration with no
   // audit row for its creation or cancellation (older records) falls back to the registration's own timestamps, attributed to the member.
   const audited = new Set(seminarAudit.map((row) => `${row.entity_id}:${row.action}`));
-  for (const row of seminarAudit) add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Seminar', detail: [row.title, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `seminar-audit-${row.id}`, title: auditTitle(row.action as string) });
+  for (const row of seminarAudit) {
+    const byAdministrator = auditActor(row.actor_id as number | null, userId, row.action as string) === 'administrator';
+    add({ actor: auditActor(row.actor_id as number | null, userId, row.action as string), at: iso(row.created_at), category: 'Seminar', detail: byAdministrator ? text(row.title) : [row.title, text(row.reason)].filter(Boolean).join(' · ') || undefined, id: `seminar-audit-${row.id}`, ...(byAdministrator ? adminLine(row, false) : { title: auditTitle(row.action as string) }) });
+  }
   for (const row of seminars) {
     const hasCreateAudit = ['member.seminar_registration.registered', 'admin.seminar_registration.created'].some((action) => audited.has(`${row.id}:${action}`));
     const hasCancelAudit = ['member.seminar_registration.canceled', 'admin.seminar_registration.status_changed'].some((action) => audited.has(`${row.id}:${action}`));
