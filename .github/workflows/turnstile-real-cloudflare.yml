@@ -1,0 +1,46 @@
+name: Turnstile real Cloudflare check
+
+# Loads the REAL Cloudflare Turnstile script with Cloudflare's published force-interactive test site key
+# and checks the user-visible contract the stubbed CI suite cannot: a challenge Cloudflare really presents
+# is on screen with room to be seen and clicked, Sign In stays disabled until it is solved, and solving it
+# enables Sign In. See playwright.turnstile-live.config.ts and tests/turnstile-live/.
+#
+# It runs the app locally on the runner with placeholder database settings, so it creates no account, sends
+# no email and touches no deployed environment. It needs outbound access to challenges.cloudflare.com, which
+# is why it is not a required PR check. The weekly schedule is an early warning that Cloudflare changed its
+# widget; a scheduled run only happens once this file is on the default branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+concurrency:
+  group: turnstile-real-cloudflare
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  forced-challenge:
+    name: Real Cloudflare forced challenge
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Run the real Cloudflare forced-challenge check
+        run: pnpm test:turnstile-live
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: turnstile-real-cloudflare-evidence
+          path: test-results/turnstile-live/
+          if-no-files-found: warn
+          retention-days: 7

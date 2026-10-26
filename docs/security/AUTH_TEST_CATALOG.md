@@ -618,6 +618,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Canonical controls:** AUTH-BOT-001, AUTH-BOT-002
 - **CI coverage:** mapped — `tests/turnstile-contract.test.ts`, `tests/turnstile-retry-restore.test.ts`, `tests/turnstile-widget-resilience.test.ts`, `tests/turnstile-signal.test.ts`, `tests/security-e2e/member-signup.spec.ts`, `tests/security-e2e/turnstile-widget-behavior.spec.ts`
 - **Live:** required; email=no; admin=no; destructive=no
+- **Automation:** automated — Staging uses Cloudflare's always-pass keys, so the runner proves the silent pass on every gated page and the visible fail-closed behavior when the Cloudflare script is blocked, and reports the case as partial. An interactive challenge cannot be solved on staging; CI (tests/security-e2e/turnstile-widget-behavior.spec.ts) and the manual/weekly 'Turnstile real Cloudflare check' workflow cover it.
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
@@ -627,6 +628,8 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 1. Run the normal human flow.
 2. Where safely possible, submit without/with invalid Turnstile proof or invoke the protected API directly.
 3. Verify the UI recovers from a failed challenge without losing unrelated form state.
+4. On staging (always-pass keys) open the sign-in, sign-up and recover-password pages, type a valid email without submitting, and confirm the submit button enables with no 'security check didn't load' message.
+5. With the Cloudflare script blocked, confirm the page shows the retry message, keeps the submit button disabled and sends no form request.
 
 ### PASS
 - Required bot proof is enforced server-side; invalid/missing proof fails closed; normal challenge succeeds; retry UX remains usable.
