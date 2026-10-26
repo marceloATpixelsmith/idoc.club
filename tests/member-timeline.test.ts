@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { accountMilestones, administratorSegments, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, administratorSegments, restoreTimelineSorting, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -251,4 +251,14 @@ test('every Type icon carries its own tooltip instead of the icon\'s code name',
   assert.match(drawer, /<Icon aria-label=\{label\} className="size-4" data-icon-tooltip=\{label\} role="img" \/>/);
   assert.match(drawer, /Account: Pointer/);
   assert.match(drawer, /Account: 'User Interaction'/);
+});
+
+test('a saved timeline sort is restored in the current format and from the earlier formats', () => {
+  assert.deepEqual(restoreTimelineSorting(null), []);
+  assert.deepEqual(restoreTimelineSorting({ sort: JSON.stringify([{ desc: true, id: 'who' }, { desc: false, id: 'nope' }]) }), [{ desc: true, id: 'who' }]);
+  assert.deepEqual(restoreTimelineSorting({ sort: 'who' }), [{ desc: false, id: 'who' }]);
+  assert.deepEqual(restoreTimelineSorting({ dir: 'desc', sort: 'type' }), [{ desc: true, id: 'type' }]);
+  assert.deepEqual(restoreTimelineSorting({ dir: 'desc' }), [{ desc: true, id: 'time' }]);
+  assert.deepEqual(restoreTimelineSorting({ newestFirst: '1' }), [{ desc: true, id: 'time' }]);
+  assert.deepEqual(restoreTimelineSorting({}), []);
 });
