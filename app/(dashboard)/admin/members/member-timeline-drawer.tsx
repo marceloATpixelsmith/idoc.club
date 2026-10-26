@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 import type { MemberTimeline } from '@/lib/admin/member-timeline';
-import { formatTimelineTime, TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
+import { formatTimelineTime, restoreTimelineSorting, TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
 import { formatTableDate } from '@/lib/format';
 
 const ACTOR_CLASS: Record<TimelineActor, string> = {
@@ -20,7 +20,6 @@ const ACTOR_CLASS: Record<TimelineActor, string> = {
 };
 const ACTORS: TimelineActor[] = ['user', 'server', 'administrator'];
 const time = formatTimelineTime;
-const SORT_COLUMN_IDS = ['time', 'who', 'type'];
 // The Sort button is the standard one every admin table uses (multi-column, saved per administrator), driving a headless table over the rows.
 const TIMELINE_COLUMNS: ColumnDef<TimelineEntry>[] = [
   { id: 'time', accessorFn: (entry) => Date.parse(entry.at), meta: { label: 'Time' } },
@@ -77,13 +76,7 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
     const hidden = typeof initialPreferences?.hide === 'string' ? initialPreferences.hide.split(',') : [];
     return { administrator: !hidden.includes('administrator'), server: !hidden.includes('server'), user: !hidden.includes('user') };
   });
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    if (typeof initialPreferences?.sort !== 'string') return [];
-    try {
-      const parsed: unknown = JSON.parse(initialPreferences.sort);
-      return Array.isArray(parsed) ? parsed.filter((item): item is { desc: boolean; id: string } => Boolean(item) && typeof item === 'object' && SORT_COLUMN_IDS.includes((item as { id?: string }).id ?? '') && typeof (item as { desc?: unknown }).desc === 'boolean') : [];
-    } catch { return []; }
-  });
+  const [sorting, setSorting] = useState<SortingState>(() => restoreTimelineSorting(initialPreferences));
   // Every change is saved for this administrator (database, not the URL), like the filters of every table, so a refresh restores them.
   const firstRender = useRef(true);
   useEffect(() => {

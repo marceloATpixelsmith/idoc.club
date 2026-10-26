@@ -264,3 +264,21 @@ export function administratorSegments(input: { action: string; name: string | un
   if (input.reason) segments.push({ text: ' because ' }, { bold: true, text: input.reason });
   return { segments, title: segments.map((segment) => segment.text).join('') };
 }
+
+export type TimelineSort = { desc: boolean; id: string };
+const SORT_COLUMNS = ['time', 'who', 'type'];
+
+/** The saved sort, restored. The current format is a JSON list of `{ id, desc }`; earlier saved views used a single column name in
+ * `sort` (`who` or `type`) plus `dir: 'desc'` or `newestFirst: '1'` for the order, so those are translated rather than lost. */
+export function restoreTimelineSorting(saved: { dir?: unknown; newestFirst?: unknown; sort?: unknown } | null | undefined): TimelineSort[] {
+  if (!saved) return [];
+  if (typeof saved.sort === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(saved.sort);
+      if (Array.isArray(parsed)) return parsed.filter((item): item is TimelineSort => Boolean(item) && typeof item === 'object' && SORT_COLUMNS.includes((item as { id?: string }).id ?? '') && typeof (item as { desc?: unknown }).desc === 'boolean');
+    } catch { /* an earlier format: a bare column name */ }
+  }
+  const desc = saved.dir === 'desc' || saved.newestFirst === '1';
+  const column = saved.sort === 'who' || saved.sort === 'type' ? saved.sort : 'time';
+  return column === 'time' && !desc ? [] : [{ desc, id: column }];
+}
