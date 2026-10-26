@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { canonicalActivityDetail, classifyUserAgent, sanitizeActivityDetail, USER_ACTIVITY_EVENTS } from '../lib/activity/user-activity-events.ts';
-import { accountMilestones, administratorSegments, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, sortTimelineBy, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
+import { accountMilestones, administratorSegments, auditActor, auditDuplicatesAnotherSource, auditTitle, brevoEntry, brevoWindowStart, emailStepTitles, errorCodeLabel, formatTimelineTime, otpPurposeLabel, safeLink, securityNoticeLabel, sortTimeline, timelineRange, withinRange } from '../lib/admin/member-timeline-core.ts';
 
 const now = new Date('2026-10-25T13:00:00Z');
 
@@ -181,7 +181,7 @@ test('the timeline filters are saved per administrator like every table, never i
   const preferences = readFileSync('lib/admin/table-preferences.ts', 'utf8');
   assert.match(preferences, /ADMIN_TABLE_IDENTIFIERS = \[[^\]]*'member_timeline'[^\]]*\]/);
   for (const id of ['communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'reconciliation_findings', 'member_notifications']) assert.match(preferences, new RegExp(`${id}: readOnlyReportTable`));
-  assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), dir: direction, from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), sort: z\.enum\(\['time', 'type', 'who'\]\)\.optional\(\), to: date,[\s\S]*?\}\)\.strict\(\)/);
+  assert.match(preferences, /member_timeline: z\.object\(\{[\s\S]*?all: z\.literal\('1'\)\.optional\(\), dir: direction, from: date, hide: multiToken\(\['user', 'server', 'administrator'\], 60\), newestFirst: z\.literal\('1'\)\.optional\(\), sort: text\(1000\), to: date,[\s\S]*?\}\)\.strict\(\)/);
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /persistTablePreferences\('member_timeline'/);
   assert.match(drawer, /initialPreferences/);
@@ -191,11 +191,10 @@ test('the timeline filters are saved per administrator like every table, never i
   assert.match(readFileSync('lib/db/schema.ts', 'utf8'), /table_identifier|tableIdentifier\}\s*~ '\^\[a-z\]\[a-z_\]\{2,39\}\$'/);
 });
 
-test('the timeline sorts through a standard Sort button, with no separate quick-range or order buttons', () => {
+test('the timeline sorts through the same Sort button every admin table uses, with no separate quick-range or order buttons', () => {
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
-  assert.match(drawer, /ArrowDownUp/);
-  assert.match(drawer, />\s*Sort\s*</);
-  assert.match(drawer, /Sort by column/);
+  assert.match(drawer, /<DataTableSortList table=\{table\} \/>/);
+  assert.doesNotMatch(drawer, /PopoverContent/);
   assert.doesNotMatch(drawer, /setNewestFirst/);
   assert.doesNotMatch(drawer, /via Brevo/);
   assert.doesNotMatch(drawer, /Last 30 days<\/Button>/);
@@ -232,16 +231,6 @@ test('Brevo rows read "what happened: which email" and never say "our email serv
   assert.ok(titles.every((title) => !/email service|via Brevo/i.test(title)));
 });
 
-test('sorting by a column keeps ties in time order, in either direction', () => {
-  const entry = (id: string, at: string, actor: 'administrator' | 'server' | 'user', category: string) => ({ actor, at, category, id, source: 'idoc' as const, title: id });
-  const rows = [entry('a', '2026-10-24T10:00:00.000Z', 'server', 'Email'), entry('b', '2026-10-24T09:00:00.000Z', 'user', 'Billing'), entry('c', '2026-10-24T08:00:00.000Z', 'server', 'Account'), entry('d', '2026-10-24T07:00:00.000Z', 'administrator', 'Email')];
-  assert.deepEqual(sortTimelineBy(rows, 'time').map((row) => row.id), ['d', 'c', 'b', 'a']);
-  assert.deepEqual(sortTimelineBy(rows, 'time', 'desc').map((row) => row.id), ['a', 'b', 'c', 'd']);
-  assert.deepEqual(sortTimelineBy(rows, 'who').map((row) => row.id), ['d', 'b', 'c', 'a']);
-  assert.deepEqual(sortTimelineBy(rows, 'type').map((row) => row.id), ['c', 'b', 'd', 'a']);
-  assert.deepEqual(sortTimelineBy(rows, 'type', 'desc').map((row) => row.id), ['a', 'd', 'b', 'c']);
-});
-
 test('an administrator action is one line: name, what they did, role and reason in bold', () => {
   const granted = administratorSegments({ action: 'admin.role.granted', name: 'Marcelo Lopes', reason: 'he is one', role: 'super_admin' });
   assert.equal(granted.title, 'Marcelo Lopes assigned role: super admin because he is one');
@@ -255,4 +244,11 @@ test('the timeline has a Type column of icons after Who, and column headings', (
   assert.match(drawer, /TYPE_ICONS/);
   assert.match(drawer, /What happened/);
   assert.match(drawer, /\['type', 'Type'\]/);
+});
+
+test('every Type icon carries its own tooltip instead of the icon\'s code name', () => {
+  const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
+  assert.match(drawer, /<Icon aria-label=\{label\} className="size-4" data-icon-tooltip=\{label\} role="img" \/>/);
+  assert.match(drawer, /Account: Pointer/);
+  assert.match(drawer, /Account: 'User Interaction'/);
 });

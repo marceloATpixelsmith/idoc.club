@@ -1,15 +1,16 @@
 'use client';
 
-import { ArrowDownUp, CalendarDays, CircleDot, CreditCard, LifeBuoy, LogIn, Mail, UserRound, type LucideIcon } from 'lucide-react';
+import { type ColumnDef, type SortingState, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
+import { CalendarDays, CircleDot, CreditCard, LifeBuoy, LogIn, Mail, Pointer, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
 import { DateRangeFilter } from '@/components/admin/date-range-filter';
 import { persistTablePreferences } from '@/components/admin/table-preference-sync';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DataTableSortList } from '@/components/data-table/data-table-sort-list';
 import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 import type { MemberTimeline } from '@/lib/admin/member-timeline';
-import { formatTimelineTime, sortTimelineBy, TIMELINE_ACTOR_LABELS, TIMELINE_SORT_LABELS, type TimelineActor, type TimelineEntry, type TimelineSortKey } from '@/lib/admin/member-timeline-core';
+import { formatTimelineTime, TIMELINE_ACTOR_LABELS, type TimelineActor, type TimelineEntry } from '@/lib/admin/member-timeline-core';
 import { formatTableDate } from '@/lib/format';
 
 const ACTOR_CLASS: Record<TimelineActor, string> = {
@@ -19,14 +20,24 @@ const ACTOR_CLASS: Record<TimelineActor, string> = {
 };
 const ACTORS: TimelineActor[] = ['user', 'server', 'administrator'];
 const time = formatTimelineTime;
-const SORT_KEYS: TimelineSortKey[] = ['time', 'who', 'type'];
+const SORT_COLUMN_IDS = ['time', 'who', 'type'];
+// The Sort button is the standard one every admin table uses (multi-column, saved per administrator), driving a headless table over the rows.
+const TIMELINE_COLUMNS: ColumnDef<TimelineEntry>[] = [
+  { id: 'time', accessorFn: (entry) => Date.parse(entry.at), meta: { label: 'Time' } },
+  { id: 'who', accessorFn: (entry) => TIMELINE_ACTOR_LABELS[entry.actor], meta: { label: 'Who' } },
+  { id: 'type', accessorFn: (entry) => entry.category, meta: { label: 'Type' } },
+];
+// Tooltip text where it differs from the category name (the hand pointer reads "User Interaction").
+const TYPE_LABELS: Record<string, string> = { Account: 'User Interaction' };
 // One icon per kind of event; the Type column shows only the icon (its name is the tooltip and the screen-reader label).
-const TYPE_ICONS: Record<string, LucideIcon> = { Account: UserRound, Billing: CreditCard, Email: Mail, Seminar: CalendarDays, 'Sign-in': LogIn, Support: LifeBuoy };
+const TYPE_ICONS: Record<string, LucideIcon> = { Account: Pointer, Billing: CreditCard, Email: Mail, Seminar: CalendarDays, 'Sign-in': LogIn, Support: LifeBuoy };
 const ROW_COLUMNS = 'grid-cols-[7.5rem_6.5rem_2.5rem_1fr]';
 
 function TypeIcon({ category }: { category: string }) {
   const Icon = TYPE_ICONS[category] ?? CircleDot;
-  return <span aria-label={category} className="flex justify-center text-muted-foreground" role="img" title={category}><Icon className="size-4" /></span>;
+  const label = TYPE_LABELS[category] ?? category;
+  // The label sits on the icon itself: otherwise the site-wide icon tooltips fall back to the icon's code name (for example "User Round").
+  return <span className="flex justify-center text-muted-foreground"><Icon aria-label={label} className="size-4" data-icon-tooltip={label} role="img" /></span>;
 }
 
 function EntryText({ entry }: { entry: TimelineEntry }) {
@@ -66,8 +77,13 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
     const hidden = typeof initialPreferences?.hide === 'string' ? initialPreferences.hide.split(',') : [];
     return { administrator: !hidden.includes('administrator'), server: !hidden.includes('server'), user: !hidden.includes('user') };
   });
-  const [sortKey, setSortKey] = useState<TimelineSortKey>(initialPreferences?.sort === 'who' || initialPreferences?.sort === 'type' ? initialPreferences.sort : 'time');
-  const [direction, setDirection] = useState<'asc' | 'desc'>(initialPreferences?.dir === 'desc' || initialPreferences?.newestFirst === '1' ? 'desc' : 'asc');
+  const [sorting, setSorting] = useState<SortingState>(() => {
+    if (typeof initialPreferences?.sort !== 'string') return [];
+    try {
+      const parsed: unknown = JSON.parse(initialPreferences.sort);
+      return Array.isArray(parsed) ? parsed.filter((item): item is { desc: boolean; id: string } => Boolean(item) && typeof item === 'object' && SORT_COLUMN_IDS.includes((item as { id?: string }).id ?? '') && typeof (item as { desc?: unknown }).desc === 'boolean') : [];
+    } catch { return []; }
+  });
   // Every change is saved for this administrator (database, not the URL), like the filters of every table, so a refresh restores them.
   const firstRender = useRef(true);
   useEffect(() => {
@@ -78,10 +94,9 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
     if (range.from) preferences.from = range.from;
     if (range.to) preferences.to = range.to;
     if (hidden.length > 0) preferences.hide = hidden.join(',');
-    if (sortKey !== 'time') preferences.sort = sortKey;
-    if (direction === 'desc') preferences.dir = 'desc';
+    if (sorting.length > 0) preferences.sort = JSON.stringify(sorting);
     void persistTablePreferences('member_timeline', preferences).catch(() => undefined);
-  }, [direction, range, shown, sortKey]);
+  }, [range, shown, sorting]);
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -104,12 +119,16 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
   }, [profileId, range]);
 
   const data = state.status === 'ready' ? state.data : null;
-  const entries = useMemo(() => {
-    const visible = (data?.entries ?? []).filter((entry) => shown[entry.actor]);
-    return sortTimelineBy(visible, sortKey, direction);
-  }, [data, direction, shown, sortKey]);
+  const visibleEntries = useMemo(() => (data?.entries ?? []).filter((entry) => shown[entry.actor]), [data, shown]);
+  const table = useReactTable({
+    columns: TIMELINE_COLUMNS, data: visibleEntries, getCoreRowModel: getCoreRowModel(), getRowId: (entry) => entry.id,
+    getSortedRowModel: getSortedRowModel(), onSortingChange: setSorting, state: { sorting },
+  });
+  // The data arrives oldest first, so rows that tie on a column keep time order. Day headings only make sense when time is the sort.
+  const entries = table.getRowModel().rows.map((row) => row.original);
+  const byTime = sorting.length === 0 || (sorting.length === 1 && sorting[0].id === 'time');
   const days = useMemo(() => {
-    if (sortKey !== 'time') return [];
+    if (!byTime) return [];
     const groups: { day: string; items: TimelineEntry[] }[] = [];
     for (const entry of entries) {
       const day = entry.at.slice(0, 10);
@@ -117,7 +136,8 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
       if (last?.day === day) last.items.push(entry); else groups.push({ day, items: [entry] });
     }
     return groups;
-  }, [entries, sortKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byTime, visibleEntries, sorting]);
   const counts = useMemo(() => Object.fromEntries(ACTORS.map((actor) => [actor, (data?.entries ?? []).filter((entry) => entry.actor === actor).length])) as Record<TimelineActor, number>, [data]);
 
   return (
@@ -150,27 +170,7 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
           <DateRangeFilter from={range.all ? undefined : range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange(from || to ? { from, to } : { all: true })} to={range.all ? undefined : range.to ?? data?.to} />
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button className="h-8 font-normal" data-idoc-table-control type="button" variant="outline">
-                <ArrowDownUp className="text-muted-foreground" />
-                Sort
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-64 space-y-2 p-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-gold">Sort by column</p>
-              <div className="grid gap-2" role="radiogroup" aria-label="Sort column">
-                {SORT_KEYS.map((key) => (
-                  <Button aria-checked={sortKey === key} className="justify-start font-normal" key={key} onClick={() => setSortKey(key)} role="radio" size="sm" type="button" variant={sortKey === key ? 'secondary' : 'outline'}>{TIMELINE_SORT_LABELS[key]}</Button>
-                ))}
-              </div>
-              <p className="text-xs font-bold uppercase tracking-wider text-gold">Order</p>
-              <div className="grid gap-2" role="radiogroup" aria-label="Sort order">
-                <Button aria-checked={direction === 'asc'} className="justify-start font-normal" onClick={() => setDirection('asc')} role="radio" size="sm" type="button" variant={direction === 'asc' ? 'secondary' : 'outline'}>{sortKey === 'time' ? 'Oldest first' : 'A to Z'}</Button>
-                <Button aria-checked={direction === 'desc'} className="justify-start font-normal" onClick={() => setDirection('desc')} role="radio" size="sm" type="button" variant={direction === 'desc' ? 'secondary' : 'outline'}>{sortKey === 'time' ? 'Newest first' : 'Z to A'}</Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <DataTableSortList table={table} />
           {range.all ? <span className="text-sm text-muted-foreground">Showing all dates</span> : null}
           <div className="flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Who did it">
             {ACTORS.map((actor) => (
@@ -198,11 +198,11 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
           <div className="space-y-3">
             <div aria-hidden="true" className={`grid ${ROW_COLUMNS} gap-3 px-3 text-xs font-bold uppercase tracking-wider text-muted-foreground`}>
               {([['time', 'Time (UTC)'], ['who', 'Who'], ['type', 'Type']] as const).map(([key, label]) => (
-                <span className={key === 'type' ? 'text-center' : undefined} key={key}>{label}{sortKey === key ? (direction === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+                <span className={key === 'type' ? 'text-center' : undefined} key={key}>{label}{table.getColumn(key)?.getIsSorted() === 'asc' ? ' ▲' : table.getColumn(key)?.getIsSorted() === 'desc' ? ' ▼' : ''}</span>
               ))}
               <span>What happened</span>
             </div>
-            {sortKey === 'time' ? days.map((group) => (
+            {byTime ? days.map((group) => (
               <section key={group.day}>
                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-gold">{formatTableDate(`${group.day}T00:00:00.000Z`)}</h3>
                 <ol className="space-y-2">{group.items.map((entry) => <TimelineRow entry={entry} key={entry.id} />)}</ol>
