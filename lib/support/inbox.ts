@@ -68,7 +68,7 @@ export async function createConversation(input: { body: unknown; category: unkno
     const existing = await sql<{ public_id: string }[]>`
       select c.public_id from support_messages m join support_conversations c on c.id=m.conversation_id
       where m.author_user_id=${actor.id} and m.idempotency_key=${idempotencyKey}::uuid limit 1`;
-    if (existing[0]) return { created: false, publicId: existing[0].public_id };
+    if (existing[0]) return { created: false, messageId: null, publicId: existing[0].public_id };
     const defaults = await sql<{ administrator_user_id: number }[]>`select d.administrator_user_id from support_category_defaults d
       join users u on u.id=d.administrator_user_id and u.account_state='active' where d.category=${category}
       and exists(select 1 from application_roles r where r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin'))`;
@@ -76,13 +76,13 @@ export async function createConversation(input: { body: unknown; category: unkno
     const rows = await sql<{ id: number; public_id: string }[]>`
       insert into support_conversations (member_user_id,category,subject,status,assigned_admin_user_id,member_read_at)
       values (${actor.id},${category},${subject},'open',${assigned[0] ?? null},now()) returning id,public_id`;
-    await sql`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
-      values (${rows[0].id},${actor.id},'member',${body},${idempotencyKey}::uuid)`;
+    const [message] = await sql<{ id: number }[]>`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
+      values (${rows[0].id},${actor.id},'member',${body},${idempotencyKey}::uuid) returning id`;
     for (const administratorId of assigned) await sql`insert into support_conversation_administrators(conversation_id,administrator_user_id)
       values(${rows[0].id},${administratorId}) on conflict do nothing`;
-    return { created: true, publicId: rows[0].public_id };
+    return { created: true, messageId: message.id, publicId: rows[0].public_id };
   });
-  if (result.created) deferAdminNotification(() => notifySupportActivity({ activity: 'submitted', actorUserId: actor.id, publicId: result.publicId }));
+  if (result.created) deferAdminNotification(() => notifySupportActivity({ activity: 'submitted', actorUserId: actor.id, messageId: result.messageId, publicId: result.publicId }));
   return result.publicId;
 }
 
@@ -136,9 +136,9 @@ export async function replyAsMember(input: { body: unknown; idempotencyKey: unkn
     const inserted = await sql`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'member',${body},${key}::uuid) on conflict (author_user_id,idempotency_key) do nothing returning id`;
     if (inserted[0]) await sql`update support_conversations set status='member_replied',updated_at=now(),member_read_at=now() where id=${rows[0].id}`;
-    return Boolean(inserted[0]);
+    return inserted[0] ? Number(inserted[0].id) : null;
   });
-  if (replied) deferAdminNotification(() => notifySupportActivity({ activity: 'member_reply', actorUserId: actor.id, publicId }));
+  if (replied !== null) deferAdminNotification(() => notifySupportActivity({ activity: 'member_reply', actorUserId: actor.id, messageId: replied, publicId }));
 }
 
 export async function listEligibleAdministrators() {
@@ -301,9 +301,9 @@ export async function replyAsAdministrator(input: { body: unknown; idempotencyKe
     const inserted = await sql`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'admin',${body},${key}::uuid) on conflict (author_user_id,idempotency_key) do nothing returning id`;
     if (inserted[0]) await sql`update support_conversations set status='admin_responded',updated_at=now(),admin_read_at=now() where id=${rows[0].id}`;
-    return Boolean(inserted[0]);
+    return inserted[0] ? Number(inserted[0].id) : null;
   });
-  if (replied) deferAdminNotification(() => notifySupportActivity({ activity: 'admin_reply', actorUserId: actor.id, publicId }));
+  if (replied !== null) deferAdminNotification(() => notifySupportActivity({ activity: 'admin_reply', actorUserId: actor.id, messageId: replied, publicId }));
 }
 
 export async function setConversationAssignment(publicIdValue: unknown, administratorValues: unknown[]) {

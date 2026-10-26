@@ -77,14 +77,14 @@ const SUPPORT_ACTIVITY_COPY: Record<SupportActivity, { heading: string; intro: s
 };
 
 /** Emails the administrators assigned to the conversation's category. `actorUserId` is excluded from the recipients. */
-export async function notifySupportActivity(input: { activity: SupportActivity; actorUserId: number; publicId: string }): Promise<void> {
+export async function notifySupportActivity(input: { activity: SupportActivity; actorUserId: number; /** The message that triggered the event; its text is what the email shows, not whatever is newest by the time it is sent. */ messageId?: number | null; publicId: string }): Promise<void> {
   try {
     const [row] = await client<{
       category: AdminNotificationCategory; email: string; first_name: string | null; last_name: string | null; message_body: string | null;
       message_id: number | null; status: string; subject: string;
     }[]>`select c.category,c.status,c.subject,coalesce(u.email_display,u.email) email,p.first_name,p.last_name,lm.id message_id,lm.body message_body
       from support_conversations c join users u on u.id=c.member_user_id left join profiles p on p.user_id=u.id
-      left join lateral (select m.id,m.body from support_messages m where m.conversation_id=c.id order by m.created_at desc,m.id desc limit 1) lm on true
+      left join support_messages lm on lm.id=${input.messageId ?? null} and lm.conversation_id=c.id
       where c.public_id=${input.publicId}::uuid`;
     if (!row) return;
     const copy = SUPPORT_ACTIVITY_COPY[input.activity];

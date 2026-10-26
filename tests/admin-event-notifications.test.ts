@@ -51,7 +51,9 @@ test('support submissions, replies and closures notify the conversation category
     assert.ok(inbox.includes(`'${activity}'`), `${activity} must raise a support notification`);
   }
   assert.match(inbox, /if \(result\.created\) deferAdminNotification/);
-  assert.match(inbox, /if \(replied\) deferAdminNotification/);
+  assert.equal((inbox.match(/messageId: (result\.messageId|replied)/g) ?? []).length, 3);
+  assert.match(alerts, /left join support_messages lm on lm\.id=\$\{input\.messageId \?\? null\} and lm\.conversation_id=c\.id/);
+  assert.match(inbox, /if \(replied !== null\) deferAdminNotification/);
   assert.equal((inbox.match(/if \(rows\[0\]\.status === next\) return false;/g) ?? []).length, 2);
 });
 
