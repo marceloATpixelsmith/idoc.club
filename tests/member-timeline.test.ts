@@ -129,7 +129,7 @@ test('each timeline source fails on its own instead of blanking the timeline, an
   assert.match(data, /unavailableSources/);
   const drawer = readFileSync('app/(dashboard)/admin/members/member-timeline-drawer.tsx', 'utf8');
   assert.match(drawer, /Some sources could not be read/);
-  assert.match(drawer, /Account history/);
+  assert.doesNotMatch(drawer, /Account history/);
 });
 
 test('timeline times show milliseconds so events in the same second keep their order', () => {

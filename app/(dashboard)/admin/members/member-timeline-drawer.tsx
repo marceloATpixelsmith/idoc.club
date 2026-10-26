@@ -148,26 +148,6 @@ export function MemberTimelineDrawer({ initialPreferences, profileId }: { initia
           {data ? <p className="text-sm text-muted-foreground">{data.member.email}</p> : null}
         </div>
 
-        {data ? (
-          <section aria-label="Account history" className="rounded-lg border p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gold">Account history</h3>
-              <span className="rounded-full border px-2 py-0.5 text-xs">{data.accountStatus}</span>
-              <span className="text-xs text-muted-foreground">Always shown, whatever the date range.</span>
-            </div>
-            <ol className="mt-3 space-y-2">
-              {data.milestones.map((milestone) => (
-                <li className={`grid ${ROW_COLUMNS} items-start gap-3 text-sm`} key={milestone.id}>
-                  <span className="font-mono text-muted-foreground">{formatTableDate(milestone.at)}{milestone.id === 'milestone-registered-old-site' ? '' : <span className="block">{time(milestone.at)}</span>}</span>
-                  <span className={`w-fit rounded-full border px-2 py-0.5 text-xs ${ACTOR_CLASS[milestone.actor]}`}>{TIMELINE_ACTOR_LABELS[milestone.actor]}</span>
-                  <TypeIcon category={milestone.category} />
-                  <EntryText entry={milestone} />
-                </li>
-              ))}
-            </ol>
-          </section>
-        ) : null}
-
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
           <DateRangeFilter from={range.all ? undefined : range.from ?? data?.from} label="Date range" onChange={(from, to) => setRange(from || to ? { from, to } : { all: true })} to={range.all ? undefined : range.to ?? data?.to} />
           <DataTableSortList table={table} />
