@@ -253,19 +253,6 @@ export function formatTimelineTime(iso: string): string {
   return iso.slice(11, 23);
 }
 
-export type TimelineSortKey = 'time' | 'type' | 'who';
-export const TIMELINE_SORT_LABELS: Record<TimelineSortKey, string> = { time: 'Time', type: 'Type', who: 'Who' };
-
-/** Sorts by the chosen column; rows that tie keep time order, so a column sort still reads as a story. */
-export function sortTimelineBy(entries: TimelineEntry[], key: TimelineSortKey, direction: 'asc' | 'desc' = 'asc'): TimelineEntry[] {
-  const sign = direction === 'asc' ? 1 : -1;
-  const value = (entry: TimelineEntry) => (key === 'who' ? TIMELINE_ACTOR_LABELS[entry.actor] : key === 'type' ? entry.category : '');
-  return [...entries].sort((left, right) => {
-    const byColumn = key === 'time' ? 0 : value(left).localeCompare(value(right));
-    return sign * (byColumn || Date.parse(left.at) - Date.parse(right.at)) || left.id.localeCompare(right.id);
-  });
-}
-
 const prettyRole = (role: string) => role.replace(/_/g, ' ');
 
 /** An administrator's action as one line: "<name> did something[: role] because <reason>", with the name, role and reason in bold. */
