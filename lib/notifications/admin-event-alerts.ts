@@ -4,13 +4,13 @@ import type Stripe from 'stripe';
 import { after } from 'next/server';
 import { client } from '@/lib/db/drizzle';
 import { PAYMENT_STATUS_LABELS, APPROVAL_STATUS_LABELS, type ApprovalStatus, type PaymentStatus } from '@/lib/seminars/status';
-import { adminUrl, type DetailRow, preformatted, sendAdminEventEmail } from './admin-event-notifications';
+import { adminUrl, type AdminNotificationCategory, type DetailRow, preformatted, sendAdminEventEmail } from './admin-event-notifications';
 import { escapeHtml } from './email-template';
 import { pathWithoutQuery, scrubErrorText, shouldSendErrorNotification } from './error-report-text';
 
 export { pathWithoutQuery };
 
-// The three event families that notify category-assigned administrators (see admin-event-notifications.ts).
+// The event families that notify category-assigned administrators (see admin-event-notifications.ts).
 // Every function here is best-effort and never throws, so a notification problem can never fail a registration,
 // a webhook acknowledgement or an error response.
 
@@ -58,6 +58,46 @@ export async function notifySeminarRegistration(registrationId: number, source: 
       heading: 'New seminar registration', intro: `<b>${escapeHtml(name)}</b> is registered for <b>${escapeHtml(row.title)}</b>.`,
       kind: 'admin.seminar_registration', messageKey: `seminar-registration-${registrationId}-${Date.parse(row.registered_at.toISOString())}`,
       subject: `IDOC: new seminar registration — ${row.title} (${name})`,
+    });
+  } catch { /* best effort */ }
+}
+
+// --- Support inbox --------------------------------------------------------------------------------------------
+
+export type SupportActivity = 'admin_reply' | 'closed_by_administrator' | 'closed_by_member' | 'member_reply' | 'reopened_by_administrator' | 'reopened_by_member' | 'submitted';
+
+const SUPPORT_ACTIVITY_COPY: Record<SupportActivity, { heading: string; intro: string; subject: string }> = {
+  admin_reply: { heading: 'Support reply sent', intro: 'An administrator replied to a support conversation.', subject: 'support reply sent' },
+  closed_by_administrator: { heading: 'Support conversation closed', intro: 'An administrator closed a support conversation.', subject: 'support conversation closed' },
+  closed_by_member: { heading: 'Support conversation closed by the member', intro: 'The member closed their own support conversation.', subject: 'support conversation closed by member' },
+  member_reply: { heading: 'Member replied to support', intro: 'A member replied in an existing support conversation.', subject: 'member reply in support' },
+  reopened_by_administrator: { heading: 'Support conversation reopened', intro: 'An administrator reopened a support conversation.', subject: 'support conversation reopened' },
+  reopened_by_member: { heading: 'Support conversation reopened by the member', intro: 'The member reopened their own support conversation.', subject: 'support conversation reopened by member' },
+  submitted: { heading: 'New support conversation', intro: 'A member submitted a new support conversation.', subject: 'new support conversation' },
+};
+
+/** Emails the administrators assigned to the conversation's category. `actorUserId` is excluded from the recipients. */
+export async function notifySupportActivity(input: { activity: SupportActivity; actorUserId: number; publicId: string }): Promise<void> {
+  try {
+    const [row] = await client<{
+      category: AdminNotificationCategory; email: string; first_name: string | null; last_name: string | null; message_body: string | null;
+      message_id: number | null; status: string; subject: string;
+    }[]>`select c.category,c.status,c.subject,coalesce(u.email_display,u.email) email,p.first_name,p.last_name,lm.id message_id,lm.body message_body
+      from support_conversations c join users u on u.id=c.member_user_id left join profiles p on p.user_id=u.id
+      left join lateral (select m.id,m.body from support_messages m where m.conversation_id=c.id order by m.created_at desc,m.id desc limit 1) lm on true
+      where c.public_id=${input.publicId}::uuid`;
+    if (!row) return;
+    const copy = SUPPORT_ACTIVITY_COPY[input.activity];
+    const name = `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim();
+    const hasMessage = input.activity === 'submitted' || input.activity === 'member_reply' || input.activity === 'admin_reply';
+    const link = adminUrl(`/admin/support/${input.publicId}`);
+    await sendAdminEventEmail({
+      action: link ? { href: link, label: 'Open conversation' } : null, category: row.category, excludeUserId: input.actorUserId,
+      details: [['Subject', row.subject], ['Category', row.category.replace(/_/g, ' ')], ['Member', name], ['Member email', row.email], ['Status', row.status.replace(/_/g, ' ')]],
+      extraSections: hasMessage && row.message_body ? [{ bodyHtml: preformatted(row.message_body), title: 'Message' }] : [],
+      heading: copy.heading, intro: escapeHtml(copy.intro), kind: 'admin.support_activity',
+      messageKey: `support-${input.publicId}-${input.activity}-${row.message_id ?? 0}-${Date.now()}`,
+      subject: `IDOC: ${copy.subject} — ${row.subject}`,
     });
   } catch { /* best effort */ }
 }

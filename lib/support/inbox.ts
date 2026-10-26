@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 import { listDate, many } from '@/lib/admin/resource-list-query';
 import { client } from '@/lib/db/drizzle';
+import { deferAdminNotification, notifySupportActivity } from '@/lib/notifications/admin-event-alerts';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { AuthorizationError, isAdministrator, requireAdministrator, requireSuperAdmin } from '@/lib/membership/authorization';
 
@@ -63,11 +64,11 @@ export async function createConversation(input: { body: unknown; category: unkno
   const category = parse(categorySchema, input.category);
   const idempotencyKey = parse(keySchema, input.idempotencyKey);
   const subject = parse(subjectSchema, input.subject);
-  return client.begin(async (sql) => {
+  const result = await client.begin(async (sql) => {
     const existing = await sql<{ public_id: string }[]>`
       select c.public_id from support_messages m join support_conversations c on c.id=m.conversation_id
       where m.author_user_id=${actor.id} and m.idempotency_key=${idempotencyKey}::uuid limit 1`;
-    if (existing[0]) return existing[0].public_id;
+    if (existing[0]) return { created: false, publicId: existing[0].public_id };
     const defaults = await sql<{ administrator_user_id: number }[]>`select d.administrator_user_id from support_category_defaults d
       join users u on u.id=d.administrator_user_id and u.account_state='active' where d.category=${category}
       and exists(select 1 from application_roles r where r.user_id=u.id and r.revoked_at is null and r.role in ('administrator','super_admin'))`;
@@ -79,8 +80,10 @@ export async function createConversation(input: { body: unknown; category: unkno
       values (${rows[0].id},${actor.id},'member',${body},${idempotencyKey}::uuid)`;
     for (const administratorId of assigned) await sql`insert into support_conversation_administrators(conversation_id,administrator_user_id)
       values(${rows[0].id},${administratorId}) on conflict do nothing`;
-    return rows[0].public_id;
+    return { created: true, publicId: rows[0].public_id };
   });
+  if (result.created) deferAdminNotification(() => notifySupportActivity({ activity: 'submitted', actorUserId: actor.id, publicId: result.publicId }));
+  return result.publicId;
 }
 
 export async function listOwnConversations() {
@@ -126,14 +129,16 @@ export async function getOwnConversation(publicIdValue: unknown) {
 export async function replyAsMember(input: { body: unknown; idempotencyKey: unknown; publicId: unknown }) {
   const actor = await requireSupportMember();
   const body = parse(messageSchema, input.body); const key = parse(keySchema, input.idempotencyKey); const publicId = parse(publicIdSchema, input.publicId);
-  await client.begin(async (sql) => {
+  const replied = await client.begin(async (sql) => {
     const rows = await sql<{ id: number; status: string }[]>`select id,status from support_conversations where public_id=${publicId}::uuid and member_user_id=${actor.id} for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
     if (rows[0].status === 'closed') throw new SupportValidationError('Closed conversations cannot receive replies.');
     const inserted = await sql`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'member',${body},${key}::uuid) on conflict (author_user_id,idempotency_key) do nothing returning id`;
     if (inserted[0]) await sql`update support_conversations set status='member_replied',updated_at=now(),member_read_at=now() where id=${rows[0].id}`;
+    return Boolean(inserted[0]);
   });
+  if (replied) deferAdminNotification(() => notifySupportActivity({ activity: 'member_reply', actorUserId: actor.id, publicId }));
 }
 
 export async function listEligibleAdministrators() {
@@ -289,14 +294,16 @@ export async function getAdminConversation(value: unknown) {
 export async function replyAsAdministrator(input: { body: unknown; idempotencyKey: unknown; publicId: unknown }) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor);
   const body = parse(messageSchema, input.body); const key = parse(keySchema, input.idempotencyKey); const publicId = parse(publicIdSchema, input.publicId);
-  await client.begin(async (sql) => {
+  const replied = await client.begin(async (sql) => {
     const rows = await sql<{ id: number; status: string }[]>`select id,status from support_conversations where public_id=${publicId}::uuid for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
     if (rows[0].status === 'closed') throw new SupportValidationError('Reopen this conversation before replying.');
     const inserted = await sql`insert into support_messages (conversation_id,author_user_id,author_side,body,idempotency_key)
       values (${rows[0].id},${actor.id},'admin',${body},${key}::uuid) on conflict (author_user_id,idempotency_key) do nothing returning id`;
     if (inserted[0]) await sql`update support_conversations set status='admin_responded',updated_at=now(),admin_read_at=now() where id=${rows[0].id}`;
+    return Boolean(inserted[0]);
   });
+  if (replied) deferAdminNotification(() => notifySupportActivity({ activity: 'admin_reply', actorUserId: actor.id, publicId }));
 }
 
 export async function setConversationAssignment(publicIdValue: unknown, administratorValues: unknown[]) {
@@ -318,16 +325,18 @@ export async function setConversationAssignment(publicIdValue: unknown, administ
 
 export async function setConversationClosed(publicIdValue: unknown, close: boolean) {
   const actor = await requireAccountAccess('administration'); requireAdministrator(actor); const publicId = parse(publicIdSchema, publicIdValue);
-  await client.begin(async (sql) => {
+  const changed = await client.begin(async (sql) => {
     const rows = await sql<{ id: number; status: string }[]>`select id,status from support_conversations where public_id=${publicId}::uuid for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
     const latest = await sql<{ author_side: string }[]>`select author_side from support_messages where conversation_id=${rows[0].id} order by created_at desc,id desc limit 1`;
     const next = close ? 'closed' : latest[0]?.author_side === 'admin' ? 'admin_responded' : latest[0]?.author_side === 'member' ? 'member_replied' : 'open';
-    if (rows[0].status === next) return;
+    if (rows[0].status === next) return false;
     await sql`update support_conversations set status=${next},updated_at=now() where id=${rows[0].id}`;
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
       values(${actor.id},${close ? 'support.conversation.closed' : 'support.conversation.reopened'},'support_conversation',${publicId},${JSON.stringify({ status: rows[0].status })}::jsonb,${JSON.stringify({ status: next })}::jsonb)`;
+    return true;
   });
+  if (changed) deferAdminNotification(() => notifySupportActivity({ activity: close ? 'closed_by_administrator' : 'reopened_by_administrator', actorUserId: actor.id, publicId }));
 }
 
 /** A member closing their own conversation -- the common flow once an administrator's fix is
@@ -337,16 +346,18 @@ export async function setConversationClosed(publicIdValue: unknown, close: boole
 export async function setOwnConversationClosed(publicIdValue: unknown, close: boolean) {
   const actor = await requireSupportMember();
   const publicId = parse(publicIdSchema, publicIdValue);
-  await client.begin(async (sql) => {
+  const changed = await client.begin(async (sql) => {
     const rows = await sql<{ id: number; status: string }[]>`select id,status from support_conversations where public_id=${publicId}::uuid and member_user_id=${actor.id} for update`;
     if (!rows[0]) throw new SupportValidationError('Conversation not found.');
     const latest = await sql<{ author_side: string }[]>`select author_side from support_messages where conversation_id=${rows[0].id} order by created_at desc,id desc limit 1`;
     const next = close ? 'closed' : latest[0]?.author_side === 'admin' ? 'admin_responded' : latest[0]?.author_side === 'member' ? 'member_replied' : 'open';
-    if (rows[0].status === next) return;
+    if (rows[0].status === next) return false;
     await sql`update support_conversations set status=${next},updated_at=now(),member_read_at=now() where id=${rows[0].id}`;
     await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json)
       values(${actor.id},${close ? 'support.conversation.closed' : 'support.conversation.reopened'},'support_conversation',${publicId},${JSON.stringify({ status: rows[0].status })}::jsonb,${JSON.stringify({ status: next })}::jsonb)`;
+    return true;
   });
+  if (changed) deferAdminNotification(() => notifySupportActivity({ activity: close ? 'closed_by_member' : 'reopened_by_member', actorUserId: actor.id, publicId }));
 }
 
 export async function listCategoryDefaults() {
