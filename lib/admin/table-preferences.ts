@@ -70,7 +70,7 @@ const schemas = {
   reconciliation_findings: readOnlyReportTable,
   member_notifications: readOnlyReportTable,
   member_timeline: z.object({
-    all: z.literal('1').optional(), from: date, hide: multiToken(['user', 'server', 'administrator'], 60), newestFirst: z.literal('1').optional(), to: date,
+    all: z.literal('1').optional(), dir: direction, from: date, hide: multiToken(['user', 'server', 'administrator'], 60), newestFirst: z.literal('1').optional(), sort: z.enum(['time', 'type', 'who']).optional(), to: date,
   }).strict(),
 } satisfies Record<AdminTableIdentifier, z.ZodType>;
 
