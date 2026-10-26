@@ -10,6 +10,8 @@ export type TimelineEntry = {
   category: string;
   detail?: string;
   id: string;
+  /** Optional bold pieces of the title (administrator name, role, reason); `title` stays the plain-text version of the same line. */
+  segments?: { bold?: boolean; text: string }[];
   source: TimelineSource;
   title: string;
 };
@@ -157,13 +159,13 @@ export function errorCodeLabel(code: string | undefined): string | undefined {
   return code ? ERROR_CODE_LABELS[code] ?? `Reason code: ${code}` : undefined;
 }
 
-/** The four steps an email goes through on our side, worded the same way for every kind of email. */
+/** The four steps an email goes through on our side, worded the same way for every kind of email: "what happened: which email". */
 export function emailStepTitles(label: string): { cancelled: string; failed: string; queued: string; sent: string } {
   return {
-    cancelled: `Email cancelled before it was sent: ${label}`,
-    failed: `Email could not be sent and the server gave up: ${label}`,
-    queued: `Email waiting to be sent: ${label}`,
-    sent: `Email handed to our email service (Brevo): ${label}`,
+    cancelled: `Cancelled before sending: ${label}`,
+    failed: `Could not be sent, server gave up: ${label}`,
+    queued: `Waiting to be sent: ${label}`,
+    sent: `Sent to Brevo: ${label}`,
   };
 }
 
@@ -174,21 +176,23 @@ export type BrevoTimelineEvent = { at: string; event: string; link?: string; rea
 export function brevoEntry(event: BrevoTimelineEvent, index: number): TimelineEntry {
   const subject = event.subject ? `“${event.subject}”` : 'an email';
   const base = { at: event.at, category: 'Email', id: `brevo-${index}`, source: 'brevo' as const };
+  const why = (explanation: string) => [explanation, event.reason].filter(Boolean).join(' · ');
+  // Every title reads "what happened: which email".
   switch (event.event) {
-    case 'requests': return { ...base, actor: 'server', title: `Our email service (Brevo) accepted ${subject} for sending` };
-    case 'delivered': return { ...base, actor: 'server', title: `${subject} reached their mail provider (delivered)` };
-    case 'opened': case 'uniqueOpened': return { ...base, actor: 'user', title: `Opened ${subject}` };
-    case 'loadedByProxy': return { ...base, actor: 'user', detail: 'Their mail app loads emails automatically (Apple Mail and Gmail do this), so this does not prove they read it.', title: `Their mail app automatically loaded ${subject}` };
-    case 'clicks': return { ...base, actor: 'user', detail: safeLink(event.link), title: `Clicked a link in ${subject}` };
-    case 'hardBounces': return { ...base, actor: 'server', detail: event.reason, title: `${subject} bounced for good: the address does not exist or refuses mail` };
-    case 'softBounces': return { ...base, actor: 'server', detail: event.reason, title: `${subject} bounced for now (for example a full mailbox); it may be retried` };
-    case 'blocked': return { ...base, actor: 'server', detail: event.reason, title: `${subject} was blocked and not delivered` };
-    case 'invalid': return { ...base, actor: 'server', detail: event.reason, title: `${subject} was rejected because the address is not valid` };
-    case 'deferred': return { ...base, actor: 'server', detail: event.reason, title: `Delivery of ${subject} was delayed; it will be retried` };
-    case 'spam': return { ...base, actor: 'user', title: `Marked ${subject} as spam` };
-    case 'unsubscribed': return { ...base, actor: 'user', title: `Unsubscribed from emails using ${subject}` };
-    case 'error': return { ...base, actor: 'server', detail: event.reason, title: `Our email service reported an error for ${subject}` };
-    default: return { ...base, actor: 'server', title: `Our email service reported “${event.event}” for ${subject}` };
+    case 'requests': return { ...base, actor: 'server', title: `Brevo accepted: ${subject}` };
+    case 'delivered': return { ...base, actor: 'server', title: `Delivered to their mail provider: ${subject}` };
+    case 'opened': case 'uniqueOpened': return { ...base, actor: 'user', title: `Opened: ${subject}` };
+    case 'loadedByProxy': return { ...base, actor: 'user', title: `Their mail app loaded: ${subject}` };
+    case 'clicks': return { ...base, actor: 'user', detail: safeLink(event.link), title: `Clicked a link: ${subject}` };
+    case 'hardBounces': return { ...base, actor: 'server', detail: why('The address does not exist or refuses mail'), title: `Bounced for good: ${subject}` };
+    case 'softBounces': return { ...base, actor: 'server', detail: why('For example a full mailbox; Brevo may retry'), title: `Bounced for now: ${subject}` };
+    case 'blocked': return { ...base, actor: 'server', detail: event.reason, title: `Blocked, not delivered: ${subject}` };
+    case 'invalid': return { ...base, actor: 'server', detail: why('The address is not valid'), title: `Rejected: ${subject}` };
+    case 'deferred': return { ...base, actor: 'server', detail: why('Delivery was delayed and will be retried'), title: `Delayed: ${subject}` };
+    case 'spam': return { ...base, actor: 'user', title: `Marked as spam: ${subject}` };
+    case 'unsubscribed': return { ...base, actor: 'user', title: `Unsubscribed: ${subject}` };
+    case 'error': return { ...base, actor: 'server', detail: event.reason, title: `Brevo reported an error: ${subject}` };
+    default: return { ...base, actor: 'server', title: `Brevo reported “${event.event}”: ${subject}` };
   }
 }
 
@@ -247,4 +251,29 @@ export function accountMilestones(input: { accountState: string; emailVerifiedAt
 /** UTC time of day to the millisecond (HH:MM:SS.mmm), because events can happen within the same second. */
 export function formatTimelineTime(iso: string): string {
   return iso.slice(11, 23);
+}
+
+export type TimelineSortKey = 'time' | 'type' | 'who';
+export const TIMELINE_SORT_LABELS: Record<TimelineSortKey, string> = { time: 'Time', type: 'Type', who: 'Who' };
+
+/** Sorts by the chosen column; rows that tie keep time order, so a column sort still reads as a story. */
+export function sortTimelineBy(entries: TimelineEntry[], key: TimelineSortKey, direction: 'asc' | 'desc' = 'asc'): TimelineEntry[] {
+  const sign = direction === 'asc' ? 1 : -1;
+  const value = (entry: TimelineEntry) => (key === 'who' ? TIMELINE_ACTOR_LABELS[entry.actor] : key === 'type' ? entry.category : '');
+  return [...entries].sort((left, right) => {
+    const byColumn = key === 'time' ? 0 : value(left).localeCompare(value(right));
+    return sign * (byColumn || Date.parse(left.at) - Date.parse(right.at)) || left.id.localeCompare(right.id);
+  });
+}
+
+const prettyRole = (role: string) => role.replace(/_/g, ' ');
+
+/** An administrator's action as one line: "<name> did something[: role] because <reason>", with the name, role and reason in bold. */
+export function administratorSegments(input: { action: string; name: string | undefined; reason?: string; role?: string }): { segments: { bold?: boolean; text: string }[]; title: string } {
+  const who = input.name ?? 'An administrator';
+  const phrase = input.action === 'admin.role.granted' ? 'assigned role: ' : input.action === 'admin.role.revoked' ? 'removed role: ' : auditTitle(input.action).replace(/^An administrator /, '');
+  const segments: { bold?: boolean; text: string }[] = [{ bold: true, text: who }, { text: ` ${phrase}` }];
+  if (input.role && /^admin\.role\./.test(input.action)) segments.push({ bold: true, text: prettyRole(input.role) });
+  if (input.reason) segments.push({ text: ' because ' }, { bold: true, text: input.reason });
+  return { segments, title: segments.map((segment) => segment.text).join('') };
 }
