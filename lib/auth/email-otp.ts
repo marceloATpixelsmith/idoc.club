@@ -10,7 +10,7 @@ import { checkRateLimit } from '@/lib/security/rate-limit';
 import { normalizeEmail } from '@/lib/membership/validation';
 import { logError } from '@/lib/observability/logger';
 
-export type EmailOtpPurpose = 'google_disconnect_verification' | 'login_verification' | 'password_reset' | 'signup_verification';
+export type EmailOtpPurpose = 'google_disconnect_verification' | 'login_verification' | 'password_reset' | 'signup_verification' | 'member_password_change' | 'member_session_revoke';
 
 const CODE_LIFETIME_MS = 15 * 60 * 1000;
 const CODE_LENGTH = 6;
@@ -19,6 +19,8 @@ const RESEND_COOLDOWN_MS = 30 * 1000;
 const RATE_LIMIT_PURPOSES: Record<EmailOtpPurpose, { issue: string; verify: string }> = {
   google_disconnect_verification: { issue: 'email_otp_google_disconnect', verify: 'otp_verify_google_disconnect' },
   login_verification: { issue: 'email_otp_login_verification', verify: 'otp_verify_login' },
+  member_password_change: { issue: 'email_otp_member_password', verify: 'otp_verify_member_password' },
+  member_session_revoke: { issue: 'email_otp_member_revoke', verify: 'otp_verify_member_revoke' },
   password_reset: { issue: 'email_otp_password_reset', verify: 'otp_verify_reset' },
   signup_verification: { issue: 'email_otp_signup_verification', verify: 'otp_verify_signup' },
 };
@@ -38,6 +40,8 @@ function deliveryFailureCategory(error: unknown) {
 export const EMAIL_OTP_SUBJECTS: Record<EmailOtpPurpose, string> = {
   google_disconnect_verification: 'Your IDOC verification code',
   login_verification: 'Your IDOC sign-in code',
+  member_password_change: 'Confirm your IDOC password change',
+  member_session_revoke: 'Confirm your IDOC session sign-out',
   password_reset: 'Your IDOC password reset code',
   signup_verification: 'Your IDOC verification code',
 };
@@ -47,6 +51,10 @@ export function renderEmailOtpHtml(code: string, purpose: EmailOtpPurpose) {
     ? 'Use this code to reset your IDOC password.'
     : purpose === 'login_verification'
       ? 'Use this code to sign in to your IDOC account.'
+      : purpose === 'member_password_change'
+        ? 'Use this code to approve a password change. If you did not request it, someone may be accessing your account.'
+        : purpose === 'member_session_revoke'
+          ? 'Use this code to approve signing out other devices. If you did not request it, someone may be accessing your account.'
       : purpose === 'google_disconnect_verification'
         ? 'Use this code to confirm it’s really you before creating a password and disconnecting Google from your IDOC account.'
         : 'Use this code to verify your email address for IDOC.';
