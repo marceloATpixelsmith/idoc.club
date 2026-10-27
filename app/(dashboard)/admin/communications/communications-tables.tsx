@@ -51,3 +51,17 @@ export function DeliveryIssuesTable({ initialPreferences, rows }: { initialPrefe
     />
   );
 }
+
+/** Repeat requests are a support signal, not evidence of an email transport failure. */
+export function RepeatedActivationTable({ rows }: { rows: ReadOnlyRow[] }) {
+  return (
+    <AdminReadOnlyTable
+      columns={[{ id: 'lastRequested', label: 'Last requested' }, { id: 'member', label: 'Member concerned' }, { id: 'email', label: 'Recipient email' }, { id: 'requests', label: 'Requests (7 days)' }, { id: 'sent', label: 'Sent' }, { id: 'account', label: 'Account status' }]}
+      dateColumn="lastRequested"
+      empty="No still-unactivated accounts with repeated activation requests."
+      preferenceKey="communications_repeated_activations"
+      rows={rows}
+      searchLabel="Search repeated activation requests"
+    />
+  );
+}
