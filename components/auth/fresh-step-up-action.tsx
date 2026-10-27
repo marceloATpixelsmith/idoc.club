@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
-export type StepUpActionState = { error?: string; stepUpRequired?: boolean; success?: string; retryAfterSeconds?: number; [key: string]: unknown };
+export type StepUpActionState = { error?: string; stepUpRequired?: boolean; stepUpMethod?: 'email' | 'totp'; success?: string; retryAfterSeconds?: number; [key: string]: unknown };
 type Action<T extends StepUpActionState = StepUpActionState> = (state: T, formData: FormData) => Promise<T>;
 
 /** Runs a protected Server Action, retaining its FormData only in this component's memory. After
