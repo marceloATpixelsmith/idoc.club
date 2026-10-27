@@ -38,7 +38,8 @@ test('member security OTPs are different from sign-in and recovery codes and the
 test('Sentry key-cap tooling checks provider settings rather than relying on SDK-side sampling', () => {
   const audit = read('scripts/check-sentry-ingestion-limits.mjs');
   const workflow = read('.github/workflows/sentry-ingestion-key-security.yml');
-  assert.match(audit, /projects\/.*keys\//);
+  assert.match(audit, /projects\//);
+  assert.match(audit, /\/keys\//);
   assert.match(audit, /rateLimit/);
   assert.match(audit, /--apply/);
   assert.match(audit, /SENTRY_SECURITY_AUTH_TOKEN/);
