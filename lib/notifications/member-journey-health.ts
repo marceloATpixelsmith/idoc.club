@@ -80,7 +80,7 @@ export async function scanMemberJourneyConcerns(now = new Date()): Promise<Membe
         group by c.user_id having count(*) >= 3
       ) a join users u on u.id=a.user_id
       join profiles p on p.user_id=u.id and p.legacy_wp_user_id is not null
-      where u.account_state in ('active','onboarding')
+      where u.account_state in ('migrated_pending','active','onboarding')
         and not exists (
           select 1 from auth_sessions s
           where s.user_id=u.id and s.authenticated_at >= a.first_at
