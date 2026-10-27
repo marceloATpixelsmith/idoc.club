@@ -60,7 +60,7 @@ const queueLabel = (status: 'failed' | 'pending' | 'sent') => (status === 'sent'
 export default async function CommunicationsPage() {
   const report = await getCommunicationsReport();
   // Each table's view (search, filters, sort, columns, page size) is saved per administrator, like every admin table.
-  const [renewalPreferences, upcomingPreferences, issuePreferences] = await Promise.all([getTablePreferences('communications_renewal_notices'), getTablePreferences('communications_upcoming_notices'), getTablePreferences('communications_delivery_issues')]);
+  const [renewalPreferences, upcomingPreferences, issuePreferences, activationPreferences] = await Promise.all([getTablePreferences('communications_renewal_notices'), getTablePreferences('communications_upcoming_notices'), getTablePreferences('communications_delivery_issues'), getTablePreferences('communications_repeated_activations')]);
   const issueCounts = { renewal: report.issueRows.filter((row) => row.group === 'Renewal notice').length, system: report.issueRows.filter((row) => row.group === 'System email').length, activation: report.repeatedActivations.length };
   const repeatedActivationRows = report.repeatedActivations.map((row, index) => ({ id: `activation-${index}`, lastRequested: row.lastRequestedAt.toISOString(), member: row.member, email: row.email, requests: String(row.requests), sent: String(row.sent), account: 'Awaiting activation', link: row.profileId ? `/admin/members?timeline=${row.profileId}` : undefined }));
   return <main className="flex-1 py-8 px-5 lg:px-8">
@@ -73,7 +73,7 @@ export default async function CommunicationsPage() {
       system: <>
         <CountsSection caption="System email totals by type for the last 7 days" description="Everything except renewal notices, over the last 7 days." issues={report.issueRows.filter((row) => row.group === 'System email')} summary={summaryOf(report.systemTotals, report.brevoAvailable)} title="System emails, last 7 days" totals={report.systemTotals} />
         {report.repeatedActivations.length > 0 ? <AdminFormSection description="Members who requested at least three activation links within seven days and are still awaiting activation. These requests can indicate the email is not reaching the member, even when Brevo reports delivery." title={`Repeated account activation requests (${report.repeatedActivations.length})`}>
-          <RepeatedActivationTable rows={repeatedActivationRows} />
+          <RepeatedActivationTable initialPreferences={activationPreferences} rows={repeatedActivationRows} />
         </AdminFormSection> : null}
       </>,
       renewal: <>
@@ -87,7 +87,7 @@ export default async function CommunicationsPage() {
       </AdminFormSection>,
       issues: <>
         {report.repeatedActivations.length > 0 ? <AdminFormSection description="These members requested activation at least three times in the last seven days but still have not activated. Brevo delivery does not rule out spam filtering or a member-access problem; investigate with the member." title="Repeated activation requests needing follow-up">
-          <RepeatedActivationTable rows={repeatedActivationRows} />
+          <RepeatedActivationTable initialPreferences={activationPreferences} rows={repeatedActivationRows} />
         </AdminFormSection> : null}
         <AdminFormSection description="Emails from the last 7 days that Brevo did not confirm as delivered, plus emails still queued or given up on. Use the address to investigate in Brevo." title="Emails to investigate">
         {report.brevoAvailable && report.issueRows.length === 0 ? <p className="rounded-lg border border-emerald-400/40 bg-emerald-950/20 p-4 text-sm text-emerald-200" role="status">All sent emails in this period were confirmed delivered to receiving mail servers by Brevo. This does not confirm inbox placement or that the recipient saw them.</p> : null}
