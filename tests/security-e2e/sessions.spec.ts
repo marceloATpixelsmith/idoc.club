@@ -142,7 +142,11 @@ test('account security renders and revokes only the signed-in member active sess
     input.value = forgedUserId;
     form.append(input);
   }, String(other.id));
+  const beforeForgedRequest = mailCount();
   await revokeForm.getByRole('button', { name: 'Log out this session' }).click();
+  await expect(page.getByText('That session is no longer available.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Confirm this security change' })).toHaveCount(0);
+  expect(mailCount()).toBe(beforeForgedRequest);
   expect((await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions
     where session_id=${other.session_id} and revoked_at is null`)[0].count).toBe(1);
 
