@@ -2,6 +2,7 @@ import 'server-only';
 
 import { handleAccountDeliveryCron } from '@/lib/notifications/account-delivery-worker-core';
 import { runEmailDeliveryWatch } from '@/lib/notifications/email-delivery-watch';
+import { runMemberJourneyWatch } from '@/lib/notifications/member-journey-watch';
 import { processOperationalAlertBatch } from '@/lib/notifications/operational-alert-delivery';
 import { cronSecretForServer } from '@/lib/runtime/configuration';
 import { logError } from '@/lib/observability/logger';
@@ -12,9 +13,10 @@ export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: async () => {
       const watch = await runEmailDeliveryWatch();
+      const journey = await runMemberJourneyWatch();
       // Deliver what the watch queued in this same run (the queue's own worker also retries anything that fails).
       const delivery = await processOperationalAlertBatch();
-      return { ...watch, alertsRetryable: delivery.retryable };
+      return { ...watch, journeyConcerns: journey.concerns, journeyDigestQueued: journey.alerted, alertsRetryable: delivery.retryable };
     },
     reportFailure: () => logError('email_delivery_watch_failed'),
     secret: cronSecretForServer(),
