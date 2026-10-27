@@ -953,6 +953,17 @@ export const emailDeliveryEvents = idocSchema.table('email_delivery_events', {
   reason: varchar('reason', { length: 200 }),
 }, (table) => [uniqueIndex('email_delivery_events_dedupe_idx').on(table.logId, table.event, table.occurredAt)]);
 
+/** A webhook event that arrived before its email was logged (Brevo can report a message a moment before the send's own insert
+ * commits). Held briefly and applied the moment the send is logged, so the event is never dropped; purged after two days. */
+export const emailDeliveryPendingEvents = idocSchema.table('email_delivery_pending_events', {
+  id: serial('id').primaryKey(),
+  providerMessageId: varchar('provider_message_id', { length: 200 }).notNull(),
+  event: varchar('event', { length: 30 }).notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  reason: varchar('reason', { length: 200 }),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('email_delivery_pending_events_dedupe_idx').on(table.providerMessageId, table.event, table.occurredAt)]);
+
 /** One row per (job, timer) holding that job's most recent run, so the owner's cron monitor can prove every scheduled job is
  * running without reading provider logs. Written best-effort after each run (a failed write never affects the job); holds only
  * the job's fixed name, the timer system, timestamps, an HTTP status and counters: never request or response content. */

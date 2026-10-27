@@ -82,10 +82,35 @@ test('a snake_case hard_bounce marks the email bounced and still alerts the oper
   assert.match(alert.subject ?? '', /hard bounce/i, 'the operator alert was sent (and is itself logged)');
 });
 
-test('an event for a message the log never recorded is accepted and ignored', async () => {
+test('an event for a message not logged yet is held and applied when the send is logged, never dropped', async () => {
+  // Brevo can report a message a moment before the send's own insert commits.
+  const early = await webhook({ email: 'early@example.test', event: 'delivered', 'message-id': '<id-1@smtp-relay.test>', ts_event: Math.floor(Date.now() / 1000) });
+  assert.equal(early.status, 200);
+  assert.equal((await events()).length, 0, 'nothing is logged yet');
+  assert.equal((await sql`select count(*)::int as count from idoc.email_delivery_pending_events`)[0].count, 1);
+
+  await sendTransactionalEmail({ html: '<p>x</p>', subject: 'S', to: 'early@example.test' });
+  const [row] = await logRows('early@example.test');
+  assert.equal(row.status, 'delivered', 'the held event was applied when the send was logged');
+  assert.ok(row.delivered_at);
+  assert.deepEqual((await events()).map((event) => event.event), ['delivered']);
+  assert.equal((await sql`select count(*)::int as count from idoc.email_delivery_pending_events`)[0].count, 0, 'and is no longer held');
+});
+
+test('an event for a message that is never logged is accepted, held, and discarded after two days', async () => {
   const response = await webhook({ email: 'someone@example.test', event: 'delivered', 'message-id': '<not-ours@relay>' });
   assert.equal(response.status, 200);
   assert.equal((await events()).length, 0);
+  await sql`update idoc.email_delivery_pending_events set received_at = now() - interval '3 days'`;
+  const result = await purgeExpiredAuthRecords(new Date());
+  assert.equal(result.emailDeliveryPendingEvents, 1);
+});
+
+test('a stalled Brevo response body never holds the sender up beyond the logging bound', async () => {
+  globalThis.fetch = (async () => new Response(new ReadableStream({ start() { /* never produces a chunk */ } }), { status: 201 })) as typeof fetch;
+  const startedAt = Date.now();
+  await sendTransactionalEmail({ html: '<p>x</p>', subject: 'S', to: 'stalled@example.test' });
+  assert.ok(Date.now() - startedAt < 5_000, 'returns within the 3 second logging bound');
 });
 
 test('a log write that fails never fails the send', async () => {

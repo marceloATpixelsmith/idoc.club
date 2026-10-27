@@ -389,6 +389,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // Migration 0087 added the email delivery log (one row per email handed to Brevo) and its webhook events.
   expectedSchema['idoc.email_delivery_log'] = currentSnapshot.tables['idoc.email_delivery_log'];
   expectedSchema['idoc.email_delivery_events'] = currentSnapshot.tables['idoc.email_delivery_events'];
+  expectedSchema['idoc.email_delivery_pending_events'] = currentSnapshot.tables['idoc.email_delivery_pending_events'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables

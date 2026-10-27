@@ -6,6 +6,7 @@ import {
   accountTokens,
   authSessions,
   emailDeliveryLog,
+  emailDeliveryPendingEvents,
   emailOtpCodes,
   loginTrustedDevices,
   mfaChallengeTransactions,
@@ -27,6 +28,8 @@ const ACTIVITY_RETENTION_MS = 400 * 24 * 60 * 60 * 1000;
 // The email delivery log (docs/05): long enough to investigate a delivery complaint after the fact and to cover Brevo's own 90-day
 // log window, short enough not to become a standing record of who was emailed.
 const DELIVERY_LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+// A webhook event held for a send that was never logged (sent before logging began) is discarded after two days.
+const PENDING_EVENT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** Physically deletes rows from every table AUTH-STORAGE-007 named as growing unbounded, once each
  * row's own expiry is more than RETENTION_MS in the past. Safe to run repeatedly and concurrently:
@@ -36,7 +39,8 @@ export async function purgeExpiredAuthRecords(now: Date = new Date()) {
   const cutoff = new Date(now.getTime() - RETENTION_MS);
   const activityCutoff = new Date(now.getTime() - ACTIVITY_RETENTION_MS);
   const deliveryLogCutoff = new Date(now.getTime() - DELIVERY_LOG_RETENTION_MS);
-  const [emailOtp, mfaChallenge, mfaEnrollment, accountToken, authSession, loginTrustedDevice, userActivity, deliveryLog] = await Promise.all([
+  const pendingEventCutoff = new Date(now.getTime() - PENDING_EVENT_RETENTION_MS);
+  const [emailOtp, mfaChallenge, mfaEnrollment, accountToken, authSession, loginTrustedDevice, userActivity, deliveryLog, pendingEvents] = await Promise.all([
     db.delete(emailOtpCodes).where(lt(emailOtpCodes.expiresAt, cutoff)).returning({ id: emailOtpCodes.id }),
     db.delete(mfaChallengeTransactions).where(lt(mfaChallengeTransactions.expiresAt, cutoff)).returning({ id: mfaChallengeTransactions.transactionId }),
     db.delete(mfaEnrollmentTransactions).where(lt(mfaEnrollmentTransactions.expiresAt, cutoff)).returning({ id: mfaEnrollmentTransactions.transactionId }),
@@ -46,10 +50,12 @@ export async function purgeExpiredAuthRecords(now: Date = new Date()) {
     db.delete(userActivityEvents).where(lt(userActivityEvents.occurredAt, activityCutoff)).returning({ id: userActivityEvents.id }),
     // Its webhook events go with it (ON DELETE CASCADE).
     db.delete(emailDeliveryLog).where(lt(emailDeliveryLog.sentAt, deliveryLogCutoff)).returning({ id: emailDeliveryLog.id }),
+    db.delete(emailDeliveryPendingEvents).where(lt(emailDeliveryPendingEvents.receivedAt, pendingEventCutoff)).returning({ id: emailDeliveryPendingEvents.id }),
   ]);
   return {
     accountTokens: accountToken.length,
     emailDeliveryLog: deliveryLog.length,
+    emailDeliveryPendingEvents: pendingEvents.length,
     authSessions: authSession.length,
     emailOtpCodes: emailOtp.length,
     loginTrustedDevices: loginTrustedDevice.length,

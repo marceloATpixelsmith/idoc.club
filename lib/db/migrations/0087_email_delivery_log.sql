@@ -41,3 +41,14 @@ CREATE INDEX IF NOT EXISTS "email_delivery_log_recipient_idx" ON "idoc"."email_d
 CREATE INDEX IF NOT EXISTS "email_delivery_log_status_sent_idx" ON "idoc"."email_delivery_log" USING btree ("status","sent_at");
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "email_delivery_events_dedupe_idx" ON "idoc"."email_delivery_events" USING btree ("log_id","event","occurred_at");
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "idoc"."email_delivery_pending_events" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"provider_message_id" varchar(200) NOT NULL,
+	"event" varchar(30) NOT NULL,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"reason" varchar(200),
+	"received_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "email_delivery_pending_events_dedupe_idx" ON "idoc"."email_delivery_pending_events" USING btree ("provider_message_id","event","occurred_at");

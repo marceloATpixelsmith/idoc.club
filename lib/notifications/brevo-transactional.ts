@@ -10,15 +10,15 @@ const DELIVERY_LOG_TIMEOUT_MS = 3_000;
 /** Best effort: the email is already accepted, so recording it (with Brevo's message id, which the webhook later uses to report
  * what became of it) must never fail the send, and a slow or unreachable database must not hold the caller up. */
 async function logAcceptedSend(response: Response, message: TransactionalEmail, options: { kind?: string; userId?: number | null }) {
-  try {
+  const work = (async () => {
     let providerMessageId: string | null = null;
     try { providerMessageId = normalizeBrevoMessageId(((await response.json()) as { messageId?: unknown }).messageId); } catch { /* a send without a readable id is still logged */ }
     const { recordAcceptedEmail } = await import('./email-delivery-log');
-    await Promise.race([
-      recordAcceptedEmail({ kind: options.kind, messageRef: message.messageId, providerMessageId, subject: message.subject, to: message.to, userId: options.userId }),
-      new Promise<void>((resolve) => setTimeout(resolve, DELIVERY_LOG_TIMEOUT_MS).unref()),
-    ]);
-  } catch { /* best effort */ }
+    await recordAcceptedEmail({ kind: options.kind, messageRef: message.messageId, providerMessageId, subject: message.subject, to: message.to, userId: options.userId });
+  })();
+  work.catch(() => { /* best effort; a late failure after the timeout has nobody to tell */ });
+  // The bound covers reading Brevo's response body as well as the database write: a stalled body must not hold the caller up either.
+  await Promise.race([work.catch(() => undefined), new Promise<void>((resolve) => setTimeout(resolve, DELIVERY_LOG_TIMEOUT_MS).unref())]);
 }
 
 export interface TransactionalEmail {

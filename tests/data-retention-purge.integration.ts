@@ -47,7 +47,7 @@ test('purgeExpiredAuthRecords deletes rows whose expiry is more than 30 days pas
   const result = await purgeExpiredAuthRecords(now);
   assert.deepEqual(result, {
     accountTokens: 1, authSessions: 1, emailOtpCodes: 1,
-    loginTrustedDevices: 1, mfaChallengeTransactions: 1, mfaEnrollmentTransactions: 1, userActivityEvents: 0, emailDeliveryLog: 0,
+    loginTrustedDevices: 1, mfaChallengeTransactions: 1, mfaEnrollmentTransactions: 1, userActivityEvents: 0, emailDeliveryLog: 0, emailDeliveryPendingEvents: 0,
   });
 
   assert.equal((await sql`select count(*)::int as count from idoc.email_otp_codes`)[0].count, 2);
@@ -65,6 +65,6 @@ test('purgeExpiredAuthRecords is a no-op against an empty database', async () =>
   const result = await purgeExpiredAuthRecords(new Date());
   assert.deepEqual(result, {
     accountTokens: 0, authSessions: 0, emailOtpCodes: 0,
-    loginTrustedDevices: 0, mfaChallengeTransactions: 0, mfaEnrollmentTransactions: 0, userActivityEvents: 0, emailDeliveryLog: 0,
+    loginTrustedDevices: 0, mfaChallengeTransactions: 0, mfaEnrollmentTransactions: 0, userActivityEvents: 0, emailDeliveryLog: 0, emailDeliveryPendingEvents: 0,
   });
 });
