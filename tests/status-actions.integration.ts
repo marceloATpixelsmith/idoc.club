@@ -10,6 +10,7 @@ after(closeHarness);
 
 function fakeStripeClient(calls: string[], shouldThrow = false): CancellationStripeClient {
   return {
+    checkout: { sessions: { expire: async (id: string) => { calls.push(`expire:${id}`); return {}; } } },
     subscriptions: {
       update: async (id: string, params: { cancel_at_period_end: boolean }) => {
         calls.push(`${id}:${params.cancel_at_period_end}`);
@@ -234,4 +235,53 @@ test('a legacy suspended membership can still be reinstated', async () => {
   await sql`insert into idoc.memberships(profile_id,status,starts_on,valid_until,source) values(${profile.id},'suspended','2025-01-01','2099-06-15','migration')`;
   const result = await asAdmin(admin.id, () => reinstateMembership(profile.id, { reason: 'Legacy suspension lifted', status: 'active' }));
   assert.equal(result.membership.status, 'active');
+});
+
+// Strix on #713: a hold must also stop the member being billed and paying -- open subscription ended at period end, open Checkout
+// sessions expired -- not only be guarded when a late payment arrives.
+async function withOpenCheckoutSessions(profileId: number) {
+  await sql`insert into idoc.membership_checkout_sessions(profile_id, external_checkout_session_id, mode, cycle, status, idempotency_key, attempt)
+    values (${profileId}, ${`cs_open_${profileId}`}, 'payment', '2099-12-31', 'open', ${`idem_${profileId}`}, 1)`;
+}
+
+test('moving a membership to review_required ends its open subscription at period end and expires its open Checkout sessions', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenSubscription(profile.id, 'sub_review');
+  await withOpenCheckoutSessions(profile.id);
+  const calls: string[] = [];
+  const result = await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Under review', status: 'review_required' }, fakeStripeClient(calls)));
+  assert.equal(result.membership.status, 'review_required');
+  assert.deepEqual(calls.sort(), [`expire:cs_open_${profile.id}`, 'sub_review:true']);
+  assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'expired');
+});
+
+test('correcting only the date, or to a non-held status, leaves subscriptions and Checkout sessions alone', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenSubscription(profile.id, 'sub_untouched');
+  await withOpenCheckoutSessions(profile.id);
+  const calls: string[] = [];
+  await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Date fix', validUntil: '2099-06-30' }, fakeStripeClient(calls)));
+  await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Still active', status: 'active' }, fakeStripeClient(calls)));
+  assert.deepEqual(calls, []);
+  assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'open');
+});
+
+test('cancelling a membership expires its open Checkout sessions, and a Stripe failure neither blocks the cancellation nor marks them expired', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenCheckoutSessions(profile.id);
+  const calls: string[] = [];
+  const failing = { ...fakeStripeClient(calls), checkout: { sessions: { expire: async () => { throw new Error('stripe unavailable'); } } } };
+  const result = await asAdmin(admin.id, () => suspendMembership(profile.id, 'Policy violation', failing));
+  assert.equal(result.membership.status, 'canceled');
+  assert.equal(result.checkoutSessionsExpired, 0);
+  assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'open', 'left open so the webhook guard still protects the membership');
 });

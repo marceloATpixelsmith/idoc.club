@@ -8,6 +8,7 @@ import { requireAccountAccess } from './data-access';
 import { requireAdministrator } from './authorization';
 import { lockLatestMembership } from './locking';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import { expireOpenCheckoutSessionsIfAny } from '@/lib/payments/checkout-session-expiry';
 import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 
@@ -62,7 +63,7 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
     return { membership: updated, wasAlreadySuspended: false };
   });
 
-  const stripeResult = await cancelOpenSubscriptionIfAny(profileId, testStripeClient);
+  const stripeResult = { ...await cancelOpenSubscriptionIfAny(profileId, testStripeClient), ...await expireOpenCheckoutSessionsIfAny(profileId, testStripeClient) };
   // Like a member's own cancellation, an administrator's removes the member from the marketing
   // mailing list. Best-effort: it can never block or undo the membership-level cancellation.
   if (!wasAlreadySuspended) {
@@ -72,7 +73,7 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
       try { await unsubscribeFromMarketingAudience(account.email); } catch { /* best-effort only */ }
     }
   }
-  if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError) {
+  if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError && stripeResult.checkoutSessionsExpired === 0) {
     throw new Error('This membership is already canceled.');
   }
   return { membership, ...stripeResult };
@@ -114,12 +115,12 @@ const correctEntitlementSchema = z.object({
 });
 
 /** Directly corrects an existing membership's paid-through date and/or status (docs/02 §5: "an audited override"). Does not grant a new membership — recordManualPayment does that. */
-export async function correctEntitlement(profileId: number, untrustedInput: unknown) {
+export async function correctEntitlement(profileId: number, untrustedInput: unknown, testStripeClient?: CancellationStripeClient) {
   const input = correctEntitlementSchema.parse(untrustedInput);
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const current = await lockLatestMembership(tx, profileId);
     if (!current) throw new Error('Member has no membership on file to correct.');
     const nextValidUntil = input.validUntil ?? current.validUntil;
@@ -134,8 +135,16 @@ export async function correctEntitlement(profileId: number, untrustedInput: unkn
       afterJson: { membership: updated }, beforeJson: { membership: current },
       entityId: String(profileId), entityType: 'profile', reason: input.reason,
     });
-    return { membership: updated };
+    return { before: current, membership: updated };
   });
+  // Moving a membership into a held status (canceled or under review) must stop it billing and being paid for: the open subscription
+  // ends at period end (as suspendMembership does) and open Checkout sessions are expired. Best effort after the committed change;
+  // the webhook handlers independently refuse to let a late payment, renewal or Setup reverse the hold.
+  const enteredHold = (input.status === 'canceled' || input.status === 'review_required') && result.before.status !== input.status;
+  const stripeResult = enteredHold
+    ? { ...await cancelOpenSubscriptionIfAny(profileId, testStripeClient), ...await expireOpenCheckoutSessionsIfAny(profileId, testStripeClient) }
+    : {};
+  return { membership: result.membership, ...stripeResult };
 }
 
 const extendExpirationSchema = z.object({
