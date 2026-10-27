@@ -5,14 +5,22 @@ import { listAssignedOpenConversationsForDashboard, CATEGORY_LABELS, STATUS_LABE
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { listNewMembersLastWeek } from '@/lib/membership/new-members';
 import { getCommunicationsReport } from '@/lib/notifications/communications-report-data';
-import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
+import { getMemberJourneyConcerns, type MemberJourneyConcern } from '@/lib/notifications/member-journey-health';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ journeyPage?: string }> }) {
+function JourneyConcernRow({ issue }: { issue: MemberJourneyConcern }) {
+  return <li className="py-3 first:pt-0 last:pb-0">
+    {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
+    <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
+    <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
+  </li>;
+}
+
+export default async function AdminPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
   const [support, newMembers, communications, revenue, journeyConcerns] = await Promise.all([
@@ -24,12 +32,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     getMemberJourneyConcerns(),
   ]);
   const delivered = communications.renewalRows.filter((row) => row.brevo === 'delivered');
-  // KEEP ALL MEMBER JOURNEY CONCERNS ACCESSIBLE; NEVER HIDE ACCOUNTS BEYOND THE OVERVIEW'S FIRST PAGE.
-  const { journeyPage: requestedPageParam } = await searchParams;
-  const requestedPage = requestedPageParam && /^[1-9]\d{0,5}$/.test(requestedPageParam) ? Number(requestedPageParam) : 1;
-  const journeyPageCount = Math.max(1, Math.ceil(journeyConcerns.length / 20));
-  const journeyPage = Math.min(requestedPage, journeyPageCount);
-  const journeyStart = (journeyPage - 1) * 20;
 
   return <main className="flex-1 space-y-6 px-5 py-8 lg:px-8">
     <header>
@@ -74,34 +76,23 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </AdminFormSection>
     </div>
 
-    <div id="member-journey-health" className="scroll-mt-24">
     <AdminFormSection description="Potential member access and renewal problems found in durable account, queue, session, and membership records. These are follow-up signals, not proof of failure. Updated whenever this dashboard loads." title="Member journey health">
       <p className="text-2xl font-semibold">{journeyConcerns.length} <span className="text-sm font-normal text-muted-foreground">member journey concerns</span></p>
       {journeyConcerns.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">No monitored activation, login, onboarding, or renewal concerns meet the escalation thresholds.</p> : (
         <ul className="mt-4 divide-y divide-border">
-          {journeyConcerns.slice(journeyStart, journeyStart + 20).map((issue) => (
-            <li className="py-3 first:pt-0 last:pb-0" key={`${issue.kind}-${issue.userId}`}>
-              {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
-              <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
-            </li>
-          ))}
+          {journeyConcerns.slice(0, 20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
         </ul>
       )}
-      {journeyConcerns.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-          <p className="text-muted-foreground">Showing {journeyStart + 1}–{Math.min(journeyStart + 20, journeyConcerns.length)} of {journeyConcerns.length} concerns · Page {journeyPage} of {journeyPageCount}</p>
-          {journeyPageCount > 1 ? (
-            <nav aria-label="Member journey concerns pages" className="flex gap-2">
-              {journeyPage > 1 ? <Link className="idoc-secondary-button px-4 py-2 text-sm" href={`/admin?journeyPage=${journeyPage - 1}#member-journey-health`}>Previous</Link> : null}
-              {journeyPage < journeyPageCount ? <Link className="idoc-secondary-button px-4 py-2 text-sm" href={`/admin?journeyPage=${journeyPage + 1}#member-journey-health`}>Next</Link> : null}
-            </nav>
-          ) : null}
-        </div>
+      {journeyConcerns.length > 20 ? (
+        <details className="mt-3 rounded-lg border border-border px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium">Show all {journeyConcerns.length - 20} additional member journey concerns</summary>
+          <ul className="mt-3 divide-y divide-border">
+            {journeyConcerns.slice(20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
+          </ul>
+        </details>
       ) : null}
       <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/communications">Open Communications</Link>
     </AdminFormSection>
-    </div>
 
     <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered. Delivery does not confirm the member received or acted on them." title="Delivered renewal notices">
       {communications.brevoAvailable ? null : <p className="text-sm text-muted-foreground">Brevo&apos;s log could not be read, so delivery cannot be confirmed right now.</p>}
