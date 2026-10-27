@@ -16,7 +16,7 @@ import { processOperationalAlertBatch } from './operational-alert-delivery';
 // the same lease-and-retry worker pattern already proven for auth_security_notification_outbox
 // -- see operational-alert-delivery.ts).
 
-export type OperationalAlertKind = 'email_delivery_problem' | 'incident_response_action_taken' | 'rate_limit_correlation_alert' | 'repeated_code_requests';
+export type OperationalAlertKind = 'email_delivery_problem' | 'incident_response_action_taken' | 'member_journey_attention' | 'rate_limit_correlation_alert' | 'repeated_code_requests';
 
 /** Fast, transactional, idempotent: a duplicate dedupeKey is silently absorbed (the caller has
  * already decided this exact alert should exist at most once), never a slow network call. */

@@ -51,3 +51,14 @@ jobs:
           IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           TARGET_SCHEMA: idoc_staging
         run: node scripts/guard-pending-migrations.mjs after
+      #THE INITIAL GIT-TRIGGERED VERCEL BUILD MAY HAVE BEEN BLOCKED WHILE MIGRATIONS RAN.
+      #A DEPLOY HOOK REBUILDS THE LATEST MERGED STAGING REVISION AFTER SCHEMA VERIFICATION.
+      - name: Rebuild staging only after migrations succeed
+        env:
+          DEPLOY_HOOK: ${{ secrets.IDOC_VERCEL_STAGING_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::warning::IDOC_VERCEL_STAGING_DEPLOY_HOOK_URL is unset; redeploy staging manually after migrations."
+          else
+            curl --fail --silent --show-error --retry 3 --retry-delay 3 -X POST "$DEPLOY_HOOK" >/dev/null
+          fi

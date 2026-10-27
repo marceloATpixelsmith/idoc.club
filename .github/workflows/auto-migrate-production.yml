@@ -96,3 +96,13 @@ jobs:
           IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           TARGET_SCHEMA: idoc_production
         run: node scripts/guard-pending-migrations.mjs after
+      #NEVER TRIGGER A NEW PRODUCTION DEPLOYMENT BEFORE THE BACKUP AND SCHEMA GATES PASS.
+      - name: Rebuild production only after migrations succeed
+        env:
+          DEPLOY_HOOK: ${{ secrets.IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::warning::IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL is unset; redeploy production manually after migrations."
+          else
+            curl --fail --silent --show-error --retry 3 --retry-delay 3 -X POST "$DEPLOY_HOOK" >/dev/null
+          fi

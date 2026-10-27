@@ -169,3 +169,19 @@ test('an earlier send without a request event cannot consume the outcome of a la
   assert.equal(checks.get('s2'), 'delivered');
   assert.equal(checks.get('s1'), 'not_found', 'the earlier send must not be credited with the later message\'s delivery');
 });
+
+test('repeated activation requests remain visible even if all emails were delivered', () => {
+  // An outbox record is created for each activation request; delivery itself does
+  // not establish inbox placement or activation. Only still-pending accounts qualify.
+  const data = readFileSync('lib/notifications/communications-report-data.ts', 'utf8');
+  const page = readFileSync('app/(dashboard)/admin/communications/page.tsx', 'utf8');
+  const tabs = readFileSync('app/(dashboard)/admin/communications/communications-tabs.tsx', 'utf8');
+  assert.match(data, /export const REPEATED_ACTIVATION_THRESHOLD = 3/);
+  assert.match(data, /o\.purpose = 'migration_activation'/);
+  assert.match(data, /u\.account_state = 'migrated_pending'/);
+  assert.match(data, /having count\(\*\) >= \$\{REPEATED_ACTIVATION_THRESHOLD\}/);
+  assert.match(data, /repeatedActivations: repeatedActivations\.map/);
+  assert.match(page, /RepeatedActivationTable initialPreferences=\{activationPreferences\} rows=\{repeatedActivationRows\}/);
+  assert.match(page, /Brevo delivery means the receiving mail server accepted the message/);
+  assert.match(tabs, /issueCounts\.activation/);
+});

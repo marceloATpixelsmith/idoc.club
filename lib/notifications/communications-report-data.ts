@@ -15,6 +15,7 @@ import {
 
 const WINDOW_DAYS = 7;
 export const UPCOMING_DAYS = 28;
+export const REPEATED_ACTIVATION_THRESHOLD = 3;
 const BREVO_EVENTS: BrevoEventName[] = ['requests', 'delivered', 'hardBounces', 'softBounces', 'blocked', 'spam', 'invalid', 'error'];
 // Profile-change alerts go to the operator mailbox (deliverProfileChangeNotification), not to the member the row is linked to.
 const BREVO_PAGE_SIZE = 500;
@@ -24,10 +25,12 @@ export type SentRow = { brevo: BrevoCheck | null; email: string | null; kind: st
 /** One email that is not a confirmed delivery: bounced/blocked, missing from Brevo's log, still queued, or given up on. */
 export type IssueBucket = 'bounced' | 'failedToSend' | 'notInBrevo' | 'pending';
 export type IssueRow = { brevo: BrevoCheck | null; bucket: IssueBucket; email: string | null; group: 'Renewal notice' | 'System email'; kind: string; label: string; member: string; profileId: number | null; sentAt: Date | null; status: 'failed' | 'pending' | 'sent' };
+export type RepeatedActivation = { email: string; lastRequestedAt: Date; member: string; profileId: number | null; requests: number; sent: number };
 export type UpcomingNotice = { email: string; kind: string; label: string; member: string; sendOn: string; targetDate: string };
 export type CommunicationsReport = {
   brevoAvailable: boolean;
   from: Date;
+  repeatedActivations: RepeatedActivation[];
   issueRows: IssueRow[];
   renewalRows: SentRow[];
   renewalTotals: KindTotals[];
@@ -86,7 +89,7 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
   const today = now.toISOString().slice(0, 10);
   const horizon = new Date(now.getTime() + UPCOMING_DAYS * 86_400_000).toISOString().slice(0, 10);
 
-  const [outbox, accountDeliveries, upcoming, events] = await Promise.all([
+  const [outbox, accountDeliveries, repeatedActivations, upcoming, events] = await Promise.all([
     client<OutboxRow[]>`select o.id, o.kind, o.sent_at, o.dead_lettered_at, case when o.kind = 'administrator.profile_changed' then ${adminAlertRecipient}::text else coalesce(o.payload->>'to', u.email) end as email, p.first_name, p.last_name, o.profile_id
       from notification_outbox o left join profiles p on p.id = o.profile_id left join users u on u.id = p.user_id
       where o.kind not like 'stripe.%' and (o.sent_at >= ${fromIso}::timestamptz or (o.sent_at is null and o.created_at >= ${fromIso}::timestamptz))`,
@@ -94,6 +97,22 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
       select d.id, d.purpose, d.sent_at, d.dead_lettered_at, d.terminal_at, u.email, pr.id as profile_id
       from account_delivery_outbox d left join users u on u.id = d.user_id left join profiles pr on pr.user_id = d.user_id
       where d.terminal_at is null and (d.sent_at >= ${fromIso}::timestamptz or (d.sent_at is null and d.created_at >= ${fromIso}::timestamptz))`,
+    // A successfully delivered message is not proof that a member saw it. Only flag repeated
+    // activation requests for accounts that are STILL awaiting activation; include superseded
+    // outbox rows because each one represents a real request, even if it was not sent.
+    client<{ email: string; first_name: string | null; last_name: string | null; last_requested_at: Date | string; profile_id: number | null; requests: number; sent: number }[]> `
+      select u.email, p.first_name, p.last_name, p.id as profile_id,
+        count(*)::int as requests, count(o.sent_at)::int as sent,
+        max(o.created_at) as last_requested_at
+      from account_delivery_outbox o
+      join users u on u.id = o.user_id
+      left join profiles p on p.user_id = u.id
+      where o.purpose = 'migration_activation' and o.created_at >= ${fromIso}::timestamptz
+        and u.account_state = 'migrated_pending'
+      group by u.id, u.email, p.id, p.first_name, p.last_name
+      having count(*) >= ${REPEATED_ACTIVATION_THRESHOLD}::int
+      order by max(o.created_at) desc
+    `,
     client<{ email: string; first_name: string | null; kind: string; last_name: string | null; target_date: string }[]>`
       select * from (
         select 'membership.renewal_reminder' as kind, s.profile_id, u.email, p.first_name, p.last_name, s.current_period_end::text as target_date
@@ -152,6 +171,7 @@ export async function getCommunicationsReport(now: Date = new Date()): Promise<C
 
   return {
     brevoAvailable: events !== null, from, issueRows, renewalRows,
+    repeatedActivations: repeatedActivations.map((row) => ({ email: row.email, lastRequestedAt: new Date(row.last_requested_at), member: memberName(row.first_name, row.last_name), profileId: row.profile_id, requests: Number(row.requests), sent: Number(row.sent) })),
     renewalTotals: totalsByKind(renewalEmails, checks), systemTotals: totalsByKind(systemEmails, checks), to: now, upcoming: upcomingNotices,
   };
 }

@@ -5,21 +5,31 @@ import { listAssignedOpenConversationsForDashboard, CATEGORY_LABELS, STATUS_LABE
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { listNewMembersLastWeek } from '@/lib/membership/new-members';
 import { getCommunicationsReport } from '@/lib/notifications/communications-report-data';
+import { getMemberJourneyConcerns, type MemberJourneyConcern } from '@/lib/notifications/member-journey-health';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
 }
 
+function JourneyConcernRow({ issue }: { issue: MemberJourneyConcern }) {
+  return <li className="py-3 first:pt-0 last:pb-0">
+    {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
+    <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
+    <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
+  </li>;
+}
+
 export default async function AdminPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const [support, newMembers, communications, revenue] = await Promise.all([
+  const [support, newMembers, communications, revenue, journeyConcerns] = await Promise.all([
     listAssignedOpenConversationsForDashboard(5),
     listNewMembersLastWeek(),
     getCommunicationsReport(),
     // A one-minute per-instance cache: this overview aggregates every payment on each dashboard load. The Revenue page stays live.
     getRevenueReport({}, { cacheSeconds: 60 }),
+    getMemberJourneyConcerns(),
   ]);
   const delivered = communications.renewalRows.filter((row) => row.brevo === 'delivered');
 
@@ -66,7 +76,25 @@ export default async function AdminPage() {
       </AdminFormSection>
     </div>
 
-    <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered." title="Delivered renewal notices">
+    <AdminFormSection description="Potential member access and renewal problems found in durable account, queue, session, and membership records. These are follow-up signals, not proof of failure. Updated whenever this dashboard loads." title="Member journey health">
+      <p className="text-2xl font-semibold">{journeyConcerns.length} <span className="text-sm font-normal text-muted-foreground">member journey concerns</span></p>
+      {journeyConcerns.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">No monitored activation, login, onboarding, or renewal concerns meet the escalation thresholds.</p> : (
+        <ul className="mt-4 divide-y divide-border">
+          {journeyConcerns.slice(0, 20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
+        </ul>
+      )}
+      {journeyConcerns.length > 20 ? (
+        <details className="mt-3 rounded-lg border border-border px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium">Show all {journeyConcerns.length - 20} additional member journey concerns</summary>
+          <ul className="mt-3 divide-y divide-border">
+            {journeyConcerns.slice(20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
+          </ul>
+        </details>
+      ) : null}
+      <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/communications">Open Communications</Link>
+    </AdminFormSection>
+
+    <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered. Delivery does not confirm the member received or acted on them." title="Delivered renewal notices">
       {communications.brevoAvailable ? null : <p className="text-sm text-muted-foreground">Brevo&apos;s log could not be read, so delivery cannot be confirmed right now.</p>}
       <p className="text-2xl font-semibold">{delivered.length} <span className="text-sm font-normal text-muted-foreground">delivered</span></p>
       {delivered.length === 0 ? <p className="text-sm text-muted-foreground">No delivered renewal notices in the last 7 days.</p> : (

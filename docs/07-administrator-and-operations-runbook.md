@@ -9,6 +9,33 @@ A member whose imported WordPress credential verifies successfully but fails any
 
 **Staging evidence:** LIVE-AUTH-039 provisions *two disposable* imported WordPress credentials in `idoc_staging`, tests a real noncompliant first-login/activation link/old-password rejection and a real compliant first-login/OTP flow, and cleans up test accounts and mailboxes. The separate breached-password first-login explanation should additionally be verified with a safe disposable fixture before launch. Staging must retain the communications and billing hold while enabling the staging-only authentication email exception. Do not accept ordinary signup/login results as evidence that legacy first-login behavior was exercised.
 
+## Member Journey Health — administrator monitoring
+
+The **Admin Dashboard** includes a **Member journey health** panel based on existing persisted state, not speculative browser tracking. The existing five-minute `/api/cron/email-delivery-watch` job also checks these signals and queues at most **one operational digest per UTC day** to the address in `IDOC_ADMIN_NOTIFICATION_EMAIL`. Digests go through the durable, leased, retrying `operational_alert_outbox`, with a persistent daily dedupe key. In an environment with member communications deliberately held, the watch does not alert. The dedicated alert kind is enabled by migration `0089`.
+
+The eight report signals and thresholds are:
+
+- **Activation link repeatedly requested:** three or more migration activation requests in seven days while the imported account remains `migrated_pending`. Each actual link request is counted, including requests superseded by newer links.
+- **Activation email not sent:** an eligible activation email has waited unsent at least thirty minutes beyond its request time and is due for delivery; terminalized or dead-lettered records are excluded (other delivery issues remain visible in Communications).
+- **Sign-in verification repeated:** an imported member requested three or more login verification codes in an hour but has no newly authenticated session after the first request in that burst. This is a correlation signal, not proof of email delivery failure.
+- **Repeated refused password sign-ins:** three or more recorded refusals within one hour for an imported member, with no successful new session in that hour. This could indicate an ordinary forgotten password or attempted account abuse; do not treat it as proof of either.
+- **Repeated activation-link rejection:** at least two rejected, expired or already-used activation-link openings from non-scanner clients in 24 hours while the account is still pending. Scanner activity is excluded.
+- **Onboarding incomplete:** a legacy member remains in `onboarding` for more than 48 hours after their account's last update, with a successful sign-in within seven days. Not proof of an error: the member might have chosen to stop.
+- **Renewal notice not sent:** a renewal, expiration or grace reminder is queued, overdue for delivery and unsent for thirty minutes. This does not change the reminder queue.
+- **Renewal follow-up:** an imported member was sent an expiration/grace reminder in the last 35 days, is still expired or in grace more than five days after their membership validity date, and has no newer non-import membership payment. Follow-up is not automatically categorized as a technical failure.
+
+The digest includes category counts and up to twenty affected accounts, and links back to the Admin Dashboard where current concerns and member-sheet links are shown. Its subject is tagged **[HIGH]** if there is a stuck delivery or repeated login-code issue, otherwise **[WARNING]**. Already successful Brevo delivery results remain unmodified. Review member records and the Notifications tab before acting; do not proactively reset passwords, change renewal status, or contact a member solely because of a possibly benign indicator.
+
+**Existing complementary protections:** the transactional-email delivery watch escalates delayed delivery, bounces and repeated email codes; Stripe payment-failure webhooks and reconciliation monitor payment outcomes; Sentry, server error alerts and the authentication security verification suite monitor application errors. None of these systems can independently prove mailbox placement, that a member read an email, or every possible client-side abandonment. Investigations may require contacting the member.
+
+## Communications: repeated activation requests
+
+The **Communications** dashboard reports Brevo's *Delivered* status as acceptance by the recipient's mail server, not proof that a member received, opened or read the message. A green delivery count must not be interpreted as successful activation.
+
+In the last-seven-days view, **Repeated account activation requests** separately lists imported members who requested at least three migration-activation links and whose account is still `migrated_pending`. Each request is counted from `account_delivery_outbox`, including superseded or pending deliveries. The table shows the recipient, member, number of requests, number sent and last request; these members also contribute to the Delivery Issues tab count without changing Brevo's transport success totals. Members who successfully activate disappear from this follow-up list. This is a support signal, not definitive evidence of email failure or of a resend-button click (requests can originate from other supported activation flows).
+
+Investigate repeated requests by checking the member's status and delivery history, checking Brevo for spam/bounce/defer signals, and contacting the member through an appropriate channel to check spam filtering and the address on record. Do not mark an accepted message as bounced merely because activation has not completed.
+
 ## Signup and password reset breach checks
 
 Password creation during signup and password reset checks the new password against Have I Been Pwned's free Pwned Passwords range endpoint. The application computes a SHA-1 hash server-side and sends only its first five hexadecimal characters; it compares the returned suffixes locally. The password and full hash are never sent. A breached match is rejected with a request to choose another password. Provider outages are recorded as an unavailable check and do not block password creation.
@@ -126,6 +153,22 @@ It hard-deletes the user and everything tied to them (roles, MFA, sessions, toke
 Codex automated review is advisory. When a pull request is opened or updated, the workflow requests a Codex review and exits promptly without polling. The `codex/review-complete` status is informational only and is not required by either branch ruleset; it does not certify review completion. Any Codex comments or inline findings remain visible for the author to address, while fast and risk-classified full CI workflows determine test readiness.
 
 The repository owner removed `codex/review-complete` from both required-check lists on 25 September 2026. Keep `Fast PR checks` required. Full release and authentication/security workflows remain required by the merge procedure whenever `docs/26-ci-risk-classification-and-agent-merge-policy.md` classifies the change as requiring them. Staging acceptance and the live or manual checks required by this runbook remain mandatory before a staging-to-main promotion.
+
+## Database-aware deployment release gate
+
+**Required for IDOC Vercel production and staging:** `vercel.json` runs `scripts/assert-deployment-schema-ready.mjs` before Next.js compilation. The gate reads the selected schema's `__drizzle_migrations` using its existing restricted application login and compares its newest applied migration timestamp to the newest committed migration in `lib/db/migrations/meta/_journal.json`. It also requires every committed migration after the historically reconciled migration 0070 to be present in the target ledger (so a later timestamp cannot conceal a skipped migration). It checks the critical email-delivery and operational-alert tables explicitly. Wrong/missing `DB_SCHEMA`, missing `POSTGRES_URL`, wrong DB login, missing tables, connection failure or migration lag causes the build to fail closed: the previously active Vercel deployment remains live, and the new incompatible code does not become active. CI and local builds without a Vercel deployment context do not access a live DB. This gate **never applies migrations** and does not grant migration privileges to Vercel.
+
+Migration jobs remain distinct and security-controlled: staging auto-migrates on committed migration changes; production uses `Auto-migrate Production Schema` on a `main` migration-bearing merge, with a required named GitHub environment reviewer, a verified offsite R2 backup and a post-migration ledger guard. These run asynchronously relative to the initial Vercel Git build. When a migration-bearing commit first triggers a build ahead of the migration, that build may be refused intentionally.
+
+**Automatic retry after a successful migration:** configure Vercel Deploy Hooks in the Vercel `idoc.club` project, one for branch `staging` and one for branch `main`. Copy their complete HTTPS URLs into GitHub Actions secrets:
+- `IDOC_VERCEL_STAGING_DEPLOY_HOOK_URL`, in the `idoc-db-staging-maintenance` GitHub environment;
+- `IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL`, in the `idoc-db-production-maintenance` GitHub environment.
+
+These are **GitHub environment secrets**, not Vercel environment variables; never paste hook URLs into code, logs or PRs. The corresponding migration workflow invokes its hook **only after** successful schema verification, rebuilding the latest merged branch head. If a hook is not configured, the workflow emits a warning and a privileged operator must click **Redeploy** in the appropriate Vercel deployment after confirming the migration. A Deploy Hook does not bypass the build's schema gate. Avoid triggering its hook for unreviewed feature branches.
+
+**Manual recovery if production drift is already present:** the production database may be at migration 0086 while code expects 0088. Use GitHub Actions > `Auto-migrate Production Schema` > **Run workflow** on `main`, approve the `idoc-db-production-maintenance` protected environment, confirm the R2 backup and schema guard succeeded, and then verify the email-delivery tables and new Vercel deployment. Do not run ad-hoc SQL, grant the application migration rights, disable the environment approval, or re-target production at the staging schema. A failed job or missing approval is a release blocker, never a reason to skip the schema readiness check.
+
+**Remaining operational limitation:** Vercel still attempts its first Git-triggered build in parallel with the migration, which may fail visibly. Once the hooks are configured, the migration workflow automatically retries a safe build after completion. Truly serial, single-deployment releases would require switching from Git-triggered Vercel deployment to a dedicated workflow-owned deployment orchestrator with Vercel credentials; do not remove the existing migration approval or deployment protection to simulate that arrangement.
 
 ## Branch, environment, and deployment workflow
 

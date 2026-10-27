@@ -42,7 +42,7 @@
       "schedule": "30 8 * * *"
     }
   ],
-  "buildCommand": "pnpm build",
+  "buildCommand": "node scripts/assert-deployment-schema-ready.mjs && pnpm build",
   "git": {
     "deploymentEnabled": {
       "*": false,
