@@ -14,6 +14,7 @@ import { getSession } from '@/lib/auth/session';
 import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import { getMarketingPreference, settleOnboardingMarketingOptIn } from './marketing-preference';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import { expireOpenCheckoutSessionsIfAny } from '@/lib/payments/checkout-session-expiry';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type AdminBoardProfileInput, type MemberProfileInput } from './validation';
@@ -284,7 +285,7 @@ export async function cancelOwnMembership(testStripeClient?: CancellationStripeC
     return updated;
   });
 
-  const stripeResult = await cancelOpenSubscriptionIfAny(profile.id, testStripeClient);
+  const stripeResult = { ...await cancelOpenSubscriptionIfAny(profile.id, testStripeClient), ...await expireOpenCheckoutSessionsIfAny(profile.id, testStripeClient) };
   if (account?.email) await unsubscribeFromMarketingAudience(account.email);
   return { membership, ...stripeResult };
 }

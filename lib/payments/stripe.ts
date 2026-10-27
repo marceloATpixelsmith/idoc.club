@@ -155,6 +155,8 @@ export async function getOwnPaymentMethodSummary(testStripeClient?: PaymentMetho
 // Only the one call this module makes for cancellation, so tests can inject a fake without
 // satisfying the entire real Stripe SDK surface (same pattern as PortalStripeClient above).
 export type CancellationStripeClient = {
+  // Optional: only the call that ends a member's open Checkout sessions on cancellation (checkout-session-expiry.ts) uses it.
+  checkout?: { sessions?: { expire?: (id: string) => Promise<unknown> } };
   subscriptions: { update: (id: string, params: { cancel_at_period_end: boolean }) => Promise<{ id: string; status: string }> };
 };
 

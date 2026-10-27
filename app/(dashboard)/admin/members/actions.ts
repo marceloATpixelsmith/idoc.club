@@ -91,8 +91,11 @@ export async function suspendMembershipForm(_state: FormState, formData: FormDat
   const profileId = Number(formData.get('profileId'));
   try {
     const result = await suspendMembership(profileId, formData.get('reason'));
-    if (result.stripeCancelError) {
-      return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — end it manually.` };
+    const warnings: string[] = [];
+    if (result.stripeCancelError) warnings.push(`could not end the Stripe subscription at period end (${result.stripeCancelError}) — retry the cancellation or end it manually in Stripe`);
+    if (result.checkoutExpiryFailed) warnings.push(`${result.checkoutExpiryFailed} open Stripe Checkout link(s) could not be expired — repeat the cancellation to retry, or expire them in Stripe`);
+    if (warnings.length > 0) {
+      return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: ${warnings.join('; ')}.` };
     }
     return { success: result.stripeCancelled ? 'Membership canceled; access continues to the end of the paid period and the Stripe subscription will not renew.' : 'Membership canceled; access continues to the end of the paid period.' };
   } catch (error) {
@@ -117,11 +120,17 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
   const validUntil = formData.get('validUntil');
   const status = formData.get('status');
   try {
-    await correctEntitlement(profileId, {
+    const result = await correctEntitlement(profileId, {
       reason: formData.get('reason'),
       status: status ? String(status) : undefined,
       validUntil: validUntil ? String(validUntil) : undefined,
     });
+    const warnings: string[] = [];
+    if ('stripeCancelError' in result && result.stripeCancelError) warnings.push(`the Stripe subscription could not be ended at period end (${result.stripeCancelError}) — retry the correction or end it manually in Stripe`);
+    if ('checkoutExpiryFailed' in result && result.checkoutExpiryFailed) warnings.push(`${result.checkoutExpiryFailed} open Stripe Checkout link(s) could not be expired — repeat the correction to retry, or expire them in Stripe`);
+    if (warnings.length > 0) {
+      return { attentionRequired: true, error: `Entitlement corrected, but action is required: ${warnings.join('; ')}.` };
+    }
     return { success: 'Entitlement corrected.' };
   } catch (error) {
     return friendlyError(error, 'The entitlement could not be corrected.');

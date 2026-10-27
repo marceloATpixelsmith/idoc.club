@@ -66,6 +66,10 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
   const claimedRequests = new Set<BrevoLogEvent>();
   const claimedMessageIds = new Set<string>();
   const ordered = [...sent].sort((left, right) => left.sentAt.getTime() - right.sentAt.getTime());
+  const unmatched: Array<[number, SentEmail]> = [];
+
+  // First pass: settle every send that has a request event of its own, so the time-window fallback below can never consume an outcome
+  // belonging to a message that a later send already claims by id.
   for (const [index, row] of ordered.entries()) {
     const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
 
@@ -83,8 +87,11 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
       claimedMessageIds.add(request.messageId);
       const mine = byMessageId.get(request.messageId) ?? [];
       result.set(row.id, mine.some((event) => FAILURE_EVENTS.includes(event.event)) ? 'failed' : mine.some((event) => event.event === 'delivered') ? 'delivered' : 'not_found');
-      continue;
-    }
+    } else unmatched.push([index, row]);
+  }
+
+  for (const [index, row] of unmatched) {
+    const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
 
     // Fallback: by recipient and time. An outcome belongs to this send only from the previous send to the same address to the next one
     // (or 24 hours), so a later message's bounce can never overturn an earlier delivery. The clock allowance only widens the start
