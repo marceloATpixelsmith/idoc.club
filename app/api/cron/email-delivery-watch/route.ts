@@ -13,7 +13,10 @@ export async function GET(request: Request) {
   return handleAccountDeliveryCron(request, {
     processBatch: async () => {
       const watch = await runEmailDeliveryWatch();
-      const journey = await runMemberJourneyWatch();
+      // KEEP EXISTING EMAIL DELIVERY ALERTS FLOWING EVEN IF THE NEW SCAN FAILS.
+      let journey = { alerted: false, concerns: 0 };
+      try { journey = await runMemberJourneyWatch(); }
+      catch { await logError('member_journey_watch_failed'); }
       // Deliver what the watch queued in this same run (the queue's own worker also retries anything that fails).
       const delivery = await processOperationalAlertBatch();
       return { ...watch, journeyConcerns: journey.concerns, journeyDigestQueued: journey.alerted, alertsRetryable: delivery.retryable };
