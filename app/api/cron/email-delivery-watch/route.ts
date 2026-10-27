@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       catch { await logError('member_journey_watch_failed'); }
       // Deliver what the watch queued in this same run (the queue's own worker also retries anything that fails).
       const delivery = await processOperationalAlertBatch();
-      return { ...watch, journeyConcerns: journey.concerns, journeyDigestQueued: journey.alerted, alertsRetryable: delivery.retryable };
+      return { ...watch, journeyConcerns: journey.concerns, journeyDigestQueued: journey.alerted ? 1 : 0, alertsRetryable: delivery.retryable };
     },
     reportFailure: () => logError('email_delivery_watch_failed'),
     secret: cronSecretForServer(),
