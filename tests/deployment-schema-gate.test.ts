@@ -15,6 +15,8 @@ test('deployment build checks database migration readiness before Next.js build'
   }
   assert.match(source, /target === null/);
   assert.match(source, /actual !== expected/);
+  assert.match(source, /entry.idx >= 71/);
+  assert.match(source, /missingMigrations.length/);
   assert.doesNotMatch(source, /db:migrate|migrate\(/);
 });
 
