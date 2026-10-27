@@ -39,7 +39,7 @@ export function UpcomingNoticesTable({ initialPreferences, rows }: { initialPref
 export function DeliveryIssuesTable({ initialPreferences, rows }: { initialPreferences?: TablePreferenceState | null; rows: ReadOnlyRow[] }) {
   return (
     <AdminReadOnlyTable
-      columns={[{ id: 'sent', label: 'Sent' }, { id: 'group', label: 'Group' }, { id: 'notice', label: 'Email type' }, { id: 'member', label: 'Member' }, { id: 'email', label: 'Email' }, { id: 'queue', label: 'Queue' }, { id: 'brevo', label: 'Brevo log' }]}
+      columns={[{ id: 'sent', label: 'Sent' }, { id: 'group', label: 'Group' }, { id: 'notice', label: 'Email type' }, { id: 'member', label: 'Member concerned' }, { id: 'email', label: 'Recipient email' }, { id: 'queue', label: 'Queue' }, { id: 'brevo', label: 'Brevo log' }]}
       dateColumn="sent"
       empty="No matching delivery issues."
       initialPreferences={initialPreferences}
