@@ -20,6 +20,16 @@ test('members must prove email possession before password change or revocation, 
   assert.match(hook, /attempt\.set\('memberSecurityCode', code\)/);
   assert.match(hook, /original\.forEach\(\(value, key\) => attempt\.append\(key, value\)\)/);
   assert.match(hook, /stepUpMethod === 'email'/);
+  // Execute the exact regex used by the inline dialog: an accidentally double-escaped
+  // \\d would silently block every real 6-digit code even if the server accepts it.
+  const patternSource = hook.match(/if \(!original \|\| busy \|\| !\/(.+?)\/\.test\(code\)\)/)?.[1];
+  assert.ok(patternSource, 'member dialog must validate its submitted code');
+  const acceptsCode = new RegExp(patternSource);
+  assert.equal(acceptsCode.test('123456'), true);
+  assert.equal(acceptsCode.test('12345'), false);
+  assert.equal(acceptsCode.test('1234567'), false);
+  assert.equal(acceptsCode.test('abcdef'), false);
+
 });
 
 test('member security OTPs are different from sign-in and recovery codes and the database allows both', () => {
