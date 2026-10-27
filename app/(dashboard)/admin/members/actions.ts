@@ -94,6 +94,9 @@ export async function suspendMembershipForm(_state: FormState, formData: FormDat
     if (result.stripeCancelError) {
       return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — end it manually.` };
     }
+    if (result.checkoutExpiryFailed) {
+      return { attentionRequired: true, success: `Membership canceled; the member keeps access until the end of the paid period. Warning: ${result.checkoutExpiryFailed} open Stripe Checkout link(s) could not be expired — repeat the cancellation to retry, or expire them in Stripe.` };
+    }
     return { success: result.stripeCancelled ? 'Membership canceled; access continues to the end of the paid period and the Stripe subscription will not renew.' : 'Membership canceled; access continues to the end of the paid period.' };
   } catch (error) {
     return friendlyError(error, 'The membership could not be canceled.');
@@ -124,6 +127,9 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
     });
     if ('stripeCancelError' in result && result.stripeCancelError) {
       return { attentionRequired: true, error: `Entitlement corrected, but the Stripe subscription could not be ended at period end (${result.stripeCancelError}) — submit the same correction again to retry, or end it manually in Stripe.` };
+    }
+    if ('checkoutExpiryFailed' in result && result.checkoutExpiryFailed) {
+      return { attentionRequired: true, error: `Entitlement corrected, but ${result.checkoutExpiryFailed} open Stripe Checkout link(s) could not be expired — submit the same correction again to retry, or expire them in Stripe.` };
     }
     return { success: 'Entitlement corrected.' };
   } catch (error) {

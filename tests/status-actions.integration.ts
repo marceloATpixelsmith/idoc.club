@@ -283,6 +283,7 @@ test('cancelling a membership expires its open Checkout sessions, and a Stripe f
   const result = await asAdmin(admin.id, () => suspendMembership(profile.id, 'Policy violation', failing));
   assert.equal(result.membership.status, 'canceled');
   assert.equal(result.checkoutSessionsExpired, 0);
+  assert.equal(result.checkoutExpiryFailed, 1, 'the failure is reported so the admin form can warn');
   assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'open', 'left open so the webhook guard still protects the membership');
 });
 

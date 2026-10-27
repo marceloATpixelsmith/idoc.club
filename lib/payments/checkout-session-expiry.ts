@@ -17,7 +17,7 @@ export type CheckoutExpiryStripeClient = Pick<CancellationStripeClient, 'checkou
  * change is the authority and must not depend on a network call. Rows are marked expired only after Stripe confirms; a session
  * Stripe could not expire stays open and the webhook guard still protects the membership.
  */
-export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStripeClient?: CheckoutExpiryStripeClient): Promise<{ checkoutSessionsExpired: number }> {
+export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStripeClient?: CheckoutExpiryStripeClient): Promise<{ checkoutExpiryFailed: number; checkoutSessionsExpired: number }> {
   try {
     const [payable, setup] = await Promise.all([
       db.select({ externalId: membershipCheckoutSessions.externalCheckoutSessionId, id: membershipCheckoutSessions.id })
@@ -29,29 +29,30 @@ export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStr
         eq(renewalPreferences.profileId, profileId), eq(renewalPreferences.transitionState, 'awaiting_setup'), isNotNull(renewalPreferences.externalCheckoutSessionId),
       )),
     ]);
-    if (payable.length === 0 && setup.length === 0) return { checkoutSessionsExpired: 0 };
+    if (payable.length === 0 && setup.length === 0) return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
     assertLiveBillingAllowed('billing.expireOpenCheckoutSessions');
     if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
     const stripe = (testStripeClient ?? getStripeServerClient()) as CheckoutExpiryStripeClient;
     const expire = stripe.checkout?.sessions?.expire;
-    if (!expire) return { checkoutSessionsExpired: 0 };
+    if (!expire) return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
     let expired = 0;
+    let failed = 0;
     for (const session of payable) {
       try {
         await expire.call(stripe.checkout!.sessions, session.externalId!);
         await db.update(membershipCheckoutSessions).set({ status: 'expired', updatedAt: new Date() }).where(eq(membershipCheckoutSessions.id, session.id));
         expired += 1;
-      } catch { /* already expired or completed at Stripe, or Stripe unreachable: the webhook guard still protects the membership */ }
+      } catch { failed += 1; /* already expired or completed at Stripe, or Stripe unreachable: the webhook guard still protects the membership, and the caller reports the count so an administrator can retry */ }
     }
     for (const session of setup) {
       try {
         await expire.call(stripe.checkout!.sessions, session.externalId!);
         await db.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() }).where(eq(renewalPreferences.externalCheckoutSessionId, session.externalId!));
         expired += 1;
-      } catch { /* as above */ }
+      } catch { failed += 1; }
     }
-    return { checkoutSessionsExpired: expired };
+    return { checkoutExpiryFailed: failed, checkoutSessionsExpired: expired };
   } catch {
-    return { checkoutSessionsExpired: 0 };
+    return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
   }
 }
