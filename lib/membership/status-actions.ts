@@ -140,8 +140,10 @@ export async function correctEntitlement(profileId: number, untrustedInput: unkn
   // Moving a membership into a held status (canceled or under review) must stop it billing and being paid for: the open subscription
   // ends at period end (as suspendMembership does) and open Checkout sessions are expired. Best effort after the committed change;
   // the webhook handlers independently refuse to let a late payment, renewal or Setup reverse the hold.
-  const enteredHold = (input.status === 'canceled' || input.status === 'review_required') && result.before.status !== input.status;
-  const stripeResult = enteredHold
+  // Attempted whenever the requested status is a hold, not only on the transition into one: both helpers no-op when nothing is open,
+  // so repeating the correction retries a Stripe call that failed the first time (outage, rate limit, live-billing hold).
+  const holdsBilling = input.status === 'canceled' || input.status === 'review_required';
+  const stripeResult = holdsBilling
     ? { ...await cancelOpenSubscriptionIfAny(profileId, testStripeClient), ...await expireOpenCheckoutSessionsIfAny(profileId, testStripeClient) }
     : {};
   return { membership: result.membership, ...stripeResult };

@@ -285,3 +285,19 @@ test('cancelling a membership expires its open Checkout sessions, and a Stripe f
   assert.equal(result.checkoutSessionsExpired, 0);
   assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'open', 'left open so the webhook guard still protects the membership');
 });
+
+test('repeating a hold correction retries Stripe cleanup that failed the first time, even though the status is already held', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenCheckoutSessions(profile.id);
+  const calls: string[] = [];
+  const failing = { ...fakeStripeClient(calls), checkout: { sessions: { expire: async () => { throw new Error('stripe unavailable'); } } } };
+  await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Under review', status: 'review_required' }, failing));
+  assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'open');
+  const retried = await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Retry cleanup', status: 'review_required' }, fakeStripeClient(calls)));
+  assert.equal(retried.membership.status, 'review_required');
+  assert.deepEqual(calls, [`expire:cs_open_${profile.id}`]);
+  assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'expired');
+});

@@ -117,11 +117,14 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
   const validUntil = formData.get('validUntil');
   const status = formData.get('status');
   try {
-    await correctEntitlement(profileId, {
+    const result = await correctEntitlement(profileId, {
       reason: formData.get('reason'),
       status: status ? String(status) : undefined,
       validUntil: validUntil ? String(validUntil) : undefined,
     });
+    if ('stripeCancelError' in result && result.stripeCancelError) {
+      return { attentionRequired: true, success: `Entitlement corrected. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — submit the same correction again to retry, or end it manually in Stripe.` };
+    }
     return { success: 'Entitlement corrected.' };
   } catch (error) {
     return friendlyError(error, 'The entitlement could not be corrected.');

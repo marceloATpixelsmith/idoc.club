@@ -66,6 +66,8 @@ responsive grid (multiple cards per row on wide viewports, one column on narrow 
 flat vertical stack. Email Member (in the Sheet header) is only a `mailto:` link to the current
 canonical account address.
 
+**Holds stop billing.** Setting a membership to `canceled` or `review_required` through *Correct entitlement* (like cancelling, suspending or the member cancelling their own membership) ends any open Stripe subscription at period end and expires the member's open Stripe Checkout sessions and pending renewal setups, so a held member cannot keep being billed or pay through an old link. This runs after the status change commits and is best effort: if Stripe is unavailable the status still changes and the form shows a warning. Submit the same correction again to retry the Stripe step (it does nothing when nothing is open), or end the subscription manually in Stripe. The Stripe webhook handlers independently refuse to let a late payment, renewal or Setup completion reverse a hold.
+
 The roster's row actions also include a Support-conversations shortcut that opens `/admin/support`
 with the search box pre-filled to that member's email, showing only their conversations; it is
 disabled when the member has never submitted a support conversation, regardless of any existing
