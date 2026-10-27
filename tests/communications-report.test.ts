@@ -181,7 +181,7 @@ test('repeated activation requests remain visible even if all emails were delive
   assert.match(data, /u\.account_state = 'migrated_pending'/);
   assert.match(data, /having count\(\*\) >= \$\{REPEATED_ACTIVATION_THRESHOLD\}/);
   assert.match(data, /repeatedActivations: repeatedActivations\.map/);
-  assert.match(page, /RepeatedActivationTable rows=\{repeatedActivationRows\}/);
+  assert.match(page, /RepeatedActivationTable initialPreferences=\{activationPreferences\} rows=\{repeatedActivationRows\}/);
   assert.match(page, /Brevo delivery means the receiving mail server accepted the message/);
   assert.match(tabs, /issueCounts\.activation/);
 });
