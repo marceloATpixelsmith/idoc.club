@@ -74,7 +74,7 @@ else
       'email_delivery_pending_events',
       'operational_alert_outbox',
     ];
-    const found = await db`select table_name from information_schema.tables where table_schema = ${target} and table_name in ${db(requiredTables)}`;
+    const found = await db`select table_name from information_schema.tables where table_schema = ${target} and table_name = any(${requiredTables}::text[])`;
     const names = new Set(found.map((row) => row.table_name));
     const missing = requiredTables.filter((name) => !names.has(name));
     if (missing.length)
