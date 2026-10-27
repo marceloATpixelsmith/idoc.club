@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { notifyWebmasterOfEmailEvent } from '@/lib/notifications/bounce-complaint-alert';
-import { parseBrevoEvent, verifyBrevoWebhookKey } from '@/lib/notifications/brevo-transactional-webhook';
+import { parseBrevoDeliveryEvent, parseBrevoEvent, verifyBrevoWebhookKey } from '@/lib/notifications/brevo-transactional-webhook';
+import { normalizeBrevoEventName } from '@/lib/notifications/email-delivery-log-core';
+import { applyBrevoDeliveryEvent } from '@/lib/notifications/email-delivery-log';
 import { logError, logWarn } from '@/lib/observability/logger';
 
 // AUTH-EMAIL-007: Brevo pings the configured Notify URL to confirm it resolves before accepting it
@@ -32,17 +34,27 @@ export async function POST(request: Request) {
     return Response.json({ received: true });
   }
 
+  // Brevo's webhook payload spells events snake_case (`hard_bounce`) while its APIs use camelCase (`hardBounces`); match on the
+  // normalized name so neither spelling can silently skip an alert.
+  const eventName = normalizeBrevoEventName(event.event);
   if (event.email) {
-    if (event.event === 'hardBounce') {
+    if (eventName === 'hard_bounced') {
       await notifyWebmasterOfEmailEvent({ email: event.email, kind: 'email.hard_bounce', reasonCode: event.reason });
-    } else if (event.event === 'spam') {
+    } else if (eventName === 'spam') {
       await notifyWebmasterOfEmailEvent({ email: event.email, kind: 'email.spam_complaint' });
-    } else if (event.event === 'softBounce') {
+    } else if (eventName === 'soft_bounced') {
       // Transient by definition -- logged for operator visibility only, deliberately never an
       // alert email: a single soft bounce (mailbox full, greylisted, ...) is routine, and paging an
       // operator for every one of these would train them to ignore the alerts that actually matter.
       await logWarn('brevo_webhook_soft_bounce');
     }
+  }
+
+  // Record what became of the email in the delivery log. Best effort: Brevo only needs a 200, and a failure here must not make it
+  // retry the whole event (the alerts above already ran).
+  const delivery = parseBrevoDeliveryEvent(rawBody);
+  if (delivery) {
+    try { await applyBrevoDeliveryEvent(delivery); } catch { await logWarn('brevo_webhook_delivery_log_failed'); }
   }
 
   return Response.json({ received: true });

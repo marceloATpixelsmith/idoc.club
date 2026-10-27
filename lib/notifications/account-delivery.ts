@@ -115,7 +115,7 @@ export async function deliverNextAccountLink(owner: string = randomUUID(), testD
         footerNote: 'If you did not request this, you can safely ignore this email.',
         heading: activation ? 'Activate your account' : 'Reset your password',
       });
-      await dependencies.send({ html, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email }, { authenticationEmail: true });
+      await dependencies.send({ html, messageId: record.messageId, subject: activation ? 'Activate your IDOC account' : 'Reset your IDOC password', to: payload.email }, { authenticationEmail: true, kind: `account.${record.purpose}`, userId: record.userId });
       await dependencies.beforeFinalize?.(record);
       const completedAt = dependencies.now();
       const [done] = await tx.update(accountDeliveryOutbox).set({ attemptCount: sql`${accountDeliveryOutbox.attemptCount} + 1`, lastAttemptAt: completedAt, lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: completedAt }).where(and(eq(accountDeliveryOutbox.id, record.id), eq(accountDeliveryOutbox.leaseOwner, owner), isNull(accountDeliveryOutbox.sentAt))).returning();

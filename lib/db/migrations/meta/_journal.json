@@ -610,6 +610,13 @@
       "when": 1792960000000,
       "tag": "0086_member_timeline_table_preference",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793120000000,
+      "tag": "0087_email_delivery_log",
+      "breakpoints": true
     }
   ]
 }
