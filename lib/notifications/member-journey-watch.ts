@@ -11,6 +11,8 @@ const LABELS: Record<MemberJourneyConcernKind, string> = {
   activation_repeated: 'Repeated activation link requests',
   activation_delivery_stuck: 'Activation email not sent',
   login_code_repeated: 'Repeated sign-in codes without a successful login',
+  password_signin_refused: 'Repeated password sign-in refusal',
+  activation_link_rejected: 'Activation link repeatedly rejected or expired',
   onboarding_incomplete: 'Onboarding incomplete',
   renewal_delivery_stuck: 'Renewal notice not sent',
   renewal_followup: 'Renewal follow-up due',
@@ -25,7 +27,7 @@ export async function runMemberJourneyWatch(now = new Date()) {
   // SEND ONE RE-TRIABLE DIGEST PER UTC DAY, NOT ONE EMAIL EVERY FIVE MINUTES OR
   // ONE EMAIL FOR EVERY AFFECTED MEMBER. ALL DETAILS REMAIN ON THE ADMIN DASHBOARD.
   const urgent = issues.some((issue) => issue.kind === 'activation_delivery_stuck'
-    || issue.kind === 'login_code_repeated' || issue.kind === 'renewal_delivery_stuck');
+    || issue.kind === 'login_code_repeated' || issue.kind === 'password_signin_refused' || issue.kind === 'activation_link_rejected' || issue.kind === 'renewal_delivery_stuck');
   const summary = Object.keys(LABELS).flatMap((key) => {
     const count = issues.filter((issue) => issue.kind === key).length;
     return count ? [`<li><strong>${escapeHtml(LABELS[key as MemberJourneyConcernKind])}:</strong> ${count}</li>`] : [];
