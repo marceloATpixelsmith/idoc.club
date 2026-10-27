@@ -10,9 +10,10 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 // AUTH-EMAIL-002: "Resend MUST be throttled and replace or invalidate superseded outstanding
 // evidence so prior verification artifacts cannot remain valid indefinitely, while public behavior
 // remains enumeration-resistant." Drives the real production resendSignupOtp Server Action -- not a
-// parallel helper -- proving the cooldown is actually enforced, a resent code actually supersedes
-// (invalidates) the one it replaces rather than merely adding a second valid code, and the
-// response shape never varies with facts an anonymous caller shouldn't be able to learn.
+// parallel helper -- proving the cooldown is actually enforced, a resend keeps only the newest
+// previous code alive beside the new one (never more than two live codes; anything older is
+// superseded), and the response shape never varies with facts an anonymous caller shouldn't be able
+// to learn.
 
 Object.assign(process.env, {
   AUTH_SECRET: 'integration-auth-secret-that-is-long-enough',
@@ -75,7 +76,7 @@ test('resendSignupOtp enforces the resend cooldown against the real production p
   assert.equal(count, 1, 'a cooldown-blocked resend must not create a second code row');
 });
 
-test('a resent code supersedes (invalidates) the one it replaces, rather than leaving both valid', async () => {
+test('a resend keeps the newest previous code live beside the new one, and supersedes anything older', async () => {
   const email = 'supersede-test@example.test';
   const { cookies, csrfToken } = await pendingSignupSession(email);
 
@@ -97,14 +98,37 @@ test('a resent code supersedes (invalidates) the one it replaces, rather than le
   assert.ok(newCode);
   assert.notEqual(newCode, oldCode, 'sanity check: the resend must actually generate a different code');
 
+  // Mail can arrive late: the code already on its way stays valid beside the new one, but never more than two.
+  const [{ count: liveAfterResend }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.email_otp_codes
+    where email=${email} and purpose='signup_verification' and consumed_at is null`;
+  assert.equal(liveAfterResend, 2, 'the previous code and the new code are both live after one resend');
+
+  // Shift (not overwrite) so the two codes keep their issuance order; the resend keeps the newest by created_at.
+  await sql`update idoc.email_otp_codes set created_at = created_at - interval '31 seconds'
+    where email=${email} and purpose='signup_verification'`;
+  await withTestRequestCookies(cookies, async () => {
+    const resend = new FormData(); resend.set('csrf_token', csrfToken);
+    assert.deepEqual(await resendSignupOtp({}, resend), { success: 'A new code was sent.' });
+  });
+  const newestCode = capturedCode;
+
   await withTestRequestCookies(cookies, async () => {
     const oldAttempt = new FormData(); oldAttempt.set('code', oldCode); oldAttempt.set('csrf_token', csrfToken);
-    assert.deepEqual(await verifySignupOtp({}, oldAttempt), { error: 'That code is incorrect.' }, 'the superseded code must no longer verify');
+    assert.deepEqual(await verifySignupOtp({}, oldAttempt), { error: 'That code is incorrect.' }, 'a code two resends old must no longer verify');
   });
 
-  const [{ count: liveCount }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.email_otp_codes
+  const [{ count: liveAfterSecondResend }] = await sql<{ count: number }[]>`select count(*)::int count from idoc.email_otp_codes
     where email=${email} and purpose='signup_verification' and consumed_at is null`;
-  assert.equal(liveCount, 1, 'exactly one live (unconsumed) code must exist after a resend');
+  assert.equal(liveAfterSecondResend, 2, 'never more than two live codes');
+
+  await withTestRequestCookies(cookies, async () => {
+    const previousAttempt = new FormData(); previousAttempt.set('code', newCode); previousAttempt.set('csrf_token', csrfToken);
+    // The failed attempt above spent budget on both live codes, so this still verifies (1 of 5 used).
+    assert.ok(newestCode && newestCode !== newCode);
+    // A successful verification redirects (Next throws NEXT_REDIRECT); a failed one returns { error }.
+    await assert.rejects(() => verifySignupOtp({}, previousAttempt), (error: unknown) => String((error as { digest?: string }).digest ?? '').startsWith('NEXT_REDIRECT'),
+      'the previous (still live) code verifies');
+  });
 });
 
 test('resendSignupOtp reports an identical response shape whether or not the pending address happens to already belong to an existing account', async () => {

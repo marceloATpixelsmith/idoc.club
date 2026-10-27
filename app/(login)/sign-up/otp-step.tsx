@@ -7,7 +7,7 @@ export function OtpStep({ email, pendingCsrfNonce }: { email: string; pendingCsr
   return (
     <OtpEntryStep
       cancelAction={cancelSignup}
-      description={<>We sent a 6-digit code to <strong>{email}</strong>.</>}
+      description={<>We sent a 6-digit code to <strong>{email}</strong>. Please check your spam folder for the email.</>}
       pendingCsrfNonce={pendingCsrfNonce}
       resendAction={resendSignupOtp}
       title="Verify your email"
