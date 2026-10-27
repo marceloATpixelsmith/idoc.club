@@ -27,6 +27,7 @@ import { checkRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 import { authoritativeMfaRole, beginPrimaryMfa } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, hasValidLoginDeviceTrust } from '@/lib/auth/login-device-trust';
 import { revokeAllUserSessions, revokeSessionWithSignOutAudit } from '@/lib/auth/session-registry';
+import { requireMemberSecurityEmailProof } from '@/lib/auth/member-security-step-up';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { verifyLegacyPassword } from '@/lib/auth/legacy-wordpress-hash';
@@ -273,14 +274,15 @@ export async function signOut(csrfToken: string) {
 const updatePasswordSchema = z.object({
   currentPassword: passwordEntrySchema,
   newPassword: passwordSchema,
+  memberSecurityCode: z.string().optional(),
 });
 
 export const updatePassword = validatedActionWithUser(
   updatePasswordSchema,
   async (data, _, user) => {
-    const { currentPassword, newPassword } = data;
-
-    if ((await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) return { stepUpRequired: true };
+    const { currentPassword, newPassword, memberSecurityCode } = data;
+    const member = await authoritativeMfaRole(user.id) === 'member';
+    if (!member && (await requireFreshStepUp(user, 'change-password', '/dashboard/security')).required) return { stepUpRequired: true };
 
     const isPasswordValid = await comparePasswords(currentPassword, user.passwordHash);
     if (!isPasswordValid) return { error: 'Current password is incorrect.' };
@@ -290,6 +292,10 @@ export const updatePassword = validatedActionWithUser(
       return { error: 'This password has appeared in a public data breach. Please choose a different password.' };
     }
 
+    if (member) {
+      const evidence = await requireMemberSecurityEmailProof(user, 'member_password_change', memberSecurityCode);
+      if (!evidence.approved) return evidence;
+    }
     const newPasswordHash = await hashPassword(newPassword);
     await db.transaction(async (tx) => {
       const [changed] = await tx.update(users).set({
