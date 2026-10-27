@@ -7,6 +7,7 @@ import { OPEN_SUBSCRIPTION_STATUSES } from '@/lib/payments/pricing';
 import { AUTO_RENEWAL_NOTICE_DAYS, GRACE_REMINDER_DAYS_BEFORE_END, NON_RENEWAL_EXPIRATION_NOTICE_DAYS } from '@/lib/payments/renewal';
 import { brevoApiKeyForServer } from '@/lib/runtime/configuration';
 import { tracedFetch } from '@/lib/observability/outbound-fetch';
+import { normalizeBrevoMessageId } from './email-delivery-log-core';
 import {
   checkAgainstBrevoLog, emailKindLabel, noticeSendDate, RENEWAL_NOTICE_KINDS, totalsByKind,
   type BrevoCheck, type BrevoEventName, type BrevoLogEvent, type KindTotals, type OutboxEmail,
@@ -14,7 +15,7 @@ import {
 
 const WINDOW_DAYS = 7;
 export const UPCOMING_DAYS = 28;
-const BREVO_EVENTS: BrevoEventName[] = ['delivered', 'hardBounces', 'softBounces', 'blocked', 'spam', 'invalid', 'error'];
+const BREVO_EVENTS: BrevoEventName[] = ['requests', 'delivered', 'hardBounces', 'softBounces', 'blocked', 'spam', 'invalid', 'error'];
 // Profile-change alerts go to the operator mailbox (deliverProfileChangeNotification), not to the member the row is linked to.
 const BREVO_PAGE_SIZE = 500;
 const BREVO_MAX_PAGES = 10;
@@ -50,11 +51,11 @@ async function fetchBrevoEvents(from: Date, to: Date): Promise<BrevoLogEvent[] |
         const url = `https://api.brevo.com/v3/smtp/statistics/events?event=${event}&startDate=${startDate}&endDate=${endDate}&limit=${BREVO_PAGE_SIZE}&offset=${page * BREVO_PAGE_SIZE}&sort=asc`;
         const response = await tracedFetch('brevo', url, { headers: { accept: 'application/json', 'api-key': apiKey }, method: 'GET', signal: AbortSignal.timeout(15_000) });
         if (!response.ok) throw new Error('brevo_log_unavailable');
-        const body = await response.json() as { events?: { date?: string; email?: string }[] };
+        const body = await response.json() as { events?: { date?: string; email?: string; messageId?: string }[] };
         const batch = body.events ?? [];
         for (const item of batch) {
           const at = item.date ? new Date(item.date) : null;
-          if (item.email && at && !Number.isNaN(at.getTime())) events.push({ at, email: item.email, event });
+          if (item.email && at && !Number.isNaN(at.getTime())) events.push({ at, email: item.email, event, messageId: normalizeBrevoMessageId(item.messageId) ?? undefined });
         }
         if (batch.length < BREVO_PAGE_SIZE) break;
       }

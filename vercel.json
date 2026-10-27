@@ -30,6 +30,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/email-delivery-watch",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/news-scheduled-publish",
       "schedule": "0 0 * * *"
     },

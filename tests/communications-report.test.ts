@@ -4,7 +4,7 @@ import test from 'node:test';
 import { checkAgainstBrevoLog, noticeSendDate, totalsByKind, type BrevoLogEvent } from '../lib/notifications/communications-report.ts';
 
 const at = (iso: string) => new Date(iso);
-const event = (email: string, name: BrevoLogEvent['event'], iso: string): BrevoLogEvent => ({ at: at(iso), email, event: name });
+const event = (email: string, name: BrevoLogEvent['event'], iso: string, messageId?: string): BrevoLogEvent => ({ at: at(iso), email, event: name, messageId });
 
 test('a Brevo delivered event confirms the send, matched case-insensitively by recipient', () => {
   const checks = checkAgainstBrevoLog([{ email: 'Member@Example.com', id: 'n1', sentAt: at('2026-10-20T10:00:00Z') }], [event('member@example.com', 'delivered', '2026-10-20T10:00:05Z')]);
@@ -117,4 +117,48 @@ test('the Communications page has one tab per section and a delivery-issues list
   assert.doesNotMatch(page, /min-w-full/);
   const data = readFileSync('lib/notifications/communications-report-data.ts', 'utf8');
   assert.match(data, /brevo !== 'failed' && brevo !== 'not_found'/);
+});
+
+test('emails sent in a quick burst to one address and delivered much later are each matched to their own delivery by message id', () => {
+  // The real pattern: three activation emails within 90 seconds, each delivered 25-93 minutes later. Matching by time window gave the
+  // delivery of the first two to the last send, so two of every three were reported as unconfirmed.
+  const sends = [
+    { email: 'm@wanadoo.fr', id: 'a1', sentAt: at('2026-10-27T07:37:15Z') }, { email: 'm@wanadoo.fr', id: 'a2', sentAt: at('2026-10-27T07:37:50Z') }, { email: 'm@wanadoo.fr', id: 'a3', sentAt: at('2026-10-27T07:38:45Z') },
+  ];
+  const log = [
+    event('m@wanadoo.fr', 'requests', '2026-10-27T07:37:16Z', 'id-1'), event('m@wanadoo.fr', 'requests', '2026-10-27T07:37:51Z', 'id-2'), event('m@wanadoo.fr', 'requests', '2026-10-27T07:38:45Z', 'id-3'),
+    event('m@wanadoo.fr', 'delivered', '2026-10-27T08:02:21Z', 'id-1'), event('m@wanadoo.fr', 'delivered', '2026-10-27T08:14:18Z', 'id-2'), event('m@wanadoo.fr', 'delivered', '2026-10-27T09:11:36Z', 'id-3'),
+  ];
+  const checks = checkAgainstBrevoLog(sends, log);
+  assert.deepEqual(['a1', 'a2', 'a3'].map((id) => checks.get(id)), ['delivered', 'delivered', 'delivered']);
+  // Without message ids the old time-window matching is still used.
+  const legacy = checkAgainstBrevoLog(sends, log.map(({ at: when, email, event: name }) => ({ at: when, email, event: name })));
+  assert.equal(legacy.get('a1'), 'not_found', 'the limitation the message-id matching removes');
+});
+
+test('by message id a failure still beats a delivery, and a message with no outcome yet is not confirmed', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:01:00Z') }];
+  const log = [
+    event('a@x.org', 'requests', '2026-10-27T10:00:01Z', 'm1'), event('a@x.org', 'requests', '2026-10-27T10:01:01Z', 'm2'),
+    event('a@x.org', 'delivered', '2026-10-27T10:05:00Z', 'm1'), event('a@x.org', 'hardBounces', '2026-10-27T10:06:00Z', 'm1'),
+    event('a@x.org', 'deferred', '2026-10-27T10:03:00Z', 'm2'),
+  ];
+  const checks = checkAgainstBrevoLog(sends, log);
+  assert.equal(checks.get('s1'), 'failed');
+  assert.equal(checks.get('s2'), 'not_found');
+});
+
+test('a send whose own request event is missing is never paired with a neighbouring send\'s request', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:01:30Z') }];
+  // Only s2 has a request event; s1's was never logged. s1 must not borrow s2's (90 seconds away) and take its delivery.
+  const checks = checkAgainstBrevoLog(sends, [event('a@x.org', 'requests', '2026-10-27T10:01:31Z', 'm2'), event('a@x.org', 'delivered', '2026-10-27T10:20:00Z', 'm2')]);
+  assert.equal(checks.get('s2'), 'delivered');
+  assert.notEqual(checks.get('s1'), 'delivered');
+});
+
+test('two sends under 30 seconds apart where only the later one has a request event: the earlier is not judged by the later one\'s message', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:00:20Z') }];
+  const checks = checkAgainstBrevoLog(sends, [event('a@x.org', 'requests', '2026-10-27T10:00:21Z', 'm2'), event('a@x.org', 'hardBounces', '2026-10-27T10:05:00Z', 'm2')]);
+  assert.equal(checks.get('s2'), 'failed', 'the later send, which owns the request, is the one that bounced');
+  assert.notEqual(checks.get('s1'), 'failed', 'the earlier send must not borrow its neighbour\'s message and bounce');
 });
