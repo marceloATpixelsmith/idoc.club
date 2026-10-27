@@ -163,3 +163,13 @@ After a defect is fixed, rerun:
 4. the full live suite before release for critical/high auth changes.
 
 If a discovered defect is not represented by an existing case, add a new case to `tests/auth/auth-test-matrix.json` before considering the fix complete, then add deterministic CI regression coverage where technically possible.
+
+## Penetration-test additions (2026-10-27)
+
+The Strix white-box report added or extended these cases; run them with the rest of the live-enabled cases:
+
+- `LIVE-AUTH-016` now requires the current password to change the login email (wrong or empty password refused, no verification mail, identical answer for an already-taken address).
+- `LIVE-AUTH-037` now includes completing a Checkout Session opened before a cancellation or suspension (must not reactivate; a `status_conflict` finding is raised) and refusing new Checkout for suspended or review-held memberships (Stripe test mode only).
+- `LIVE-AUTH-040` (administrator needed): a verification link captured before a suspension must be refused afterward; `/verify-email` never starts a session. `tests/live-auth/live-security-basics.spec.mjs` automates the invalid-token half.
+- `LIVE-AUTH-041` (Technical Support mailbox needed): `/api/client-error` volume is bounded and carries no caller-chosen Referer or User-Agent text; the spec automates the always-200-with-correlation-id half.
+- `LIVE-AUTH-042` (administrator needed): stray or unterminated markup in rich-text content shows as text, normal formatting survives.
