@@ -60,11 +60,20 @@ else
   });
   try
   {
-    const rows = await db.unsafe(`select max(created_at)::bigint as latest from "${target}".__drizzle_migrations`);
-    const actual = rows[0]?.latest == null ? null : Number(rows[0].latest);
+    const rows = await db.unsafe(`select created_at::bigint as applied from "${target}".__drizzle_migrations`);
+    const applied = new Set(rows.map((row) => Number(row.applied)));
+    const actual = rows.length ? Math.max(...applied) : null;
     if (actual !== expected)
     {
       throw new Error(`Deployment schema gate: ${target} migrations are not ready (applied=${actual ?? 'none'}; required=${expected}). Approve/complete the protected database migration job, then redeploy.`);
+    }
+    //LEGACY MIGRATION LEDGERS ARE HISTORICALLY RECONCILED THROUGH 0070.
+    //REQUIRE EVERY COMMITTED MIGRATION AFTER 0070, NOT JUST THE NEWEST ONE.
+    const required = journal.entries.filter((entry) => entry.idx >= 71);
+    const missingMigrations = required.filter((entry) => !applied.has(Number(entry.when))).map((entry) => entry.tag);
+    if (missingMigrations.length)
+    {
+      throw new Error(`Deployment schema gate: ${target} is missing committed migrations: ${missingMigrations.join(', ')}.`);
     }
 
     //THE HISTORIC LEDGER MAY CONTAIN RECONCILED ROWS; VERIFY CRITICAL TABLES, NOT ONLY A TIMESTAMP.
