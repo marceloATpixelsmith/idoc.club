@@ -67,3 +67,11 @@ export function reportedUserAgent(value: string | null | undefined): string | nu
   const cleaned = value?.replace(/[^A-Za-z0-9 ./;,()_-]/g, '').slice(0, 150).trim();
   return cleaned || null;
 }
+
+const PLAIN_PATH = /^\/[A-Za-z0-9_\-./]{0,199}$/;
+
+/** The path of a failed request, which a caller also chooses (a request to any URL it likes can raise an error). Shown in a staff alert only
+ * when it is a plain path; otherwise the alert names no path and the server-derived route pattern carries the location. */
+export function reportedRequestPath(path: string | null | undefined): string | null {
+  return path && PLAIN_PATH.test(path) && !path.includes('//') ? path : null;
+}

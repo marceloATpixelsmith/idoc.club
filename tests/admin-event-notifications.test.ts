@@ -115,7 +115,12 @@ test('a failing scheduled job emails the operations recipient on the first failu
 
 // Pentest 2026-10-27, finding 3: the anonymous client-error endpoint put caller-chosen Referer and User-Agent text into staff alerts.
 test('the page named in a browser error alert is a plain same-site path, never caller-chosen text, and the User-Agent is cut to plain characters', async () => {
-  const { reportedPagePath, reportedUserAgent } = await import('../lib/notifications/error-report-text.ts');
+  const { reportedPagePath, reportedRequestPath, reportedUserAgent } = await import('../lib/notifications/error-report-text.ts');
+  assert.equal(reportedRequestPath('/sign-in'), '/sign-in');
+  assert.equal(reportedRequestPath('/news/a-story'), '/news/a-story');
+  assert.equal(reportedRequestPath('/call-support-at-https://idoc-support.example/login'), null, 'a lure with a URL in the path is dropped');
+  assert.equal(reportedRequestPath('/please%20call%20now'), null);
+  assert.equal(reportedRequestPath(null), null);
   assert.equal(reportedPagePath('https://idoc.club/news/a-story?token=abc#x', 'idoc.club'), '/news/a-story');
   assert.equal(reportedPagePath('https://idoc.club/', 'idoc.club'), '/');
   assert.equal(reportedPagePath('https://evil.example/news/a', 'idoc.club'), null, 'another host is dropped');
@@ -136,4 +141,12 @@ test('the client-error route limits volume through the shared database and takes
   assert.match(route, /checkOriginRateLimit\('client_error_report', 'deployment-wide'\)/);
   assert.match(route, /reportedPagePath\(requestHeaders\.get\('referer'\), requestHeaders\.get\('host'\)\)/);
   assert.doesNotMatch(route, /pathWithoutQuery/);
+});
+
+test('the server request-error hook sends only sanitised Referer, path and User-Agent to the staff alert', () => {
+  const hook = read('instrumentation.ts');
+  assert.match(hook, /reportedPagePath\(header\('referer'\), header\('host'\)\)/);
+  assert.match(hook, /path: reportedRequestPath\(request\.path\)/);
+  assert.match(hook, /userAgent: reportedUserAgent\(header\('user-agent'\)\)/);
+  assert.doesNotMatch(hook, /split\(\/\[\?#\]\/\)/);
 });

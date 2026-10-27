@@ -6,9 +6,9 @@ import { client } from '@/lib/db/drizzle';
 import { PAYMENT_STATUS_LABELS, APPROVAL_STATUS_LABELS, type ApprovalStatus, type PaymentStatus } from '@/lib/seminars/status';
 import { adminUrl, type AdminNotificationCategory, type DetailRow, preformatted, sendAdminEventEmail } from './admin-event-notifications';
 import { escapeHtml } from './email-template';
-import { pathWithoutQuery, reportedPagePath, reportedUserAgent, scrubErrorText, shouldSendErrorNotification } from './error-report-text';
+import { pathWithoutQuery, reportedPagePath, reportedRequestPath, reportedUserAgent, scrubErrorText, shouldSendErrorNotification } from './error-report-text';
 
-export { pathWithoutQuery, reportedPagePath, reportedUserAgent };
+export { pathWithoutQuery, reportedPagePath, reportedRequestPath, reportedUserAgent };
 
 // The event families that notify category-assigned administrators (see admin-event-notifications.ts).
 // Every function here is best-effort and never throws, so a notification problem can never fail a registration,
