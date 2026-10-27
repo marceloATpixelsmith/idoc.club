@@ -76,3 +76,19 @@ test('breadcrumbs are cleaned as they are recorded: no query strings, emails or 
   assert.equal(crumb.data.status_code, 200);
   assert.doesNotMatch(String(crumb.message), /member@example\.org|abc\.def\.ghi/);
 });
+
+test('Sentry drops only errors a visitor or scanner caused with a malformed or unauthorised request, never application errors', async () => {
+  const { isExpectedClientCausedEvent, prepareSentryEvent } = await import('../lib/observability/sentry-privacy.ts');
+  const serverError = (type: string, value: string, mechanism = 'auto.function.nextjs.on_request_error') => ({ exception: { values: [{ type, value, mechanism: { type: mechanism } }] } });
+  for (const [type, value] of [['Error', 'Invalid Server Actions request.'], ['Error', 'Multipart: Boundary not found'], ['Error', 'Connection closed.'],
+    ['Error', 'The router state header was sent but could not be parsed.'], ['AuthorizationError', 'You are not authorized to perform this action.'], ['CsrfError', 'Your session security check failed.']]) {
+    assert.equal(isExpectedClientCausedEvent(serverError(type, value)), true, `${type}: ${value}`);
+    assert.equal(prepareSentryEvent(serverError(type, value)), null);
+  }
+  // Real application errors, database failures and browser errors are kept.
+  for (const event of [serverError('TypeError', 'undefined is not iterable'), serverError('Error', 'write CONNECT_TIMEOUT'),
+    serverError('AuthorizationError', 'x', 'auto.browser.global_handlers.onerror'), serverError('Error', 'Connection closed.', 'generic'), {}, { exception: { values: [] } }]) {
+    assert.equal(isExpectedClientCausedEvent(event), false);
+    assert.notEqual(prepareSentryEvent(event), null);
+  }
+});
