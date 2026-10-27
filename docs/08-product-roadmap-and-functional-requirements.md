@@ -11,6 +11,10 @@ After the admin layout authorizes access, its error boundaries present the page 
 Organization Settings remains a Super-Admin-only function. It is the single owner of the structured public organization address used by the footer and Contact page and of the existing canonical seminar-payment configuration. Online via Stripe is permanently present, enabled, and protected. Bank Transfer and Cash may be enabled or disabled; enabling Bank Transfer requires server-sanitized visible instructions. This slice does not add or redesign the Memberships table, Revenue dashboard, Support Inbox, News/Blog, or Seminar administration.
 
 
+### Legacy member journey operational monitoring
+
+The Admin Dashboard includes a read-only **Member journey health** panel for imported members encountering repeated or blocked activation, password sign-in, email verification, onboarding and renewal-related steps. The Communications report separately flags repeated activation requests even when Brevo reports successful transport. The existing five-minute operational email watch detects the corresponding persisted-data warning signals and queues at most one daily, deduplicated member-journey digest to `IDOC_ADMIN_NOTIFICATION_EMAIL`, with durable retries. A successful Brevo delivery never implies that the member read the message or completed the workflow. These alerts are triage evidence, not an automatic entitlement/password change. See [07 Administrator and Operations Runbook](07-administrator-and-operations-runbook.md#member-journey-health--administrator-monitoring).
+
 ### Dedicated Super Admin GitHub Operations
 
 The Super Admin navigation includes **Promote To Production** and **Live Authentication Tests** as separate menu entries immediately below **Backups & restore**; the former combined Manual GitHub Operations URL redirects to Live Authentication Tests.
