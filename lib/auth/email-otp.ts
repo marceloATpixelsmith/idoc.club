@@ -73,10 +73,12 @@ export type IssueEmailOtpResult = { status: 'ok' } | { status: 'cooldown'; retry
 export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, options: { origin?: string; userId?: number } = {}): Promise<IssueEmailOtpResult> {
   const email = normalizeEmail(untrustedEmail);
   const now = new Date();
-  const [latest] = await db.select({ createdAt: emailOtpCodes.createdAt }).from(emailOtpCodes)
+  const [latest] = await db.select({ createdAt: emailOtpCodes.createdAt, consumedAt: emailOtpCodes.consumedAt }).from(emailOtpCodes)
     .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose)))
     .orderBy(desc(emailOtpCodes.createdAt)).limit(1);
-  if (latest && now.getTime() - latest.createdAt.getTime() < RESEND_COOLDOWN_MS) {
+  // A consumed one-time code cannot authorize another operation. Allow a new security
+  // challenge immediately; the shared per-email/per-origin send limits still apply.
+  if (latest && !latest.consumedAt && now.getTime() - latest.createdAt.getTime() < RESEND_COOLDOWN_MS) {
     return { retryAfterMs: RESEND_COOLDOWN_MS - (now.getTime() - latest.createdAt.getTime()), status: 'cooldown' };
   }
   const allowed = await checkRateLimit(RATE_LIMIT_PURPOSES[purpose].issue, email, options.origin ?? 'unknown', now);
