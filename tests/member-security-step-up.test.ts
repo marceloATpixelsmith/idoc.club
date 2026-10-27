@@ -43,5 +43,5 @@ test('Sentry key-cap tooling checks provider settings rather than relying on SDK
   assert.match(audit, /--apply/);
   assert.match(audit, /SENTRY_SECURITY_AUTH_TOKEN/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /environment: idoc-sentry-maintenance/);
+  assert.match(workflow, /environment: idoc-db-production-maintenance/);
 });
