@@ -1601,3 +1601,16 @@ Design, mapping rules and removal plan: [03 section 12](03-legacy-data-migration
 5. When finished, remove `LEGACY_IMPORT_ENABLED` (and `LEGACY_STRIPE_SECRET_KEY`, revoking that key in Stripe) and redeploy. Do not leave the switch on between runs.
 
 The dry run changes no member data and makes no Stripe changes; if `LEGACY_STRIPE_SECRET_KEY` is set it makes read-only list calls to live Stripe (step 1a), otherwise it makes no Stripe calls. Keep the dump files only in approved, access-controlled migration storage and delete them according to the credential-bearing export retention rules in document 03.
+
+## Sentry provider-side client key ingestion cap (2026-10-27)
+
+**Security goal:** the public Sentry DSN can be extracted from browser JavaScript, so SDK-side filtering, source-code rate limiting, or the `/api/client-error` endpoint cannot prevent an attacker from sending large volumes directly to Sentry. The `idoc` project in Sentry organization `pixelsmith-platform` therefore needs a provider-enforced per-client-key event cap.
+
+**Required one-time GitHub environment secret:** create `SENTRY_SECURITY_AUTH_TOKEN` under the existing protected `idoc-db-production-maintenance` GitHub environment. Its value is a dedicated Sentry API token scoped to project `idoc` with `project:read` for audits and `project:write` for applying settings. Do not use a DSN or `NEXT_PUBLIC_*` variable. The existing Vercel build-time `SENTRY_AUTH_TOKEN` may have source-map-only scope and is not a substitute unless verified to have these rights. No additional Vercel environment variable is required.
+
+1. In Sentry, create the scoped token and add it to GitHub Settings → Environments → `idoc-db-production-maintenance` → Environment secrets as `SENTRY_SECURITY_AUTH_TOKEN`. Use the existing environment's human review protection; do not disable that protection.
+2. Run GitHub Actions → **Sentry ingestion key security** → Run workflow on `staging` with `apply=true`. Approve the protected environment job. The workflow checks all active client keys on the `pixelsmith-platform/idoc` project and configures up to 1,000 error events per 3,600 seconds per key if a key is uncapped or more permissive. It does not create keys, change DSNs, or reveal secret key material.
+3. Run the same workflow with `apply=false`; this audit must be green, proving the provider persisted the caps. Check Sentry → Settings → Projects → idoc → Client Keys as a second verification. Repeat the audit whenever client keys are rotated or added.
+4. If the API returns 403, give the token `project:write` on the correct project and rerun. If the key cannot be read/updated, **do not mark this action resolved**. The Vercel deployment is unaffected; the security-control audit remains outstanding.
+
+The check script is `node scripts/check-sentry-ingestion-limits.mjs` (optional `--apply`). It fails closed when the token is missing, no active keys are returned, or any active key has no adequate provider-side rate limit. Do not paste token values, DSNs, or raw key-listing responses into issues, CI logs or reports. Provider verification is an operational step, not something that the repository can truthfully claim just because the code merged.
