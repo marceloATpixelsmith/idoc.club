@@ -100,10 +100,10 @@ test('account security renders and revokes only the signed-in member active sess
         form.append(input);
       }
     }, '999999');
-  const [identity] = await sql<{ email: string }[]>`select email from idoc.users where id=${fixture.userId}`;
+  const [memberIdentity] = await sql<{ email: string }[]>`select email from idoc.users where id=${fixture.userId}`;
   const confirmMemberRevoke = async (before: number) => {
     await expect(page.getByRole('heading', { name: 'Confirm this security change' })).toBeVisible();
-    const code = extractOtp(await waitForMail(identity.email, 'Confirm your IDOC session sign-out', before));
+    const code = extractOtp(await waitForMail(memberIdentity.email, 'Confirm your IDOC session sign-out', before));
     await page.getByRole('textbox', { name: 'Email security code' }).fill(code);
     await page.getByRole('button', { name: 'Verify and continue' }).click();
   };
