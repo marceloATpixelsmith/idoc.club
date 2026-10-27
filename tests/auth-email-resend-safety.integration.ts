@@ -10,9 +10,10 @@ import { closeHarness, createUser, resetIdoc, sql } from './postgres-harness.ts'
 // AUTH-EMAIL-002: "Resend MUST be throttled and replace or invalidate superseded outstanding
 // evidence so prior verification artifacts cannot remain valid indefinitely, while public behavior
 // remains enumeration-resistant." Drives the real production resendSignupOtp Server Action -- not a
-// parallel helper -- proving the cooldown is actually enforced, a resent code actually supersedes
-// (invalidates) the one it replaces rather than merely adding a second valid code, and the
-// response shape never varies with facts an anonymous caller shouldn't be able to learn.
+// parallel helper -- proving the cooldown is actually enforced, a resend keeps only the newest
+// previous code alive beside the new one (never more than two live codes; anything older is
+// superseded), and the response shape never varies with facts an anonymous caller shouldn't be able
+// to learn.
 
 Object.assign(process.env, {
   AUTH_SECRET: 'integration-auth-secret-that-is-long-enough',
@@ -75,7 +76,7 @@ test('resendSignupOtp enforces the resend cooldown against the real production p
   assert.equal(count, 1, 'a cooldown-blocked resend must not create a second code row');
 });
 
-test('a resent code supersedes (invalidates) the one it replaces, rather than leaving both valid', async () => {
+test('a resend keeps the newest previous code live beside the new one, and supersedes anything older', async () => {
   const email = 'supersede-test@example.test';
   const { cookies, csrfToken } = await pendingSignupSession(email);
 
