@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   alertTier, buildDeliveryProblemAlert, buildRepeatRequestAlert, deliveryDeadlineMs, diagnose, emailKindLabel,
-  AUTH_CODE_DEADLINE_MS, GENERAL_DEADLINE_MS, type DeliveryProblemData,
+  AUTH_CODE_DEADLINE_MS, buildFloodSummaryAlert, GENERAL_DEADLINE_MS, HOURLY_ALERT_CAP, type DeliveryProblemData,
 } from '../lib/notifications/email-delivery-watch-core.ts';
 
 const now = new Date('2026-10-27T15:00:00Z');
@@ -85,4 +85,13 @@ test('kinds have readable labels and fall back to the subject', () => {
   assert.equal(emailKindLabel('auth.otp.signup_verification', null), 'sign-up code');
   assert.equal(emailKindLabel(null, 'Welcome'), 'Welcome');
   assert.equal(emailKindLabel(null, null), 'email');
+});
+
+test('the flood summary states how many are held, why, and where to look, once per hour', () => {
+  const summary = buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 12, now });
+  assert.ok(summary.html.includes('12 more emails need attention'));
+  assert.ok(summary.html.includes(`after ${HOURLY_ALERT_CAP}`));
+  assert.ok(summary.html.includes('https://idoc.club/admin/communications'));
+  assert.equal(summary.dedupeKey, buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 99, now: new Date(now.getTime() + 60_000) }).dedupeKey);
+  assert.match(buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 1, now }).html, /1 more email needs attention/);
 });

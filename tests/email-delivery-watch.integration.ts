@@ -137,5 +137,47 @@ test('the watch cron rejects an unauthenticated call and, when authorized, runs 
   assert.equal(response.status, 200);
   const body = await response.json() as Record<string, number>;
   assert.equal(body.alerted, 1);
-  assert.deepEqual(Object.keys(body).sort(), ['alerted', 'alertsRetryable', 'reconciled', 'repeatAlerted']);
+  assert.deepEqual(Object.keys(body).sort(), ['alerted', 'alertsRetryable', 'held', 'reconciled', 'repeatAlerted']);
+});
+
+test('emails already reported can never crowd a newer undelivered email out of the batch', async () => {
+  for (let index = 0; index < 210; index += 1) await logEmail({ email: `old-${index}@example.test`, minutes: 60 });
+  // Every one of the 210 has its alert queued already (an hour ago, so the hourly cap is untouched).
+  await sql`insert into idoc.operational_alert_outbox(kind, subject, body_html, dedupe_key, created_at, sent_at)
+    select 'email_delivery_problem', 's', 'b', 'email-delivery-problem:' || id || ':late', now() - interval '2 hours', now() - interval '2 hours' from idoc.email_delivery_log`;
+  await logEmail({ email: 'fresh@example.test', minutes: 9 });
+  const result = await runEmailDeliveryWatch(now);
+  assert.equal(result.alerted, 1, 'the newest overdue email is still reported');
+  assert.ok((await alerts()).some((alert) => alert.subject.includes('example.test') && alert.body_html.includes('fresh@example.test')));
+});
+
+test('alerts are capped per hour, and past the cap one summary replaces the rest', async () => {
+  for (let index = 0; index < 40; index += 1) await logEmail({ email: `burst-${index}@example.test`, minutes: 9 });
+  await runEmailDeliveryWatch(now);
+  await runEmailDeliveryWatch(now);
+  const third = await runEmailDeliveryWatch(now);
+  const fourth = await runEmailDeliveryWatch(now);
+  const all = await alerts();
+  const individual = all.filter((alert) => alert.dedupe_key.startsWith('email-delivery-problem:'));
+  const summaries = all.filter((alert) => alert.dedupe_key.startsWith('email-delivery-flood:'));
+  assert.equal(individual.length, 30, 'never more than 30 individual alerts in an hour');
+  assert.equal(summaries.length, 1, 'one summary for the hour, however many runs');
+  assert.equal(third.held, 10);
+  assert.equal(fourth.alerted, 0);
+  assert.match(summaries[0].body_html, /10 more emails need attention/);
+});
+
+test('repeated-request groups already reported this hour cannot crowd a new one out of the batch', async () => {
+  const stale = Array.from({ length: 30 }, (_, index) => `stale-${index}@example.test`);
+  for (const email of stale) {
+    for (const minutes of [10, 7, 3]) await sql`insert into idoc.email_otp_codes(email, purpose, code_hash, expires_at, created_at) values (${email}, 'login_verification', 'h', ${minutesAgo(-5)}::timestamptz, ${minutesAgo(minutes)}::timestamptz)`;
+  }
+  await runEmailDeliveryWatch(now);
+  await runEmailDeliveryWatch(now);
+  const before = (await alerts()).filter((alert) => alert.kind === 'repeated_code_requests').length;
+  assert.ok(before > 0 && before <= 30);
+  for (const minutes of [9, 6, 2]) await sql`insert into idoc.email_otp_codes(email, purpose, code_hash, expires_at, created_at) values ('brand-new@example.test', 'login_verification', 'h', ${minutesAgo(-5)}::timestamptz, ${minutesAgo(minutes)}::timestamptz)`;
+  await sql`update idoc.operational_alert_outbox set created_at = now() - interval '2 hours'`;
+  await runEmailDeliveryWatch(now);
+  assert.ok((await alerts()).some((alert) => alert.kind === 'repeated_code_requests' && alert.body_html.includes('brand-new@example.test')), 'the new group is reported');
 });

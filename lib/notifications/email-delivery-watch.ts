@@ -7,7 +7,8 @@ import { taggedSubject } from './alert-severity';
 import { applyBrevoDeliveryEvent } from './email-delivery-log';
 import { normalizeBrevoEventName, normalizeBrevoMessageId } from './email-delivery-log-core';
 import {
-  alertTier, buildDeliveryProblemAlert, buildRepeatRequestAlert, REPEAT_REQUEST_THRESHOLD, REPEAT_REQUEST_WINDOW_MS, WATCH_LOOKBACK_MS,
+  alertTier, AUTH_CODE_DEADLINE_MS, buildDeliveryProblemAlert, buildFloodSummaryAlert, buildRepeatRequestAlert, FINAL_DEADLINE_MS, GENERAL_DEADLINE_MS, HOURLY_ALERT_CAP,
+  MAX_ALERTS_PER_RUN, REPEAT_REQUEST_THRESHOLD, REPEAT_REQUEST_WINDOW_MS, WATCH_LOOKBACK_MS,
   type BrevoCheck, type DomainContext, type EventLine, type MemberRef, type RecentEmail,
 } from './email-delivery-watch-core';
 import { enqueueOperationalAlert } from './operational-alert-outbox';
@@ -16,7 +17,6 @@ import { enqueueOperationalAlert } from './operational-alert-outbox';
 // IDOC_ADMIN_NOTIFICATION_EMAIL through the durable operational alert queue, at most once per email and tier. Runs inside the
 // account-delivery cron every five minutes.
 
-const MAX_ALERTS_PER_RUN = 25;
 const BREVO_CHECK_TIMEOUT_MS = 10_000;
 
 type LogRow = {
@@ -83,18 +83,46 @@ async function memberByEmail(email: string): Promise<MemberRef | null> {
   return row ? { accountState: row.account_state, name: fullName(row.first_name, row.last_name), profileId: row.profile_id, userId: row.id } : null;
 }
 
-async function reportDeliveryProblems(now: Date, adminEmail: string | null) {
-  const summary = { alerted: 0, reconciled: 0 };
+/** How many more alerts this hour's cap allows. */
+async function remainingHourlyBudget(now: Date): Promise<number> {
+  const [row] = await client<{ recent: number }[]>`
+    select count(*)::int recent from operational_alert_outbox
+    where kind in ('email_delivery_problem', 'repeated_code_requests') and dedupe_key not like 'email-delivery-flood:%'
+      and created_at >= ${new Date(now.getTime() - 3_600_000).toISOString()}::timestamptz`;
+  return Math.max(0, HOURLY_ALERT_CAP - (row?.recent ?? 0));
+}
+
+async function reportDeliveryProblems(now: Date, adminEmail: string | null, budget: number) {
+  const summary = { alerted: 0, held: 0, reconciled: 0 };
   const since = new Date(now.getTime() - WATCH_LOOKBACK_MS).toISOString();
+  const authCut = new Date(now.getTime() - AUTH_CODE_DEADLINE_MS).toISOString();
+  const generalCut = new Date(now.getTime() - GENERAL_DEADLINE_MS).toISOString();
+  const finalCut = new Date(now.getTime() - FINAL_DEADLINE_MS).toISOString();
+  // Only emails that still owe an alert are selected (the alert for their current tier is not queued yet), so rows already reported
+  // can never crowd newer ones out of the batch, however many there are.
   const rows = await client<LogRow[]>`
     select l.id, l.provider_message_id, l.recipient_email, l.recipient_domain, l.user_id, l.kind, l.subject, l.message_ref, l.sent_at, l.status, l.status_at, l.delivered_at,
       u.account_state, p.id as profile_id, p.first_name, p.last_name
     from email_delivery_log l left join users u on u.id=l.user_id left join profiles p on p.user_id=l.user_id
     where l.sent_at >= ${since}::timestamptz and l.status <> 'delivered' and (${adminEmail}::text is null or l.recipient_email <> ${adminEmail})
+      and (
+        (l.status in ('hard_bounced','blocked','invalid','error','spam')
+          and not exists (select 1 from operational_alert_outbox o where o.dedupe_key = 'email-delivery-problem:' || l.id || ':failed'))
+        or (l.status not in ('hard_bounced','blocked','invalid','error','spam') and l.sent_at <= ${finalCut}::timestamptz
+          and not exists (select 1 from operational_alert_outbox o where o.dedupe_key = 'email-delivery-problem:' || l.id || ':final'))
+        or (l.status not in ('hard_bounced','blocked','invalid','error','spam') and l.sent_at > ${finalCut}::timestamptz
+          and l.sent_at <= (case when l.kind like 'auth.otp.%' then ${authCut}::timestamptz else ${generalCut}::timestamptz end)
+          and not exists (select 1 from operational_alert_outbox o where o.dedupe_key = 'email-delivery-problem:' || l.id || ':late'))
+      )
     order by l.sent_at limit 200`;
   const baseUrl = baseUrlForServer();
-  for (const row of rows) {
-    if (summary.alerted >= MAX_ALERTS_PER_RUN) break;
+  const limit = Math.min(MAX_ALERTS_PER_RUN, budget);
+  for (const [index, row] of rows.entries()) {
+    if (summary.alerted >= limit) {
+      // Only the hourly cap holds emails back (and earns a summary); the per-run limit just leaves them for the next run.
+      summary.held = summary.alerted >= budget ? rows.length - index : 0;
+      break;
+    }
     const sentAt = toDate(row.sent_at);
     let tier = alertTier({ kind: row.kind, now, sentAt, status: row.status });
     if (!tier || await alreadyQueued(`email-delivery-problem:${row.id}:${tier}`)) continue;
@@ -138,14 +166,22 @@ async function reportDeliveryProblems(now: Date, adminEmail: string | null) {
   return summary;
 }
 
-async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null) {
+async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, budget: number) {
   let alerted = 0;
   const windowStart = new Date(now.getTime() - REPEAT_REQUEST_WINDOW_MS);
+  const hourIso = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000).toISOString();
+  // Groups already reported this hour are excluded in the query (the key is the same SHA-256 the alert builder derives) so they can never
+  // crowd a newer one out of the batch; the rest are ordered newest first so the order is deterministic.
   const groups = await client<{ email: string; purpose: string }[]>`
-    select email, purpose from email_otp_codes where created_at >= ${windowStart.toISOString()}::timestamptz
-    group by email, purpose having count(*) >= ${REPEAT_REQUEST_THRESHOLD} and max(attempt_count) = 0 limit 25`;
+    select c.email, c.purpose from email_otp_codes c where c.created_at >= ${windowStart.toISOString()}::timestamptz
+    group by c.email, c.purpose
+    having count(*) >= ${REPEAT_REQUEST_THRESHOLD} and max(c.attempt_count) = 0
+      and not exists (select 1 from operational_alert_outbox o
+        where o.dedupe_key = 'repeated-code-requests:' || encode(sha256(convert_to(c.email || ':' || c.purpose || ':' || ${hourIso}::text, 'UTF8')), 'hex'))
+    order by max(c.created_at) desc limit 25`;
   const baseUrl = baseUrlForServer();
   for (const group of groups) {
+    if (alerted >= budget) break;
     if (adminEmail && group.email === adminEmail) continue;
     const codes = await client<{ created_at: Date | string }[]>`
       select created_at from email_otp_codes where email=${group.email} and purpose=${group.purpose} and created_at >= ${windowStart.toISOString()}::timestamptz order by created_at`;
@@ -167,7 +203,13 @@ async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null) 
 /** One pass of the watch. Safe to run repeatedly and concurrently: every alert is keyed, so the same email or request burst is reported once. */
 export async function runEmailDeliveryWatch(now: Date = new Date()) {
   const adminEmail = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL?.trim().toLowerCase() || null;
-  const delivery = await reportDeliveryProblems(now, adminEmail);
-  const repeated = await reportRepeatedCodeRequests(now, adminEmail);
-  return { alerted: delivery.alerted, reconciled: delivery.reconciled, repeatAlerted: repeated };
+  const budget = await remainingHourlyBudget(now);
+  const delivery = await reportDeliveryProblems(now, adminEmail, budget);
+  const repeated = await reportRepeatedCodeRequests(now, adminEmail, Math.max(0, budget - delivery.alerted));
+  // Past the hourly cap, one summary replaces the individual alerts (one per hour), so the administrator still hears that more exist.
+  if (delivery.held > 0) {
+    const flood = buildFloodSummaryAlert({ baseUrl: baseUrlForServer(), held: delivery.held, now });
+    await enqueueOperationalAlert({ bodyHtml: flood.html, dedupeKey: flood.dedupeKey, kind: 'email_delivery_problem', subject: taggedSubject('email.delivery_problem', flood.subject) });
+  }
+  return { alerted: delivery.alerted, held: delivery.held, reconciled: delivery.reconciled, repeatAlerted: repeated };
 }

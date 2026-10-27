@@ -15,6 +15,11 @@ export const WATCH_LOOKBACK_MS = 48 * 3_600_000;
 export const REPEAT_REQUEST_THRESHOLD = 3;
 export const REPEAT_REQUEST_WINDOW_MS = 15 * 60_000;
 
+/** At most this many alerts per hour. Past it the watch holds the rest and sends one summary instead, so a burst of undeliverable
+ * addresses (a provider outage, or someone submitting many bad addresses) cannot flood the administrator's mailbox. */
+export const HOURLY_ALERT_CAP = 30;
+export const MAX_ALERTS_PER_RUN = 25;
+
 export type AlertTier = 'failed' | 'final' | 'late';
 const FAILED_STATUSES = ['hard_bounced', 'blocked', 'invalid', 'error', 'spam'];
 
@@ -206,5 +211,23 @@ ${h('What to do')}
     dedupeKey: `repeated-code-requests:${fingerprint}`,
     html: renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC delivery monitoring. This message never contains a verification code.', heading: 'A member keeps requesting codes' }),
     subject: `IDOC: ${data.requests.length} ${label} requests, none entered — ${data.domain.domain}`,
+  };
+}
+
+/** The single alert sent in place of the individual ones once the hourly cap is reached. */
+export function buildFloodSummaryAlert(data: { baseUrl: string; held: number; now: Date }): { dedupeKey: string; html: string; subject: string } {
+  const hour = new Date(Math.floor(data.now.getTime() / 3_600_000) * 3_600_000).toISOString();
+  const bodyHtml = `
+<p style="margin:0 0 16px;"><b>${data.held} more email${data.held === 1 ? '' : 's'} need${data.held === 1 ? 's' : ''} attention, but individual alerts are paused for this hour after ${HOURLY_ALERT_CAP}, so your inbox is not flooded.</b></p>
+<p style="margin:0 0 16px;font-size:14px;">This usually means a mail provider is delaying or refusing our email for many members at once, or many undeliverable addresses were submitted. Nothing is lost: the remaining emails are reported as the cap allows over the next hours.</p>
+${h('What to do')}
+<ol style="margin:0 0 8px;padding-left:20px;font-size:14px;">
+<li style="margin:0 0 6px;">Open <a href="${escapeHtml(`${data.baseUrl}/admin/communications`)}" style="color:${IDOC_EMAIL_COLORS.gold};">Communications → Delivery issues</a> to see every email that is not confirmed delivered, by address.</li>
+<li style="margin:0 0 6px;">Look at the provider named in the individual alerts you did receive; if one provider dominates, it is throttling or blocking us.</li>
+<li>Check Brevo's status and Transactional → Logs.</li></ol>`;
+  return {
+    dedupeKey: `email-delivery-flood:${hour}`,
+    html: renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC delivery monitoring.', heading: 'Email delivery alerts paused' }),
+    subject: `IDOC: ${data.held} more undelivered email${data.held === 1 ? '' : 's'} — alerts paused this hour`,
   };
 }

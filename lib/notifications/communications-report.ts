@@ -38,8 +38,9 @@ const CLOCK_SLACK_MS = 2 * 60_000;
 // Brevo reports a delivery or bounce within minutes, a deferred retry within hours; a later event for the same address belongs to a later send.
 const OUTCOME_WINDOW_MS = 24 * 3_600_000;
 
-// Brevo reports a message's "request" (accepted) within seconds of our send; a delivery can follow minutes or hours later.
-const REQUEST_MATCH_MS = 3 * 60_000;
+// Brevo reports a message's "request" (accepted) within a second or two of our send (under one second in every observed case); a delivery can
+// follow minutes or hours later. The pairing window is kept tight so a send whose own request is missing can never be paired with a neighbour's.
+const REQUEST_MATCH_MS = 30_000;
 
 /** Matches each sent email to the Brevo log. Preferred: pair the send with Brevo's own "request" event for it (same address, within
  * seconds), then judge it by every event carrying that message's id, however late they arrive: a message delivered an hour later

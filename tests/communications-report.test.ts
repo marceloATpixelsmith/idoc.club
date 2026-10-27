@@ -147,3 +147,11 @@ test('by message id a failure still beats a delivery, and a message with no outc
   assert.equal(checks.get('s1'), 'failed');
   assert.equal(checks.get('s2'), 'not_found');
 });
+
+test('a send whose own request event is missing is never paired with a neighbouring send\'s request', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:01:30Z') }];
+  // Only s2 has a request event; s1's was never logged. s1 must not borrow s2's (90 seconds away) and take its delivery.
+  const checks = checkAgainstBrevoLog(sends, [event('a@x.org', 'requests', '2026-10-27T10:01:31Z', 'm2'), event('a@x.org', 'delivered', '2026-10-27T10:20:00Z', 'm2')]);
+  assert.equal(checks.get('s2'), 'delivered');
+  assert.notEqual(checks.get('s1'), 'delivered');
+});
