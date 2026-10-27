@@ -30,7 +30,7 @@ import { prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
 import { regenerateRecoveryCodesWithEvidence } from '@/lib/auth/mfa/recovery-regeneration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/login-device-trust';
-import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
+import { readActiveSession, revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { generatePendingCsrfNonce, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
@@ -62,6 +62,9 @@ export const logOutSession = validatedActionWithUser(sessionSchema, async ({ ses
   if (!member && (await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
   const current = await canonicalSession(user.id);
   if (sessionId === current.sessionId) return { error: 'Use the normal sign-out action to log out this browser.' };
+  // Reject forged or stale session IDs before emailing a one-time code. An unowned
+  // session must never trigger a useless challenge that blocks the next real action.
+  if (!(await readActiveSession(sessionId, user.id))) return { error: 'That session is no longer available.' };
   if (member) {
     const evidence = await requireMemberSecurityEmailProof(user, 'member_session_revoke', memberSecurityCode);
     if (!evidence.approved) return evidence;
