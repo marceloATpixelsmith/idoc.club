@@ -9,6 +9,14 @@ A member whose imported WordPress credential verifies successfully but fails any
 
 **Staging evidence:** LIVE-AUTH-039 provisions *two disposable* imported WordPress credentials in `idoc_staging`, tests a real noncompliant first-login/activation link/old-password rejection and a real compliant first-login/OTP flow, and cleans up test accounts and mailboxes. The separate breached-password first-login explanation should additionally be verified with a safe disposable fixture before launch. Staging must retain the communications and billing hold while enabling the staging-only authentication email exception. Do not accept ordinary signup/login results as evidence that legacy first-login behavior was exercised.
 
+## Communications: repeated activation requests
+
+The **Communications** dashboard reports Brevo's *Delivered* status as acceptance by the recipient's mail server, not proof that a member received, opened or read the message. A green delivery count must not be interpreted as successful activation.
+
+In the last-seven-days view, **Repeated account activation requests** separately lists imported members who requested at least three migration-activation links and whose account is still `migrated_pending`. Each request is counted from `account_delivery_outbox`, including superseded or pending deliveries. The table shows the recipient, member, number of requests, number sent and last request; these members also contribute to the Delivery Issues tab count without changing Brevo's transport success totals. Members who successfully activate disappear from this follow-up list. This is a support signal, not definitive evidence of email failure or of a resend-button click (requests can originate from other supported activation flows).
+
+Investigate repeated requests by checking the member's status and delivery history, checking Brevo for spam/bounce/defer signals, and contacting the member through an appropriate channel to check spam filtering and the address on record. Do not mark an accepted message as bounced merely because activation has not completed.
+
 ## Signup and password reset breach checks
 
 Password creation during signup and password reset checks the new password against Have I Been Pwned's free Pwned Passwords range endpoint. The application computes a SHA-1 hash server-side and sends only its first five hexadecimal characters; it compares the returned suffixes locally. The password and full hash are never sent. A breached match is rejected with a request to choose another password. Provider outages are recorded as an unavailable check and do not block password creation.
