@@ -5,6 +5,7 @@ import { listAssignedOpenConversationsForDashboard, CATEGORY_LABELS, STATUS_LABE
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { listNewMembersLastWeek } from '@/lib/membership/new-members';
 import { getCommunicationsReport } from '@/lib/notifications/communications-report-data';
+import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
 function money(cents: number, currency: string) {
@@ -14,12 +15,13 @@ function money(cents: number, currency: string) {
 export default async function AdminPage() {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const [support, newMembers, communications, revenue] = await Promise.all([
+  const [support, newMembers, communications, revenue, journeyConcerns] = await Promise.all([
     listAssignedOpenConversationsForDashboard(5),
     listNewMembersLastWeek(),
     getCommunicationsReport(),
     // A one-minute per-instance cache: this overview aggregates every payment on each dashboard load. The Revenue page stays live.
     getRevenueReport({}, { cacheSeconds: 60 }),
+    getMemberJourneyConcerns(),
   ]);
   const delivered = communications.renewalRows.filter((row) => row.brevo === 'delivered');
 
@@ -66,7 +68,24 @@ export default async function AdminPage() {
       </AdminFormSection>
     </div>
 
-    <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered." title="Delivered renewal notices">
+    <AdminFormSection description="Potential member access and renewal problems found in durable account, queue, session, and membership records. These are follow-up signals, not proof of failure. Updated whenever this dashboard loads." title="Member journey health">
+      <p className="text-2xl font-semibold">{journeyConcerns.length} <span className="text-sm font-normal text-muted-foreground">member journey concerns</span></p>
+      {journeyConcerns.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">No monitored activation, login, onboarding, or renewal concerns meet the escalation thresholds.</p> : (
+        <ul className="mt-4 divide-y divide-border">
+          {journeyConcerns.slice(0, 20).map((issue) => (
+            <li className="py-3 first:pt-0 last:pb-0" key={`${issue.kind}-${issue.userId}`}>
+              {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
+              <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {journeyConcerns.length > 20 ? <p className="mt-2 text-xs text-muted-foreground">Showing 20 of {journeyConcerns.length} concerns. Open Communications for additional delivery details.</p> : null}
+      <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/communications">Open Communications</Link>
+    </AdminFormSection>
+
+    <AdminFormSection description="Renewal notices from the last 7 days that Brevo's log shows as delivered. Delivery does not confirm the member received or acted on them." title="Delivered renewal notices">
       {communications.brevoAvailable ? null : <p className="text-sm text-muted-foreground">Brevo&apos;s log could not be read, so delivery cannot be confirmed right now.</p>}
       <p className="text-2xl font-semibold">{delivered.length} <span className="text-sm font-normal text-muted-foreground">delivered</span></p>
       {delivered.length === 0 ? <p className="text-sm text-muted-foreground">No delivered renewal notices in the last 7 days.</p> : (
