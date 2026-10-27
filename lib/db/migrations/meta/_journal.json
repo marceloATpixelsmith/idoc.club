@@ -624,6 +624,13 @@
       "when": 1793125000000,
       "tag": "0088_email_delivery_alert_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793130000000,
+      "tag": "0089_member_journey_alert_kind",
+      "breakpoints": true
     }
   ]
 }
