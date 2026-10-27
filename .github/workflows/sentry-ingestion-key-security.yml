@@ -1,0 +1,28 @@
+name: Sentry ingestion key security
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the conservative provider-side key rate cap (requires project:write)"
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  sentry-client-keys:
+    runs-on: ubuntu-latest
+    environment: idoc-sentry-maintenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Audit Sentry provider-side DSN rate caps
+        env:
+          SENTRY_SECURITY_AUTH_TOKEN: ${{ secrets.SENTRY_SECURITY_AUTH_TOKEN }}
+          SENTRY_ORG: pixelsmith-platform
+          SENTRY_PROJECT: idoc
+          SENTRY_KEY_MAX_EVENTS: '1000'
+          SENTRY_KEY_WINDOW_SECONDS: '3600'
+        run: node scripts/check-sentry-ingestion-limits.mjs ${{ inputs.apply && '--apply' || '' }}
