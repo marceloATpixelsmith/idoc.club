@@ -95,3 +95,17 @@ test('the flood summary states how many are held, why, and where to look, once p
   assert.equal(summary.dedupeKey, buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 99, now: new Date(now.getTime() + 60_000) }).dedupeKey);
   assert.match(buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 1, now }).html, /1 more email needs attention/);
 });
+
+test('URL schemes in untrusted text never reach an alert, because the send boundary refuses a message that mentions another IDOC host as a URL', async () => {
+  const { nonCanonicalEmailHosts } = await import('../lib/notifications/email-link-policy.ts');
+  const hostile = 'rejected, see https://staging.idoc.club/x and http://my-idoc.vercel.app/y and ftp://idoc.test/z';
+  const alert = buildDeliveryProblemAlert(problem({
+    events: [{ at: now, event: 'deferred', reason: hostile }], member: { accountState: null, name: 'https://redesign.idoc.club', profileId: null, userId: 1 },
+    email: { ...problem().email, status: 'deferred', subject: 'http://idoc.vercel.app' },
+  }));
+  assert.deepEqual(nonCanonicalEmailHosts(alert.html), [], 'the alert HTML carries no non-canonical IDOC URL');
+  const repeat = buildRepeatRequestAlert({ baseUrl: 'https://idoc.club', domain: { delivered: 0, domain: 'x.org', notDelivered: 1, total: 1 }, member: null, now, purpose: 'login_verification', to: 'a@x.org',
+    requests: [{ events: [{ at: now, event: 'deferred', reason: hostile }], requestedAt: now, status: 'deferred' }] });
+  assert.deepEqual(nonCanonicalEmailHosts(repeat.html), []);
+  assert.ok(alert.html.includes('staging.idoc.club/x'), 'the text itself is still readable, only the scheme is removed');
+});

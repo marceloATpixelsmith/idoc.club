@@ -53,6 +53,12 @@ export function emailKindLabel(kind: string | null, subject: string | null): str
   return (kind && KIND_LABELS[kind]) || subject || 'email';
 }
 
+/** Untrusted text (a Brevo reason written by the recipient's mail server, a member's name, a subject line) as it may appear in an alert.
+ * HTML-escaped, and with URL schemes removed: the send boundary refuses any message that mentions another IDOC host as a URL, so a URL-like
+ * string in a bounce reason could otherwise stop the alert about that very email from ever being delivered. */
+const stripSchemes = (value: string) => value.replace(/[a-z][a-z0-9+.-]*:\/\//gi, '');
+export const untrusted = (value: string) => escapeHtml(stripSchemes(value));
+
 export const utc = (at: Date) => `${at.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
 
 export type BrevoCheck = 'events_found' | 'no_events' | 'skipped' | 'unavailable';
@@ -60,7 +66,7 @@ export type EventLine = { at: Date; event: string; reason: string | null };
 
 /** The plain-English reading of where an email stands, and what to do next. Written for the person who has to troubleshoot it. */
 export function diagnose(input: { ageMinutes: number; brevoCheck: BrevoCheck; events: EventLine[]; status: string }): { steps: string[]; summary: string } {
-  const lastReason = [...input.events].reverse().find((event) => event.reason)?.reason;
+  const lastReason = [...input.events].reverse().find((event) => event.reason)?.reason?.replace(/[a-z][a-z0-9+.-]*:\/\//gi, '');
   const reason = lastReason ? ` Brevo's reason: “${lastReason}”.` : '';
   switch (input.status) {
     case 'hard_bounced':
@@ -99,13 +105,13 @@ const code = (value: string) => `<code style="font-family:Consolas,Menlo,monospa
 function memberRows(member: MemberRef | null, baseUrl: string): string {
   if (!member?.userId) return row('Member', 'No account (the address is not tied to a member)');
   const link = member.profileId ? ` · <a href="${escapeHtml(`${baseUrl}/admin/members?timeline=${member.profileId}`)}" style="color:${IDOC_EMAIL_COLORS.gold};">open their timeline</a>` : '';
-  return row('Member', `${escapeHtml(member.name ?? '(no profile name)')} · user #${member.userId}${member.accountState ? ` · account ${escapeHtml(member.accountState)}` : ''}${link}`);
+  return row('Member', `${untrusted(member.name ?? '(no profile name)')} · user #${member.userId}${member.accountState ? ` · account ${escapeHtml(member.accountState)}` : ''}${link}`);
 }
 
 function eventsTable(events: EventLine[]): string {
   if (events.length === 0) return `<p style="margin:0 0 20px;font-size:14px;">No events have been reported for this message.</p>`;
   const head = `<tr><td style="${cell}color:${IDOC_EMAIL_COLORS.muted};">Time</td><td style="${cell}color:${IDOC_EMAIL_COLORS.muted};">Event</td><td style="${cell}color:${IDOC_EMAIL_COLORS.muted};">Brevo's reason</td></tr>`;
-  return table(head + events.map((event) => `<tr><td style="${cell}white-space:nowrap;">${escapeHtml(utc(event.at))}</td><td style="${cell}">${escapeHtml(event.event)}</td><td style="${cell}">${event.reason ? escapeHtml(event.reason) : '—'}</td></tr>`).join(''));
+  return table(head + events.map((event) => `<tr><td style="${cell}white-space:nowrap;">${escapeHtml(utc(event.at))}</td><td style="${cell}">${escapeHtml(event.event)}</td><td style="${cell}">${event.reason ? untrusted(event.reason) : '—'}</td></tr>`).join(''));
 }
 
 function domainLine(context: DomainContext): string {
@@ -115,7 +121,7 @@ function domainLine(context: DomainContext): string {
 
 const recentTable = (emails: RecentEmail[]) => emails.length === 0
   ? `<p style="margin:0 0 20px;font-size:14px;">No other emails to this address in the last 24 hours.</p>`
-  : table(emails.map((email) => row(utc(email.sentAt), `${escapeHtml(emailKindLabel(email.kind, email.subject))} — <b>${escapeHtml(email.status)}</b>`)).join(''));
+  : table(emails.map((email) => row(utc(email.sentAt), `${untrusted(emailKindLabel(email.kind, email.subject))} — <b>${escapeHtml(email.status)}</b>`)).join(''));
 
 export type DeliveryProblemData = {
   baseUrl: string;
@@ -147,7 +153,7 @@ ${table([
     row('Recipient', `<b>${escapeHtml(email.to)}</b>`),
     memberRows(data.member, data.baseUrl),
     row('Type', escapeHtml(label)),
-    row('Subject', escapeHtml(email.subject ?? '—')),
+    row('Subject', untrusted(email.subject ?? '—')),
     row('Accepted by Brevo', `${escapeHtml(utc(email.sentAt))} (${ageMinutes} minutes ago)`),
     row('Status now', `<b>${escapeHtml(email.status)}</b> since ${escapeHtml(utc(email.statusAt))}`),
     row('Brevo message id', email.messageId ? code(email.messageId) : 'not recorded'),
@@ -190,7 +196,7 @@ export function buildRepeatRequestAlert(data: RepeatRequestData): { dedupeKey: s
     ? `Brevo reports every one of these ${data.requests.length} codes as delivered, yet the member never entered one. They most likely cannot find the email (spam/junk folder, a different mailbox, or a mail app that is slow to show it).`
     : `The member requested ${data.requests.length} ${label}s within 15 minutes and never entered one, and at least one was not reported delivered. The emails are probably not reaching them in time.`;
   const requestRows = data.requests.map((request, index) => row(`Request ${index + 1} · ${utc(request.requestedAt)}`, request.status
-    ? `<b>${escapeHtml(request.status)}</b>${request.events.length ? ': ' + request.events.map((event) => `${escapeHtml(event.event)} ${escapeHtml(utc(event.at).slice(11))}${event.reason ? ` (${escapeHtml(event.reason)})` : ''}`).join(', ') : ''}`
+    ? `<b>${escapeHtml(request.status)}</b>${request.events.length ? ': ' + request.events.map((event) => `${escapeHtml(event.event)} ${escapeHtml(utc(event.at).slice(11))}${event.reason ? ` (${untrusted(event.reason)})` : ''}`).join(', ') : ''}`
     : 'no delivery record (sent before logging began, or Brevo did not accept it)')).join('');
   const bodyHtml = `
 <p style="margin:0 0 16px;"><b>${escapeHtml(summary)}</b></p>
