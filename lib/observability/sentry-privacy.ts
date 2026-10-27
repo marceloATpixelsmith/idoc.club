@@ -77,3 +77,15 @@ export function sanitizeSentryEvent<T>(event: T): T {
   sanitized.user = typeof internalId === 'string' && /^\d+$/.test(internalId) ? { id: internalId } : undefined;
   return sanitized;
 }
+
+/** Breadcrumbs (console output, fetch/XHR URLs, UI clicks) are recorded as they happen, before any event exists for beforeSend to clean,
+ * and they can carry query-string tokens, emails or form text. Cleaned here as each one is recorded, so what is held in memory and
+ * attached to a later error is already free of them. */
+export function sanitizeSentryBreadcrumb<T>(breadcrumb: T): T {
+  const sanitized = sanitizeValue(breadcrumb) as T & { data?: { url?: unknown; to?: unknown; from?: unknown }; message?: unknown };
+  for (const key of ['url', 'to', 'from'] as const) {
+    const value = sanitized.data?.[key];
+    if (sanitized.data && typeof value === 'string') sanitized.data[key] = value.split(/[?#]/)[0];
+  }
+  return sanitized;
+}

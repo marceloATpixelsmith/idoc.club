@@ -64,3 +64,15 @@ test('Sentry environment and error-only defaults use Vercel deployment context',
   assert.equal(options.sendDefaultPii, false);
   assert.equal(options.tracesSampleRate, 0);
 });
+
+test('breadcrumbs are cleaned as they are recorded: no query strings, emails or token-bearing fields', async () => {
+  const { sanitizeSentryBreadcrumb } = await import('../lib/observability/sentry-privacy.ts');
+  const crumb = sanitizeSentryBreadcrumb({
+    category: 'fetch', message: 'Sent to member@example.org with Bearer abc.def.ghi',
+    data: { method: 'GET', status_code: 200, token: 'secret-value', url: 'https://idoc.club/reset-password?token=abc123&x=1#frag' },
+  });
+  assert.equal(crumb.data.url, 'https://idoc.club/reset-password');
+  assert.equal(crumb.data.token, '[Filtered]');
+  assert.equal(crumb.data.status_code, 200);
+  assert.doesNotMatch(String(crumb.message), /member@example\.org|abc\.def\.ghi/);
+});
