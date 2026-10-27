@@ -39,7 +39,8 @@ const CLOCK_SLACK_MS = 2 * 60_000;
 const OUTCOME_WINDOW_MS = 24 * 3_600_000;
 
 // Brevo reports a message's "request" (accepted) within a second or two of our send (under one second in every observed case); a delivery can
-// follow minutes or hours later. The pairing window is kept tight so a send whose own request is missing can never be paired with a neighbour's.
+// follow minutes or hours later. A request is claimed only by the send nearest to it (within this window), so a send whose own request is
+// missing cannot borrow a neighbour's.
 const REQUEST_MATCH_MS = 30_000;
 
 /** Matches each sent email to the Brevo log. Preferred: pair the send with Brevo's own "request" event for it (same address, within
@@ -69,8 +70,13 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
     const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
 
     // Preferred: Brevo's own message id, found through the request event nearest this send.
+    // Only the send nearest a request may claim it, so a send whose own request is missing falls through to the time-window fallback
+    // instead of borrowing a neighbour's message id and being judged by another message's events.
+    const sameAddressSends = ordered.filter((other) => other.email !== null && other.email.trim().toLowerCase() === row.email?.trim().toLowerCase());
+    const nearestSendId = (event: BrevoLogEvent) => [...sameAddressSends]
+      .sort((left, right) => Math.abs(event.at.getTime() - left.sentAt.getTime()) - Math.abs(event.at.getTime() - right.sentAt.getTime()))[0]?.id;
     const request = candidates
-      .filter((event) => event.event === 'requests' && event.messageId && !claimedRequests.has(event) && Math.abs(event.at.getTime() - row.sentAt.getTime()) <= REQUEST_MATCH_MS)
+      .filter((event) => event.event === 'requests' && event.messageId && !claimedRequests.has(event) && nearestSendId(event) === row.id && Math.abs(event.at.getTime() - row.sentAt.getTime()) <= REQUEST_MATCH_MS)
       .sort((left, right) => Math.abs(left.at.getTime() - row.sentAt.getTime()) - Math.abs(right.at.getTime() - row.sentAt.getTime()))[0];
     if (request?.messageId) {
       claimedRequests.add(request);

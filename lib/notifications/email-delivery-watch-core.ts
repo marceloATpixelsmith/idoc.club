@@ -18,6 +18,9 @@ export const REPEAT_REQUEST_WINDOW_MS = 15 * 60_000;
 /** At most this many alerts per hour. Past it the watch holds the rest and sends one summary instead, so a burst of undeliverable
  * addresses (a provider outage, or someone submitting many bad addresses) cannot flood the administrator's mailbox. */
 export const HOURLY_ALERT_CAP = 30;
+/** Separate cap for the repeated-code-request alerts, so a burst of undelivered emails can never use it up (that pattern only exists for 15 minutes, so
+ * an alert held back could never be sent later). */
+export const HOURLY_REPEAT_ALERT_CAP = 10;
 export const MAX_ALERTS_PER_RUN = 25;
 
 export type AlertTier = 'failed' | 'final' | 'late';
@@ -220,20 +223,32 @@ ${h('What to do')}
   };
 }
 
-/** The single alert sent in place of the individual ones once the hourly cap is reached. */
-export function buildFloodSummaryAlert(data: { baseUrl: string; held: number; now: Date }): { dedupeKey: string; html: string; subject: string } {
+/** The single alert sent in place of the individual ones once an hourly cap is reached. `emails` are undelivered emails, which are still reported
+ * as the cap allows over the next hours; `requests` are members requesting codes, a pattern that only exists for 15 minutes, so those held back are
+ * not reported later. */
+export function buildFloodSummaryAlert(data: { baseUrl: string; held: number; kind: 'emails' | 'requests'; now: Date }): { dedupeKey: string; html: string; subject: string } {
   const hour = new Date(Math.floor(data.now.getTime() / 3_600_000) * 3_600_000).toISOString();
+  const emails = data.kind === 'emails';
+  const cap = emails ? HOURLY_ALERT_CAP : HOURLY_REPEAT_ALERT_CAP;
+  const heading = emails
+    ? `${data.held} more email${data.held === 1 ? '' : 's'} need${data.held === 1 ? 's' : ''} attention, but individual alerts are paused for this hour after ${cap}, so your inbox is not flooded.`
+    : `${data.held} more member${data.held === 1 ? ' is' : 's are'} requesting codes that are not arriving, but those alerts are paused for this hour after ${cap}.`;
+  const detail = emails
+    ? 'This usually means a mail provider is delaying or refusing our email for many members at once, or many undeliverable addresses were submitted. Nothing is lost: the remaining emails are reported as the cap allows over the next hours.'
+    : 'This usually means delivery is broken for many members at once. These members are NOT reported later (the pattern only exists for 15 minutes), so look at Communications → Delivery issues to find the affected addresses.';
   const bodyHtml = `
-<p style="margin:0 0 16px;"><b>${data.held} more email${data.held === 1 ? '' : 's'} need${data.held === 1 ? 's' : ''} attention, but individual alerts are paused for this hour after ${HOURLY_ALERT_CAP}, so your inbox is not flooded.</b></p>
-<p style="margin:0 0 16px;font-size:14px;">This usually means a mail provider is delaying or refusing our email for many members at once, or many undeliverable addresses were submitted. Nothing is lost: the remaining emails are reported as the cap allows over the next hours.</p>
+<p style="margin:0 0 16px;"><b>${heading}</b></p>
+<p style="margin:0 0 16px;font-size:14px;">${detail}</p>
 ${h('What to do')}
 <ol style="margin:0 0 8px;padding-left:20px;font-size:14px;">
 <li style="margin:0 0 6px;">Open <a href="${escapeHtml(`${data.baseUrl}/admin/communications`)}" style="color:${IDOC_EMAIL_COLORS.gold};">Communications → Delivery issues</a> to see every email that is not confirmed delivered, by address.</li>
 <li style="margin:0 0 6px;">Look at the provider named in the individual alerts you did receive; if one provider dominates, it is throttling or blocking us.</li>
 <li>Check Brevo's status and Transactional → Logs.</li></ol>`;
   return {
-    dedupeKey: `email-delivery-flood:${hour}`,
-    html: renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC delivery monitoring.', heading: 'Email delivery alerts paused' }),
-    subject: `IDOC: ${data.held} more undelivered email${data.held === 1 ? '' : 's'} — alerts paused this hour`,
+    dedupeKey: `${emails ? 'email-delivery-flood' : 'repeated-code-requests-flood'}:${hour}`,
+    html: renderTransactionalEmail({ bodyHtml, footerNote: 'IDOC delivery monitoring.', heading: emails ? 'Email delivery alerts paused' : 'Code-request alerts paused' }),
+    subject: emails
+      ? `IDOC: ${data.held} more undelivered email${data.held === 1 ? '' : 's'} — alerts paused this hour`
+      : `IDOC: ${data.held} more member${data.held === 1 ? '' : 's'} requesting codes — alerts paused this hour`,
   };
 }

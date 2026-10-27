@@ -155,3 +155,10 @@ test('a send whose own request event is missing is never paired with a neighbour
   assert.equal(checks.get('s2'), 'delivered');
   assert.notEqual(checks.get('s1'), 'delivered');
 });
+
+test('two sends under 30 seconds apart where only the later one has a request event: the earlier is not judged by the later one\'s message', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:00:20Z') }];
+  const checks = checkAgainstBrevoLog(sends, [event('a@x.org', 'requests', '2026-10-27T10:00:21Z', 'm2'), event('a@x.org', 'hardBounces', '2026-10-27T10:05:00Z', 'm2')]);
+  assert.equal(checks.get('s2'), 'failed', 'the later send, which owns the request, is the one that bounced');
+  assert.notEqual(checks.get('s1'), 'failed', 'the earlier send must not borrow its neighbour\'s message and bounce');
+});

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   alertTier, buildDeliveryProblemAlert, buildRepeatRequestAlert, deliveryDeadlineMs, diagnose, emailKindLabel,
-  AUTH_CODE_DEADLINE_MS, buildFloodSummaryAlert, GENERAL_DEADLINE_MS, HOURLY_ALERT_CAP, type DeliveryProblemData,
+  AUTH_CODE_DEADLINE_MS, buildFloodSummaryAlert, GENERAL_DEADLINE_MS, HOURLY_ALERT_CAP, HOURLY_REPEAT_ALERT_CAP, type DeliveryProblemData,
 } from '../lib/notifications/email-delivery-watch-core.ts';
 
 const now = new Date('2026-10-27T15:00:00Z');
@@ -87,13 +87,20 @@ test('kinds have readable labels and fall back to the subject', () => {
   assert.equal(emailKindLabel(null, null), 'email');
 });
 
-test('the flood summary states how many are held, why, and where to look, once per hour', () => {
-  const summary = buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 12, now });
-  assert.ok(summary.html.includes('12 more emails need attention'));
-  assert.ok(summary.html.includes(`after ${HOURLY_ALERT_CAP}`));
-  assert.ok(summary.html.includes('https://idoc.club/admin/communications'));
-  assert.equal(summary.dedupeKey, buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 99, now: new Date(now.getTime() + 60_000) }).dedupeKey);
-  assert.match(buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 1, now }).html, /1 more email needs attention/);
+test('the flood summaries state how many are held, why, whether they will be reported later, and where to look, once per family per hour', () => {
+  const emails = buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 12, kind: 'emails', now });
+  assert.ok(emails.html.includes('12 more emails need attention'));
+  assert.ok(emails.html.includes(`after ${HOURLY_ALERT_CAP}`));
+  assert.ok(emails.html.includes('https://idoc.club/admin/communications'));
+  assert.ok(emails.html.includes('reported as the cap allows over the next hours'));
+  assert.equal(emails.dedupeKey, buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 99, kind: 'emails', now: new Date(now.getTime() + 60_000) }).dedupeKey);
+  assert.match(buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 1, kind: 'emails', now }).html, /1 more email needs attention/);
+
+  const requests = buildFloodSummaryAlert({ baseUrl: 'https://idoc.club', held: 3, kind: 'requests', now });
+  assert.ok(requests.html.includes('3 more members are requesting codes'));
+  assert.ok(requests.html.includes(`after ${HOURLY_REPEAT_ALERT_CAP}`));
+  assert.ok(requests.html.includes('NOT reported later'), 'it does not promise later reporting for a pattern that expires');
+  assert.notEqual(requests.dedupeKey, emails.dedupeKey, 'the two families never share a summary');
 });
 
 test('URL schemes in untrusted text never reach an alert, because the send boundary refuses a message that mentions another IDOC host as a URL', async () => {

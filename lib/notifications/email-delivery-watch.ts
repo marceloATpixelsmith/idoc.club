@@ -8,7 +8,7 @@ import { applyBrevoDeliveryEvent } from './email-delivery-log';
 import { normalizeBrevoEventName, normalizeBrevoMessageId } from './email-delivery-log-core';
 import {
   alertTier, AUTH_CODE_DEADLINE_MS, buildDeliveryProblemAlert, buildFloodSummaryAlert, buildRepeatRequestAlert, FINAL_DEADLINE_MS, GENERAL_DEADLINE_MS, HOURLY_ALERT_CAP,
-  MAX_ALERTS_PER_RUN, REPEAT_REQUEST_THRESHOLD, REPEAT_REQUEST_WINDOW_MS, WATCH_LOOKBACK_MS,
+  HOURLY_REPEAT_ALERT_CAP, MAX_ALERTS_PER_RUN, REPEAT_REQUEST_THRESHOLD, REPEAT_REQUEST_WINDOW_MS, WATCH_LOOKBACK_MS,
   type BrevoCheck, type DomainContext, type EventLine, type MemberRef, type RecentEmail,
 } from './email-delivery-watch-core';
 import { enqueueOperationalAlert } from './operational-alert-outbox';
@@ -83,13 +83,14 @@ async function memberByEmail(email: string): Promise<MemberRef | null> {
   return row ? { accountState: row.account_state, name: fullName(row.first_name, row.last_name), profileId: row.profile_id, userId: row.id } : null;
 }
 
-/** How many more alerts this hour's cap allows. */
-async function remainingHourlyBudget(now: Date): Promise<number> {
+/** How many more alerts of one family this hour's cap allows (the families have independent caps). */
+async function remainingHourlyBudget(now: Date, family: 'delivery' | 'repeat'): Promise<number> {
   const [row] = await client<{ recent: number }[]>`
     select count(*)::int recent from operational_alert_outbox
-    where kind in ('email_delivery_problem', 'repeated_code_requests') and dedupe_key not like 'email-delivery-flood:%'
+    where kind in ('email_delivery_problem', 'repeated_code_requests')
+      and dedupe_key like ${family === 'delivery' ? 'email-delivery-problem:%' : 'repeated-code-requests:%'}
       and created_at >= ${new Date(now.getTime() - 3_600_000).toISOString()}::timestamptz`;
-  return Math.max(0, HOURLY_ALERT_CAP - (row?.recent ?? 0));
+  return Math.max(0, (family === 'delivery' ? HOURLY_ALERT_CAP : HOURLY_REPEAT_ALERT_CAP) - (row?.recent ?? 0));
 }
 
 async function reportDeliveryProblems(now: Date, adminEmail: string | null, budget: number) {
@@ -168,6 +169,7 @@ async function reportDeliveryProblems(now: Date, adminEmail: string | null, budg
 
 async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, budget: number) {
   let alerted = 0;
+  let held = 0;
   const windowStart = new Date(now.getTime() - REPEAT_REQUEST_WINDOW_MS);
   const hourIso = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000).toISOString();
   // Groups already reported this hour are excluded in the query (the key is the same SHA-256 the alert builder derives) so they can never
@@ -180,8 +182,8 @@ async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, 
         where o.dedupe_key = 'repeated-code-requests:' || encode(sha256(convert_to(c.email || ':' || c.purpose || ':' || ${hourIso}::text, 'UTF8')), 'hex'))
     order by max(c.created_at) desc limit 25`;
   const baseUrl = baseUrlForServer();
-  for (const group of groups) {
-    if (alerted >= budget) break;
+  for (const [index, group] of groups.entries()) {
+    if (alerted >= budget) { held = groups.length - index; break; }
     if (adminEmail && group.email === adminEmail) continue;
     const codes = await client<{ created_at: Date | string }[]>`
       select created_at from email_otp_codes where email=${group.email} and purpose=${group.purpose} and created_at >= ${windowStart.toISOString()}::timestamptz order by created_at`;
@@ -197,19 +199,19 @@ async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, 
     const alert = buildRepeatRequestAlert({ baseUrl, domain, member: await memberByEmail(group.email), now, purpose: group.purpose, requests, to: group.email });
     if (await enqueueOperationalAlert({ bodyHtml: alert.html, dedupeKey: alert.dedupeKey, kind: 'repeated_code_requests', subject: taggedSubject('email.repeated_code_requests', alert.subject) })) alerted += 1;
   }
-  return alerted;
+  return { alerted, held };
 }
 
 /** One pass of the watch. Safe to run repeatedly and concurrently: every alert is keyed, so the same email or request burst is reported once. */
 export async function runEmailDeliveryWatch(now: Date = new Date()) {
   const adminEmail = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL?.trim().toLowerCase() || null;
-  const budget = await remainingHourlyBudget(now);
-  const delivery = await reportDeliveryProblems(now, adminEmail, budget);
-  const repeated = await reportRepeatedCodeRequests(now, adminEmail, Math.max(0, budget - delivery.alerted));
-  // Past the hourly cap, one summary replaces the individual alerts (one per hour), so the administrator still hears that more exist.
-  if (delivery.held > 0) {
-    const flood = buildFloodSummaryAlert({ baseUrl: baseUrlForServer(), held: delivery.held, now });
+  const delivery = await reportDeliveryProblems(now, adminEmail, await remainingHourlyBudget(now, 'delivery'));
+  const repeated = await reportRepeatedCodeRequests(now, adminEmail, await remainingHourlyBudget(now, 'repeat'));
+  // Past a cap, one summary per family and hour replaces the individual alerts, so the administrator still hears that more exist.
+  for (const [kind, held] of [['emails', delivery.held], ['requests', repeated.held]] as const) {
+    if (held <= 0) continue;
+    const flood = buildFloodSummaryAlert({ baseUrl: baseUrlForServer(), held, kind, now });
     await enqueueOperationalAlert({ bodyHtml: flood.html, dedupeKey: flood.dedupeKey, kind: 'email_delivery_problem', subject: taggedSubject('email.delivery_problem', flood.subject) });
   }
-  return { alerted: delivery.alerted, held: delivery.held, reconciled: delivery.reconciled, repeatAlerted: repeated };
+  return { alerted: delivery.alerted, held: delivery.held + repeated.held, reconciled: delivery.reconciled, repeatAlerted: repeated.alerted };
 }

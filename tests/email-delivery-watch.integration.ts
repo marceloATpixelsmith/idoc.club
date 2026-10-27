@@ -181,3 +181,27 @@ test('repeated-request groups already reported this hour cannot crowd a new one 
   await runEmailDeliveryWatch(now);
   assert.ok((await alerts()).some((alert) => alert.kind === 'repeated_code_requests' && alert.body_html.includes('brand-new@example.test')), 'the new group is reported');
 });
+
+test('a burst of undelivered emails cannot use up the repeated-code-request alerts, and each family reports what it held back', async () => {
+  for (let index = 0; index < 40; index += 1) await logEmail({ email: `burst-${index}@example.test`, minutes: 9 });
+  for (let round = 0; round < 3; round += 1) await runEmailDeliveryWatch(now);
+  for (const minutes of [9, 6, 2]) await sql`insert into idoc.email_otp_codes(email, purpose, code_hash, expires_at, created_at) values ('stuck-member@example.test', 'login_verification', 'h', ${minutesAgo(-5)}::timestamptz, ${minutesAgo(minutes)}::timestamptz)`;
+  const result = await runEmailDeliveryWatch(now);
+  assert.equal(result.repeatAlerted, 1, 'the member in a code-request loop is still reported although the delivery cap is spent');
+  const all = await alerts();
+  assert.equal(all.filter((alert) => alert.dedupe_key.startsWith('email-delivery-problem:')).length, 30);
+  assert.ok(all.some((alert) => alert.kind === 'repeated_code_requests' && alert.body_html.includes('stuck-member@example.test')));
+});
+
+test('repeated-request groups past their own cap are summarised separately, not silently dropped', async () => {
+  for (let index = 0; index < 14; index += 1) {
+    for (const minutes of [9, 6, 2]) await sql`insert into idoc.email_otp_codes(email, purpose, code_hash, expires_at, created_at) values (${`loop-${index}@example.test`}, 'login_verification', 'h', ${minutesAgo(-5)}::timestamptz, ${minutesAgo(minutes)}::timestamptz)`;
+  }
+  const result = await runEmailDeliveryWatch(now);
+  assert.equal(result.repeatAlerted, 10, 'capped at 10 per hour');
+  const summary = (await alerts()).find((alert) => alert.dedupe_key.startsWith('repeated-code-requests-flood:'));
+  assert.ok(summary, 'a summary names the groups that were held back');
+  assert.match(summary.body_html, /4 more members are requesting codes/);
+  assert.equal((await runEmailDeliveryWatch(now)).repeatAlerted, 0);
+  assert.equal((await alerts()).filter((alert) => alert.dedupe_key.startsWith('repeated-code-requests-flood:')).length, 1, 'one summary per hour');
+});
