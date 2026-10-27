@@ -8,6 +8,8 @@ export type MemberJourneyConcernKind =
   | 'activation_repeated'
   | 'activation_delivery_stuck'
   | 'login_code_repeated'
+  | 'password_signin_refused'
+  | 'activation_link_rejected'
   | 'onboarding_incomplete'
   | 'renewal_delivery_stuck'
   | 'renewal_followup';
@@ -39,13 +41,14 @@ function concern(kind: MemberJourneyConcernKind, row: TimedRow, note: string): M
 // NOT PROOF OF USER ERROR, INBOX PLACEMENT, OR A FAILED FINANCIAL TRANSACTION.
 export async function scanMemberJourneyConcerns(now = new Date()): Promise<MemberJourneyConcern[]> {
   const sinceHour = new Date(now.getTime() - 3_600_000).toISOString();
+  const sinceDay = new Date(now.getTime() - 86_400_000).toISOString();
   const sinceWeek = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const sinceMonth = new Date(now.getTime() - 35 * 86_400_000).toISOString();
   const tooOld = new Date(now.getTime() - 48 * 3_600_000).toISOString();
   const stuck = new Date(now.getTime() - 30 * 60_000).toISOString();
   const expired = new Date(now.getTime() - 5 * 86_400_000).toISOString().slice(0, 10);
 
-  const [repeatedActivations, stalledActivationLinks, repeatedCodes, onboarding, stalledRenewals, renewals] = await Promise.all([
+  const [repeatedActivations, stalledActivationLinks, repeatedCodes, refusedSignins, rejectedLinks, onboarding, stalledRenewals, renewals] = await Promise.all([
     client<TimedRow[]>`
       select u.id user_id, u.email, p.id profile_id, p.first_name, p.last_name,
         max(d.created_at) occurred_at, count(*)::int as count
@@ -85,6 +88,32 @@ export async function scanMemberJourneyConcerns(now = new Date()): Promise<Membe
           select 1 from auth_sessions s
           where s.user_id=u.id and s.authenticated_at >= a.first_at
         )
+    `,
+    client<TimedRow[]>`
+      select u.id user_id,u.email,p.id profile_id,p.first_name,p.last_name,
+        max(a.occurred_at) occurred_at,count(*)::int as count
+      from user_activity_events a
+      join users u on u.id=a.user_id
+      join profiles p on p.user_id=u.id and p.legacy_wp_user_id is not null
+      where a.event='sign_in_password_failed' and a.occurred_at >= ${sinceHour}::timestamptz
+        and not exists (
+          select 1 from auth_sessions s
+          where s.user_id=u.id and s.authenticated_at >= ${sinceHour}::timestamptz
+        )
+      group by u.id,u.email,p.id,p.first_name,p.last_name having count(*) >= 3
+    `,
+    client<TimedRow[]>`
+      select u.id user_id,u.email,p.id profile_id,p.first_name,p.last_name,
+        max(a.occurred_at) occurred_at,count(*)::int as count
+      from user_activity_events a
+      join users u on u.id=a.user_id
+      join profiles p on p.user_id=u.id and p.legacy_wp_user_id is not null
+      where a.event='activation_link_opened'
+        and a.outcome in ('expired','rejected','already_used')
+        and a.occurred_at >= ${sinceDay}::timestamptz
+        and u.account_state='migrated_pending'
+        and coalesce(a.detail->>'browser','browser') <> 'scanner'
+      group by u.id,u.email,p.id,p.first_name,p.last_name having count(*) >= 2
     `,
     client<TimedRow[]>`
       select u.id user_id,u.email,p.id profile_id,p.first_name,p.last_name,
@@ -131,6 +160,8 @@ export async function scanMemberJourneyConcerns(now = new Date()): Promise<Membe
     ...stalledActivationLinks.map((row) => concern('activation_delivery_stuck', row, 'Activation email queued for more than 30 minutes without being sent')),
     ...repeatedActivations.map((row) => concern('activation_repeated', row, 'Three or more activation requests in seven days; account still awaits activation')),
     ...repeatedCodes.map((row) => concern('login_code_repeated', row, 'Three or more login codes requested within one hour with no new successful session')),
+    ...refusedSignins.map((row) => concern('password_signin_refused', row, 'Three or more refused password sign-ins in one hour without a new authenticated session')),
+    ...rejectedLinks.map((row) => concern('activation_link_rejected', row, 'Two or more rejected or expired activation links opened by a browser in 24 hours')),
     ...onboarding.map((row) => concern('onboarding_incomplete', row, 'Imported member signed in but onboarding remains incomplete after 48 hours')),
     ...stalledRenewals.map((row) => concern('renewal_delivery_stuck', row, 'Renewal notice queued for more than 30 minutes without being sent')),
     ...renewals.map((row) => concern('renewal_followup', row, 'Previously notified member remains expired or in grace beyond five days; follow-up only')),
