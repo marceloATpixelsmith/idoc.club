@@ -252,15 +252,6 @@ async function finishTokenPasswordFlow(flash: 'account-activated' | 'password-re
   redirect('/sign-in');
 }
 
-const resendVerificationSchema = z.object({ email: z.string().email().max(255) });
-
-export const resendVerification = validatedAction(resendVerificationSchema, async (data) => {
-  const email = normalizeEmail(data.email);
-  const [user] = await db.select({ emailVerifiedAt: users.emailVerifiedAt, id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (user && !user.emailVerifiedAt) await issueEmailVerification(user.id, data.email);
-  return { success: 'If an unverified account uses this address, a verification email will be sent.' };
-});
-
 export async function signOut(csrfToken: string) {
   // AUTH-CSRF-001 explicitly includes logout among mutations requiring CSRF validation, even
   // though signing out an already-forged session mainly harms the attacker's own forged state --
@@ -342,7 +333,9 @@ export const deleteAccount = validatedActionWithUser(
 );
 
 const updateAccountSchema = z.object({
-  email: z.string().email('Invalid email address')
+  email: z.string().email('Invalid email address'),
+  // Only read when the login email actually changes (My Profile always submits the field, empty when untouched).
+  currentPassword: z.string().max(200).optional(),
 });
 
 // A 'use server' file may only export async functions, so this can't be exported for a composing
@@ -356,6 +349,13 @@ export const updateAccount = validatedActionWithUser(
     const email = normalizeEmail(data.email);
     if (email !== user.email) {
       if ((await requireFreshStepUp(user, 'change-email', '/dashboard/account')).required) return { stepUpRequired: true };
+      // The login email is the recovery address for the password-reset and sign-in codes, so changing it hands over the whole account.
+      // A session alone is not enough proof: members have no authenticator, so the step-up above is a no-op for them. The current
+      // password is checked before anything else (including the duplicate check, which would otherwise tell a session holder which
+      // addresses are taken). An account with no password (Google-only) must set one first.
+      if (!user.passwordSetAt) return { error: 'Set a password under Security before changing your login email, or contact support.' };
+      if (!data.currentPassword) return { error: 'Enter your current password to change your login email.' };
+      if (!(await comparePasswords(data.currentPassword, user.passwordHash))) return { error: 'Current password is incorrect.' };
       const [duplicate] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (duplicate) return { error: 'That email address is unavailable.' };
       await issueEmailVerification(user.id, data.email);

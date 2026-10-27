@@ -24,8 +24,9 @@ export function emailKindLabel(kind: string): string {
   return EMAIL_KIND_LABELS[kind] ?? kind;
 }
 
-export type BrevoEventName = 'delivered' | 'hardBounces' | 'softBounces' | 'blocked' | 'spam' | 'invalid' | 'error' | 'deferred';
-export type BrevoLogEvent = { at: Date; email: string; event: BrevoEventName };
+export type BrevoEventName = 'requests' | 'delivered' | 'hardBounces' | 'softBounces' | 'blocked' | 'spam' | 'invalid' | 'error' | 'deferred';
+/** `messageId` is Brevo's own id for the message (angle brackets removed); every event Brevo reports for one message carries the same one. */
+export type BrevoLogEvent = { at: Date; email: string; event: BrevoEventName; messageId?: string };
 
 /** Events that mean the recipient did not get the message. `deferred` is retrying, so it is not a failure yet. */
 const FAILURE_EVENTS: readonly BrevoEventName[] = ['hardBounces', 'softBounces', 'blocked', 'spam', 'invalid', 'error'];
@@ -37,9 +38,17 @@ const CLOCK_SLACK_MS = 2 * 60_000;
 // Brevo reports a delivery or bounce within minutes, a deferred retry within hours; a later event for the same address belongs to a later send.
 const OUTCOME_WINDOW_MS = 24 * 3_600_000;
 
-/** Matches each sent email to the Brevo log by recipient and time. A Brevo "delivered" event is consumed by
- * the first send to that address at or before it, so two emails to one member in the window are not both
- * credited with a single delivery. Any failure event after the send wins over a delivery. */
+// Brevo reports a message's "request" (accepted) within a second or two of our send (under one second in every observed case); a delivery can
+// follow minutes or hours later. A request is claimed only by the send nearest to it (within this window), so a send whose own request is
+// missing cannot borrow a neighbour's.
+const REQUEST_MATCH_MS = 30_000;
+
+/** Matches each sent email to the Brevo log. Preferred: pair the send with Brevo's own "request" event for it (same address, within
+ * seconds), then judge it by every event carrying that message's id, however late they arrive: a message delivered an hour later
+ * is still delivered even when another email to the same address went out in between. Fallback, when the log has no request event
+ * for a send: match by recipient and time, where a Brevo "delivered" event is consumed by the first send to that address at or
+ * before it, so two emails to one member in the window are not both credited with a single delivery. Any failure event after the
+ * send wins over a delivery. `not_found` means no delivery or failure was found, not that Brevo has no record of the message. */
 export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] | null): Map<string, BrevoCheck> {
   const result = new Map<string, BrevoCheck>();
   if (events === null) {
@@ -47,23 +56,52 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
     return result;
   }
   const byEmail = new Map<string, BrevoLogEvent[]>();
+  const byMessageId = new Map<string, BrevoLogEvent[]>();
   for (const event of events) {
     const key = event.email.trim().toLowerCase();
     byEmail.set(key, [...(byEmail.get(key) ?? []), event]);
+    if (event.messageId) byMessageId.set(event.messageId, [...(byMessageId.get(event.messageId) ?? []), event]);
   }
   const consumed = new Set<BrevoLogEvent>();
+  const claimedRequests = new Set<BrevoLogEvent>();
+  const claimedMessageIds = new Set<string>();
   const ordered = [...sent].sort((left, right) => left.sentAt.getTime() - right.sentAt.getTime());
+  const unmatched: Array<[number, SentEmail]> = [];
+
+  // First pass: settle every send that has a request event of its own, so the time-window fallback below can never consume an outcome
+  // belonging to a message that a later send already claims by id.
   for (const [index, row] of ordered.entries()) {
     const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
-    // An outcome belongs to this send only from the previous send to the same address to the next one (or 24 hours),
-    // so a later message's bounce can never overturn an earlier delivery. The clock allowance only widens the start
+
+    // Preferred: Brevo's own message id, found through the request event nearest this send.
+    // Only the send nearest a request may claim it, so a send whose own request is missing falls through to the time-window fallback
+    // instead of borrowing a neighbour's message id and being judged by another message's events.
+    const sameAddressSends = ordered.filter((other) => other.email !== null && other.email.trim().toLowerCase() === row.email?.trim().toLowerCase());
+    const nearestSendId = (event: BrevoLogEvent) => [...sameAddressSends]
+      .sort((left, right) => Math.abs(event.at.getTime() - left.sentAt.getTime()) - Math.abs(event.at.getTime() - right.sentAt.getTime()))[0]?.id;
+    const request = candidates
+      .filter((event) => event.event === 'requests' && event.messageId && !claimedRequests.has(event) && nearestSendId(event) === row.id && Math.abs(event.at.getTime() - row.sentAt.getTime()) <= REQUEST_MATCH_MS)
+      .sort((left, right) => Math.abs(left.at.getTime() - row.sentAt.getTime()) - Math.abs(right.at.getTime() - row.sentAt.getTime()))[0];
+    if (request?.messageId) {
+      claimedRequests.add(request);
+      claimedMessageIds.add(request.messageId);
+      const mine = byMessageId.get(request.messageId) ?? [];
+      result.set(row.id, mine.some((event) => FAILURE_EVENTS.includes(event.event)) ? 'failed' : mine.some((event) => event.event === 'delivered') ? 'delivered' : 'not_found');
+    } else unmatched.push([index, row]);
+  }
+
+  for (const [index, row] of unmatched) {
+    const candidates = row.email ? (byEmail.get(row.email.trim().toLowerCase()) ?? []) : [];
+
+    // Fallback: by recipient and time. An outcome belongs to this send only from the previous send to the same address to the next one
+    // (or 24 hours), so a later message's bounce can never overturn an earlier delivery. The clock allowance only widens the start
     // of the window, never moves the next send's boundary back across this send's own delivery.
     const sameAddress = (other: SentEmail) => other.email !== null && other.email.trim().toLowerCase() === row.email?.trim().toLowerCase();
     const previousSend = ordered.slice(0, index).reverse().find(sameAddress);
     const nextSend = ordered.slice(index + 1).find(sameAddress);
     const lower = Math.max(row.sentAt.getTime() - CLOCK_SLACK_MS, previousSend ? previousSend.sentAt.getTime() : -Infinity);
     const upper = Math.min(row.sentAt.getTime() + OUTCOME_WINDOW_MS, nextSend ? nextSend.sentAt.getTime() : Infinity);
-    const window = candidates.filter((event) => event.at.getTime() >= lower && event.at.getTime() <= upper && !consumed.has(event)).sort((left, right) => left.at.getTime() - right.at.getTime());
+    const window = candidates.filter((event) => !(event.messageId && claimedMessageIds.has(event.messageId)) && event.at.getTime() >= lower && event.at.getTime() <= upper && !consumed.has(event)).sort((left, right) => left.at.getTime() - right.at.getTime());
     // Every outcome inside this send's window belongs to it, so a later send close behind can never pick up a leftover event.
     for (const event of window) consumed.add(event);
     if (window.some((event) => FAILURE_EVENTS.includes(event.event))) { result.set(row.id, 'failed'); continue; }
@@ -76,7 +114,7 @@ export function checkAgainstBrevoLog(sent: SentEmail[], events: BrevoLogEvent[] 
 export const BREVO_CHECK_LABELS: Record<BrevoCheck, string> = {
   delivered: 'Delivered',
   failed: 'Bounced / blocked',
-  not_found: 'Not in Brevo log',
+  not_found: 'No delivery confirmation',
   unavailable: 'Brevo log unavailable',
 };
 

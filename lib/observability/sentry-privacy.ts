@@ -77,3 +77,40 @@ export function sanitizeSentryEvent<T>(event: T): T {
   sanitized.user = typeof internalId === 'string' && /^\d+$/.test(internalId) ? { id: internalId } : undefined;
   return sanitized;
 }
+
+/** Breadcrumbs (console output, fetch/XHR URLs, UI clicks) are recorded as they happen, before any event exists for beforeSend to clean,
+ * and they can carry query-string tokens, emails or form text. Cleaned here as each one is recorded, so what is held in memory and
+ * attached to a later error is already free of them. */
+export function sanitizeSentryBreadcrumb<T>(breadcrumb: T): T {
+  const sanitized = sanitizeValue(breadcrumb) as T & { data?: { url?: unknown; to?: unknown; from?: unknown }; message?: unknown };
+  for (const key of ['url', 'to', 'from'] as const) {
+    const value = sanitized.data?.[key];
+    if (sanitized.data && typeof value === 'string') sanitized.data[key] = value.split(/[?#]/)[0];
+  }
+  return sanitized;
+}
+
+// Errors a visitor (or a scanner) causes with a malformed or unauthorised request, which the application already answers correctly (a
+// 4xx or a refusal). Left in Sentry they bury the errors that matter: the 2026-10-27 list was mostly these. The server logs still
+// carry every such request; only the Sentry alert is skipped. Malformed requests the application itself mishandled (an action posted
+// without its form payload) are fixed at the source rather than hidden here.
+const EXPECTED_REQUEST_ERROR_MESSAGES = [
+  /^Invalid Server Actions request/i,
+  /^Failed to find Server Action/i,
+  /^Multipart: Boundary not found/i,
+  /^The router state header was sent but could not be parsed/i,
+  /^Connection closed\.?$/i,
+];
+const EXPECTED_DENIAL_TYPES = new Set(['AuthorizationError', 'CsrfError']);
+
+export function isExpectedClientCausedEvent(event: unknown): boolean {
+  const values = (event as { exception?: { values?: { type?: string; value?: string; mechanism?: { type?: string } }[] } })?.exception?.values;
+  if (!values?.length) return false;
+  return values.every((entry) => entry.mechanism?.type === 'auto.function.nextjs.on_request_error'
+    && (EXPECTED_DENIAL_TYPES.has(entry.type ?? '') || EXPECTED_REQUEST_ERROR_MESSAGES.some((pattern) => pattern.test(entry.value ?? ''))));
+}
+
+/** The beforeSend hook for every runtime: drops expected client-caused events, otherwise removes request content and secrets. */
+export function prepareSentryEvent<T>(event: T): T | null {
+  return isExpectedClientCausedEvent(event) ? null : sanitizeSentryEvent(event);
+}

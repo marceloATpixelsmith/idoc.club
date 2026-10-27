@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **39 cases** — CI mapped 36, CI gaps 2, not applicable 1.
+Summary: **42 cases** — CI mapped 39, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -21,7 +21,7 @@ Summary: **39 cases** — CI mapped 36, CI gaps 2, not applicable 1.
 | LIVE-AUTH-013 | Fresh MFA step-up automatically resumes the original programmed action exactly once | mapped | required | AUTH-MFA-006, AUTH-TRANSACTION-003, AUTH-TRANSACTION-004 |
 | LIVE-AUTH-014 | Password change enforces current authority and invalidates the old credential as designed | mapped | required | AUTH-PASSWORD-005, AUTH-LIFECYCLE-002 |
 | LIVE-AUTH-015 | Password reset tokens are non-enumerating, single-use, expiring, and actually replace the credential | mapped | required | AUTH-TRANSACTION-003, AUTH-STORAGE-005 |
-| LIVE-AUTH-016 | Email change preserves identity uniqueness and requires the intended verification/step-up | mapped | required | AUTH-IDENTITY-003, AUTH-IDENTITY-005 |
+| LIVE-AUTH-016 | Email change preserves identity uniqueness and requires the current password and the intended verification/step-up | mapped | required | AUTH-EMAIL-003, AUTH-IDENTITY-003, AUTH-IDENTITY-005 |
 | LIVE-AUTH-017 | Role boundaries and object ownership resist direct URL/API ID tampering | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004 |
 | LIVE-AUTH-018 | CSRF defenses reject forged state-changing requests without damaging the valid session | mapped | required | AUTH-CSRF-003 |
 | LIVE-AUTH-019 | Session fixation, token tampering, stale-session replay, and revoked-session reuse fail closed | mapped | required | AUTH-SESSION-002, AUTH-SESSION-009, AUTH-SESSION-010 |
@@ -42,6 +42,9 @@ Summary: **39 cases** — CI mapped 36, CI gaps 2, not applicable 1.
 | LIVE-AUTH-034 | Signup, password reset and password change reject passwords found in known data breaches | mapped | required | AUTH-PASSWORD-006, AUTH-PASSWORD-007 |
 | LIVE-AUTH-035 | Member archive and permanent deletion enforce authorization, billing guards, and audit retention | mapped | required | AUTH-AUTHZ-001, AUTH-MFA-006, AUTH-CSRF-003 |
 | LIVE-AUTH-036 | Paid member journey: membership entitlement and seminar payment are granted only by verified provider events, and seminar registration rules hold | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-005, AUTH-API-004, AUTH-CSRF-003 |
-| LIVE-AUTH-037 | A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002 |
+| LIVE-AUTH-037 | A canceled membership works through its paid-through date and then ends the relationship: the session ends and sign-in is refused | mapped | required | AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-AUTHZ-005, AUTH-SESSION-002 |
 | LIVE-AUTH-038 | An expired protected-page session returns the user to the same page after sign-in, and active use keeps an administrator signed in | mapped | required | AUTH-SESSION-004, AUTH-SESSION-010 |
 | LIVE-AUTH-039 | Imported WordPress passwords failing the current policy require a verified reset; compliant ones upgrade seamlessly | mapped | required | AUTH-STORAGE-004, AUTH-PASSWORD-005, AUTH-IDENTITY-003 |
+| LIVE-AUTH-040 | A pre-issued email-verification link cannot undo a suspension or deletion, rebind the login email afterward, or promote a legacy account | mapped | required | AUTH-EMAIL-003, AUTH-AUTHZ-004, AUTH-SESSION-008 |
+| LIVE-AUTH-041 | Anonymous endpoints that cause email cannot be driven by unauthenticated callers beyond shared limits, and cannot carry caller-chosen text to staff | mapped | required | AUTH-RATE-001, AUTH-RATE-005, AUTH-OPERATIONS-006 |
+| LIVE-AUTH-042 | Rich-text content cannot inject live markup into public pages or transactional emails | mapped | required | AUTH-HEADER-001, AUTH-AUTHZ-005 |

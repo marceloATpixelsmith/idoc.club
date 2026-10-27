@@ -7,7 +7,7 @@ export function OtpStep({ allowRemember, email, pendingCsrfNonce }: { allowRemem
   return (
     <OtpEntryStep
       cancelAction={cancelLogin}
-      description={<>We sent a 6-digit code to <strong>{email}</strong>.</>}
+      description={<>We sent a 6-digit code to <strong>{email}</strong>. Please check your spam folder for the email.</>}
       pendingCsrfNonce={pendingCsrfNonce}
       resendAction={resendLoginOtp}
       verifyFields={allowRemember ? (

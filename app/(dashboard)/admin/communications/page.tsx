@@ -23,7 +23,7 @@ function sum(totals: KindTotals[], key: 'brevoDelivered' | 'brevoFailed' | 'brev
   return totals.reduce((total, row) => total + row[key], 0);
 }
 
-const BUCKET_LABELS: Record<IssueBucket, string> = { bounced: 'Bounced / blocked', failedToSend: 'Failed to send', notInBrevo: 'Not in Brevo log', pending: 'Pending' };
+const BUCKET_LABELS: Record<IssueBucket, string> = { bounced: 'Bounced / blocked', failedToSend: 'Failed to send', notInBrevo: 'No delivery confirmation', pending: 'Pending' };
 
 /** The addresses behind a non-delivered count, so each can be opened in that member's timeline. */
 function recipientsOf(rows: IssueRow[], buckets: IssueBucket[], kind?: string): CountRecipient[] {
@@ -44,7 +44,7 @@ function CountsSection({ caption, description, issues, title, totals, summary }:
     <div className="min-w-0 max-w-full"><AdminFormSection description="Each row is one kind of email." title="By email type">
       {totals.length === 0 ? <p className="text-sm text-muted-foreground">Nothing was sent in this period.</p> : <div className="overflow-x-auto"><table className="w-auto border text-sm">
         <caption className="sr-only">{caption}</caption>
-        <thead><tr><th className="p-2 pr-8 text-left">Email type</th><th className="p-2 pl-6 text-right">Sent</th><th className="p-2 pl-6 text-right">Delivered (Brevo)</th><th className="p-2 pl-6 text-right">Bounced / blocked</th><th className="p-2 pl-6 text-right">Not in Brevo log</th><th className="p-2 pl-6 text-right">Pending</th><th className="p-2 pl-6 text-right">Failed to send</th></tr></thead>
+        <thead><tr><th className="p-2 pr-8 text-left">Email type</th><th className="p-2 pl-6 text-right">Sent</th><th className="p-2 pl-6 text-right">Delivered (Brevo)</th><th className="p-2 pl-6 text-right">Bounced / blocked</th><th className="p-2 pl-6 text-right">No delivery confirmation</th><th className="p-2 pl-6 text-right">Pending</th><th className="p-2 pl-6 text-right">Failed to send</th></tr></thead>
         <tbody>{totals.map((row) => <tr className="border-t" key={row.kind}>
           <td className="p-2 pr-8">{row.label}</td><td className="p-2 pl-6 text-right">{row.sent}</td>
           <td className="p-2 pl-6 text-right">{row.brevoUnavailable > 0 && row.brevoDelivered === 0 ? '—' : row.brevoDelivered}</td>

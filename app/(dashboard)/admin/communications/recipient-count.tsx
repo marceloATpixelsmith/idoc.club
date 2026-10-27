@@ -12,7 +12,7 @@ export function RecipientCount({ count, label, recipients }: { count: number | s
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button aria-label={`${count} — show the ${recipients.length} address${recipients.length === 1 ? '' : 'es'}: ${label}`} className="cursor-pointer font-semibold text-gold underline decoration-dotted underline-offset-4 hover:opacity-80" type="button">{count}</button>
+        <button aria-label={`${count} — show the ${recipients.length} address${recipients.length === 1 ? '' : 'es'}: ${label}`} className="cursor-pointer bg-transparent font-semibold normal-case tracking-normal text-gold underline decoration-dotted underline-offset-4 hover:opacity-80" type="button">{count}</button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 max-w-[90vw] space-y-2 p-3">
         <p className="text-xs font-bold uppercase tracking-wider text-gold">{label}</p>

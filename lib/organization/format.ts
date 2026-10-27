@@ -1,3 +1,5 @@
+import { rewriteTags } from '../security/html-rewrite.ts';
+
 export type OrganizationAddress = { address1: string | null; address2: string | null; city: string | null; country: string | null; postalCode: string | null; stateProvince: string | null };
 
 export function formatOrganizationAddress(address: OrganizationAddress | null): string[] {
@@ -20,7 +22,7 @@ function escapeAmpersand(value: string): string {
 
 export function sanitizeBankInstructions(input: string): string {
   const withoutActiveContent = input.replace(/<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
-  return withoutActiveContent.replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi, (whole, rawTag: string, attributes: string) => {
+  return rewriteTags(withoutActiveContent, (whole, rawTag, attributes) => {
     const tag = rawTag.toLowerCase();
     if (!ALLOWED_TAGS.has(tag)) return '';
     if (whole.startsWith('</')) return tag === 'br' ? '' : `</${tag}>`;

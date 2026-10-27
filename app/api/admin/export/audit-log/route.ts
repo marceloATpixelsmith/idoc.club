@@ -8,6 +8,7 @@ export async function GET() {
     const rows = await listAllAuditLogForExport();
     return new Response(`\uFEFF${toCsv(rows, ['createdAt', 'actorId', 'action', 'entityType', 'entityId', 'reason', 'beforeJson', 'afterJson'])}`, {
       headers: {
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': 'attachment; filename="audit-log.csv"',
         'Content-Type': 'text/csv; charset=utf-8',
       },

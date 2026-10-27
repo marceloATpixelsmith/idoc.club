@@ -62,7 +62,7 @@ export function ReconciliationTabs({ summary, total, findingsTable, scanState }:
                     <div className={`h-2 rounded ${row.severity === 'act' ? 'bg-red-400' : 'bg-amber-400'}`} style={{ width: `${Math.max(2, Math.round((row.count / biggest) * 100))}%` }} />
                   </div>
                   <p className="mt-2 text-sm text-foreground">{row.plain}</p>
-                  <button className="mt-1 text-sm text-primary underline underline-offset-4 hover:opacity-80" onClick={() => openGuide(row.kind)} type="button">What this means and what to do</button>
+                  <button className="mt-1 bg-transparent text-sm font-medium normal-case tracking-normal text-primary underline underline-offset-4 hover:opacity-80" onClick={() => openGuide(row.kind)} type="button">What this means and what to do</button>
                 </li>
               ))}
             </ul>

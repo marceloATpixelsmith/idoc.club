@@ -1,4 +1,4 @@
-import { sanitizeSentryEvent } from './sentry-privacy.ts';
+import { prepareSentryEvent, sanitizeSentryBreadcrumb } from './sentry-privacy.ts';
 
 export function sentryEnvironment(environment: Partial<NodeJS.ProcessEnv> = process.env): string {
   if (environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT) return environment.NEXT_PUBLIC_SENTRY_ENVIRONMENT;
@@ -13,7 +13,8 @@ export function sentryEnvironment(environment: Partial<NodeJS.ProcessEnv> = proc
 
 export function sentryOptions(environment: Partial<NodeJS.ProcessEnv> = process.env) {
   return {
-    beforeSend: sanitizeSentryEvent,
+    beforeBreadcrumb: sanitizeSentryBreadcrumb,
+    beforeSend: prepareSentryEvent,
     dsn: environment.NEXT_PUBLIC_SENTRY_DSN,
     enabled: Boolean(environment.NEXT_PUBLIC_SENTRY_DSN),
     environment: sentryEnvironment(environment),

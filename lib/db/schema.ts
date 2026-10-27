@@ -919,6 +919,51 @@ export const userActivityEvents = idocSchema.table('user_activity_events', {
   requestId: varchar('request_id', { length: 64 }),
 }, (table) => [index('user_activity_events_user_time_idx').on(table.userId, table.occurredAt)]);
 
+/** One row per email handed to Brevo, written when Brevo accepts it and updated as Brevo's webhook reports what became of it,
+ * so an administrator (and the delivery alerts) can follow any email -- sign-in codes included, which no outbox records --
+ * from "accepted" to "delivered", "deferred" or "bounced" by Brevo's own message id instead of guessing by recipient and time.
+ * Holds the recipient address and subject line only: never the message body, a code, a link or a token. Purged by the retention job. */
+export const emailDeliveryLog = idocSchema.table('email_delivery_log', {
+  id: serial('id').primaryKey(),
+  providerMessageId: varchar('provider_message_id', { length: 200 }),
+  recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
+  recipientDomain: varchar('recipient_domain', { length: 255 }).notNull(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  kind: varchar('kind', { length: 60 }),
+  subject: varchar('subject', { length: 255 }),
+  messageRef: varchar('message_ref', { length: 100 }),
+  sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  status: varchar('status', { length: 20 }).notNull().default('accepted'),
+  statusAt: timestamp('status_at', { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+}, (table) => [
+  uniqueIndex('email_delivery_log_provider_message_id_idx').on(table.providerMessageId).where(sql`${table.providerMessageId} is not null`),
+  index('email_delivery_log_recipient_idx').on(table.recipientEmail, table.sentAt),
+  index('email_delivery_log_status_sent_idx').on(table.status, table.sentAt),
+  check('email_delivery_log_status_check', sql`${table.status} in ('accepted', 'deferred', 'soft_bounced', 'delivered', 'hard_bounced', 'blocked', 'invalid', 'error', 'spam')`),
+]);
+
+/** Every event Brevo's webhook reported for one logged email (delivered, deferred, opened, ...). The unique index makes a
+ * redelivered webhook a no-op. */
+export const emailDeliveryEvents = idocSchema.table('email_delivery_events', {
+  id: serial('id').primaryKey(),
+  logId: integer('log_id').notNull().references(() => emailDeliveryLog.id, { onDelete: 'cascade' }),
+  event: varchar('event', { length: 30 }).notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  reason: varchar('reason', { length: 200 }),
+}, (table) => [uniqueIndex('email_delivery_events_dedupe_idx').on(table.logId, table.event, table.occurredAt)]);
+
+/** A webhook event that arrived before its email was logged (Brevo can report a message a moment before the send's own insert
+ * commits). Held briefly and applied the moment the send is logged, so the event is never dropped; purged after two days. */
+export const emailDeliveryPendingEvents = idocSchema.table('email_delivery_pending_events', {
+  id: serial('id').primaryKey(),
+  providerMessageId: varchar('provider_message_id', { length: 200 }).notNull(),
+  event: varchar('event', { length: 30 }).notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  reason: varchar('reason', { length: 200 }),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('email_delivery_pending_events_dedupe_idx').on(table.providerMessageId, table.event, table.occurredAt)]);
+
 /** One row per (job, timer) holding that job's most recent run, so the owner's cron monitor can prove every scheduled job is
  * running without reading provider logs. Written best-effort after each run (a failed write never affects the job); holds only
  * the job's fixed name, the timer system, timestamps, an HTTP status and counters: never request or response content. */

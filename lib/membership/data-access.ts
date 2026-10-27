@@ -14,6 +14,7 @@ import { getSession } from '@/lib/auth/session';
 import { unsubscribeFromMarketingAudience } from '@/lib/notifications/mailchimp-marketing';
 import { getMarketingPreference, settleOnboardingMarketingOptIn } from './marketing-preference';
 import { cancelOpenSubscriptionIfAny } from '@/lib/payments/subscription-cancellation';
+import { expireOpenCheckoutSessionsIfAny } from '@/lib/payments/checkout-session-expiry';
 import type { CancellationStripeClient } from '@/lib/payments/stripe';
 import { type Actor, AuthorizationError, requireAdministrator, requireOwnerOrAdmin } from './authorization';
 import { memberProfileSchema, type AdminBoardProfileInput, type MemberProfileInput } from './validation';
@@ -21,6 +22,7 @@ import { mayAccessAccountFunction, type AccountFunction, type AccountState } fro
 import { isEntitled } from './entitlement';
 import { loadAccountFacts } from './session-gate-loader';
 import { lockLatestMembership } from './locking';
+import { retireEmailVerificationTokens } from './email-verification';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
 export type OnboardingConsentInput = {
@@ -245,6 +247,7 @@ export async function deleteOwnAccount() {
       // address would otherwise survive indefinitely in this column alone.
       emailDisplay: sql`concat(${users.email}, '-', ${users.id}, '-deleted')`,
     }).where(eq(users.id, actor.id));
+    await retireEmailVerificationTokens(tx, actor.id);
     await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
   });
 }
@@ -282,7 +285,7 @@ export async function cancelOwnMembership(testStripeClient?: CancellationStripeC
     return updated;
   });
 
-  const stripeResult = await cancelOpenSubscriptionIfAny(profile.id, testStripeClient);
+  const stripeResult = { ...await cancelOpenSubscriptionIfAny(profile.id, testStripeClient), ...await expireOpenCheckoutSessionsIfAny(profile.id, testStripeClient) };
   if (account?.email) await unsubscribeFromMarketingAudience(account.email);
   return { membership, ...stripeResult };
 }

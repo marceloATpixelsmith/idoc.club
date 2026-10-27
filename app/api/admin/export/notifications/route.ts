@@ -8,6 +8,7 @@ export async function GET() {
     const rows = await listAllNotificationsForExport();
     return new Response(`\uFEFF${toCsv(rows, ['firstName', 'lastName', 'email', 'kind', 'createdAt', 'sentAt'])}`, {
       headers: {
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': 'attachment; filename="notifications.csv"',
         'Content-Type': 'text/csv; charset=utf-8',
       },

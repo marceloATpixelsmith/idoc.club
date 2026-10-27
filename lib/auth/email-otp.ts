@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createHash, randomInt } from 'node:crypto';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { emailOtpCodes } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
@@ -74,14 +74,20 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
   const allowed = await checkRateLimit(RATE_LIMIT_PURPOSES[purpose].issue, email, options.origin ?? 'unknown', now);
   if (!allowed) return { status: 'rate_limited' };
   const code = generateCode();
+  // Mail can arrive late, and a member who asks again must not lose the code already on its way.
+  // Keep the newest still-valid previous code alive beside the new one (at most two live codes);
+  // every older outstanding code is superseded.
+  const [previous] = await db.select({ id: emailOtpCodes.id }).from(emailOtpCodes)
+    .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt), gt(emailOtpCodes.expiresAt, now)))
+    .orderBy(desc(emailOtpCodes.createdAt)).limit(1);
   await db.update(emailOtpCodes).set({ consumedAt: now })
-    .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)));
+    .where(and(eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt), previous ? ne(emailOtpCodes.id, previous.id) : undefined));
   await db.insert(emailOtpCodes).values({
     codeHash: digest(code), email, expiresAt: new Date(now.getTime() + CODE_LIFETIME_MS),
     purpose, userId: options.userId ?? null,
   });
   try {
-    await sendTransactionalEmail({ html: renderEmailOtpHtml(code, purpose), subject: EMAIL_OTP_SUBJECTS[purpose], to: email }, { allowLiveAuthE2eOtp: true, authenticationEmail: true });
+    await sendTransactionalEmail({ html: renderEmailOtpHtml(code, purpose), subject: EMAIL_OTP_SUBJECTS[purpose], to: email }, { allowLiveAuthE2eOtp: true, authenticationEmail: true, kind: `auth.otp.${purpose}`, userId: options.userId });
   } catch (error) {
     const reason = deliveryFailureCategory(error);
     if (options.userId) await logError('email_otp_delivery_failed', { purpose, reason, subjectId: options.userId });
@@ -93,9 +99,10 @@ export async function issueEmailOtp(untrustedEmail: string, purpose: EmailOtpPur
 
 export type VerifyEmailOtpResult = 'expired' | 'invalid' | 'locked' | 'rate_limited' | 'verified';
 
-/** Verifies a submitted code against the latest unconsumed, unexpired code for this email/purpose.
- * Each call against an existing record increments its attempt counter first. Verification attempts
- * are additionally rate-limited independently by email and origin. */
+/** Verifies a submitted code against the (at most two) newest unconsumed codes for this email/purpose.
+ * Each call increments the attempt counter of every code it is checked against before comparing, so
+ * a guess spends the budget of both live codes. Verification attempts are additionally rate-limited
+ * independently by email and origin. A successful verification consumes all of them. */
 export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPurpose, code: string, origin = 'unknown', expectedUserId?: number): Promise<VerifyEmailOtpResult> {
   if (!/^\d{6}$/.test(code)) return 'invalid';
   const email = normalizeEmail(untrustedEmail);
@@ -104,21 +111,25 @@ export async function verifyEmailOtp(untrustedEmail: string, purpose: EmailOtpPu
   return db.transaction(async (tx) => {
     const conditions = [eq(emailOtpCodes.email, email), eq(emailOtpCodes.purpose, purpose), isNull(emailOtpCodes.consumedAt)];
     if (expectedUserId !== undefined) conditions.push(eq(emailOtpCodes.userId, expectedUserId));
-    const [record] = await tx.select().from(emailOtpCodes)
+    const records = await tx.select().from(emailOtpCodes)
       .where(and(...conditions))
-      .orderBy(desc(emailOtpCodes.createdAt)).limit(1);
-    if (!record) return 'invalid';
-    if (record.expiresAt.getTime() < Date.now()) return 'expired';
-    if (record.attemptCount >= MAX_VERIFY_ATTEMPTS) return 'locked';
-    const [updated] = await tx.update(emailOtpCodes).set({ attemptCount: sql`${emailOtpCodes.attemptCount} + 1` })
-      .where(eq(emailOtpCodes.id, record.id)).returning({ attemptCount: emailOtpCodes.attemptCount });
-    if (updated.attemptCount > MAX_VERIFY_ATTEMPTS) return 'locked';
-    if (digest(code) !== record.codeHash) return 'invalid';
-    const [consumed] = await tx.update(emailOtpCodes).set({ consumedAt: new Date() }).where(and(
-      eq(emailOtpCodes.id, record.id),
+      .orderBy(desc(emailOtpCodes.createdAt)).limit(2);
+    if (records.length === 0) return 'invalid';
+    const unexpired = records.filter((record) => record.expiresAt.getTime() >= Date.now());
+    if (unexpired.length === 0) return 'expired';
+    const open = unexpired.filter((record) => record.attemptCount < MAX_VERIFY_ATTEMPTS);
+    if (open.length === 0) return 'locked';
+    const updated = await tx.update(emailOtpCodes).set({ attemptCount: sql`${emailOtpCodes.attemptCount} + 1` })
+      .where(inArray(emailOtpCodes.id, open.map((record) => record.id))).returning({ attemptCount: emailOtpCodes.attemptCount, id: emailOtpCodes.id });
+    const counted = new Set(updated.filter((row) => row.attemptCount <= MAX_VERIFY_ATTEMPTS).map((row) => row.id));
+    if (counted.size === 0) return 'locked';
+    const match = open.find((record) => counted.has(record.id) && digest(code) === record.codeHash);
+    if (!match) return 'invalid';
+    const consumed = await tx.update(emailOtpCodes).set({ consumedAt: new Date() }).where(and(
+      inArray(emailOtpCodes.id, records.map((record) => record.id)),
       isNull(emailOtpCodes.consumedAt),
     )).returning({ id: emailOtpCodes.id });
-    return consumed ? 'verified' : 'invalid';
+    return consumed.some((row) => row.id === match.id) ? 'verified' : 'invalid';
   });
 }
 

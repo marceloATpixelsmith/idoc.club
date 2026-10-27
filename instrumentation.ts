@@ -68,16 +68,18 @@ export const onRequestError: typeof Sentry.captureRequestError = async (error, r
   // notification reads the database. Best-effort -- it can never change how the failed request is answered.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   try {
-    const { notifyTechnicalError } = await import('./lib/notifications/admin-event-alerts');
+    const { notifyTechnicalError, reportedPagePath, reportedRequestPath, reportedUserAgent } = await import('./lib/notifications/admin-event-alerts');
     const header = (name: string) => {
       const value = request.headers[name];
       return Array.isArray(value) ? value[0] : value;
     };
     await notifyTechnicalError({
-      context: [['Router', context.routerKind], ['Route pattern', context.routePath], ['Referring page', header('referer')?.split(/[?#]/)[0]]],
+      // Referer, request path and User-Agent are all chosen by the caller, who can be anonymous: only plain same-site paths and plain
+      // characters reach the staff alert (the route pattern is derived by the server and carries the location when the path is dropped).
+      context: [['Router', context.routerKind], ['Route pattern', context.routePath], ['Referring page', reportedPagePath(header('referer'), header('host'))]],
       digest: (error as { digest?: string } | null)?.digest ?? null,
-      error, method: request.method, path: request.path, requestId: header('x-vercel-id') ?? header('x-request-id') ?? null, routeType: context.routeType,
-      source: 'server', userAgent: header('user-agent'),
+      error, method: request.method, path: reportedRequestPath(request.path), requestId: header('x-vercel-id') ?? header('x-request-id') ?? null, routeType: context.routeType,
+      source: 'server', userAgent: reportedUserAgent(header('user-agent')),
     });
   } catch {
     // Notification problems are never allowed to surface from the error hook itself.

@@ -66,6 +66,8 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   const [latestMembership] = await db.select({ status: memberships.status }).from(memberships)
     .where(eq(memberships.profileId, profile.id)).orderBy(desc(memberships.validUntil)).limit(1);
   if (latestMembership?.status === 'canceled') throw new Error('This membership has been canceled and cannot be renewed.');
+  // Suspended and review-held memberships are likewise decided by an administrator, so the payment page must not offer a path around it.
+  if (latestMembership?.status === 'suspended' || latestMembership?.status === 'review_required') throw new Error('This membership is on hold and cannot be paid for. Contact support.');
   if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
     throw new Error('An active or pending subscription already exists for this membership.');
   }

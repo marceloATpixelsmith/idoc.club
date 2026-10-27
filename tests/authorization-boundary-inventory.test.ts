@@ -20,7 +20,7 @@ function exportedNames(source: string): string[] {
 const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authentication' | 'authenticated-continuation' | 'delegates-to-data-access'>> = {
   'app/(login)/actions.ts': {
     signIn: 'pre-authentication', requestPasswordRecovery: 'pre-authentication', requestMigrationActivation: 'pre-authentication',
-    resetPassword: 'pre-authentication', activateMigratedAccount: 'pre-authentication', resendVerification: 'pre-authentication',
+    resetPassword: 'pre-authentication', activateMigratedAccount: 'pre-authentication',
     signOut: 'pre-authentication', updatePassword: 'session-boundary', deleteAccount: 'session-boundary', updateAccount: 'session-boundary',
   },
   'app/(login)/sign-up/actions.ts': {
@@ -116,6 +116,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/client-error/route.ts': 'log-only-no-data-access',
   'app/api/cron/account-delivery/route.ts': 'shared-secret-header',
   'app/api/cron/clock-skew-check/route.ts': 'shared-secret-header',
+  'app/api/cron/email-delivery-watch/route.ts': 'shared-secret-header',
   'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
   'app/api/cron/marketing-preference-sync/route.ts': 'shared-secret-header',
   'app/api/cron/new-relic-health-check/route.ts': 'shared-secret-header',

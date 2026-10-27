@@ -87,7 +87,7 @@ Automatic renewal is a member-controlled billing preference, not a membership pr
 | invoice.paid                                                        | Record payment idempotently and update/extend membership according to approved policy. |
 | invoice.payment_failed                                              | Record failure and apply grace/notification rule.                                      |
 | invoice.payment_action_required or equivalent payment-action signal | Notify/admin flag as appropriate without granting unverified payment.                  |
-| checkout.session.completed (payment mode)                            | Validate authenticated-profile metadata, expected membership Product/Price configuration, amount, currency, and paid status; record idempotently. |
+| checkout.session.completed (payment mode)                            | Validate authenticated-profile metadata, expected membership Product/Price configuration, amount, currency, and paid status; record idempotently. A `canceled`, `suspended` or `review_required` membership is never reactivated by this event: the payment is recorded, entitlement is unchanged and a `status_conflict` finding is raised for an administrator. |
 | payment_intent.succeeded                                             | Confirm the one-time payment record where applicable; never create a subscription.     |
 | refund.created / refund.updated / refund.failed                      | Preserve refund attempts/provider evidence and project only verified matched state.    |
 | charge.refunded                                                      | Match direct refunds to their original payment or create a retained finding.            |

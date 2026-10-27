@@ -112,3 +112,41 @@ test('a failing scheduled job emails the operations recipient on the first failu
   assert.match(record, /if \(!ok && row && shouldAlertJobFailure\(row\.consecutiveFailures\)\)/);
   assert.match(read('lib/observability/job-failure-alert.ts'), /IDOC_ADMIN_NOTIFICATION_EMAIL/);
 });
+
+// Pentest 2026-10-27, finding 3: the anonymous client-error endpoint put caller-chosen Referer and User-Agent text into staff alerts.
+test('the page named in a browser error alert is a plain same-site path, never caller-chosen text, and the User-Agent is cut to plain characters', async () => {
+  const { reportedPagePath, reportedRequestPath, reportedUserAgent } = await import('../lib/notifications/error-report-text.ts');
+  assert.equal(reportedRequestPath('/sign-in'), '/sign-in');
+  assert.equal(reportedRequestPath('/news/a-story'), '/news/a-story');
+  assert.equal(reportedRequestPath('/call-support-at-https://idoc-support.example/login'), null, 'a lure with a URL in the path is dropped');
+  assert.equal(reportedRequestPath('/please%20call%20now'), null);
+  assert.equal(reportedRequestPath(null), null);
+  assert.equal(reportedPagePath('https://idoc.club/news/a-story?token=abc#x', 'idoc.club'), '/news/a-story');
+  assert.equal(reportedPagePath('https://idoc.club/', 'idoc.club'), '/');
+  assert.equal(reportedPagePath('https://evil.example/news/a', 'idoc.club'), null, 'another host is dropped');
+  assert.equal(reportedPagePath('https://idoc.club/updates/verify-your-idoc-account-at-https://idoc-support.example/login', 'idoc.club'), null, 'a lure sentence with a URL in the path is dropped');
+  assert.equal(reportedPagePath('https://idoc.club/please%20call%20+1-555', 'idoc.club'), null, 'encoded text is dropped');
+  assert.equal(reportedPagePath('not a url', 'idoc.club'), null);
+  assert.equal(reportedPagePath(null, 'idoc.club'), null);
+  assert.equal(reportedPagePath('https://idoc.club/a', null), null);
+  assert.equal(reportedUserAgent('Mozilla/5.0 (X11; Linux x86_64) Firefox/120.0'), 'Mozilla/5.0 (X11; Linux x86_64) Firefox/120.0');
+  assert.equal(reportedUserAgent('Call us: <b>urgent</b> https://evil.example/login'), 'Call us burgent/b https//evil.example/login', 'no < > : or quotes survive, so no tag and no URL scheme');
+  assert.equal(reportedUserAgent('x'.repeat(400))?.length, 150);
+  assert.equal(reportedUserAgent('<>"\''), null);
+});
+
+test('the client-error route limits volume through the shared database and takes the page from the same-site path helper only', () => {
+  const route = read('app/api/client-error/route.ts');
+  assert.match(route, /checkOriginRateLimit\('client_error_report', await requestOrigin\(\)\)/);
+  assert.match(route, /checkOriginRateLimit\('client_error_report', 'deployment-wide'\)/);
+  assert.match(route, /reportedPagePath\(requestHeaders\.get\('referer'\), requestHeaders\.get\('host'\)\)/);
+  assert.doesNotMatch(route, /pathWithoutQuery/);
+});
+
+test('the server request-error hook sends only sanitised Referer, path and User-Agent to the staff alert', () => {
+  const hook = read('instrumentation.ts');
+  assert.match(hook, /reportedPagePath\(header\('referer'\), header\('host'\)\)/);
+  assert.match(hook, /path: reportedRequestPath\(request\.path\)/);
+  assert.match(hook, /userAgent: reportedUserAgent\(header\('user-agent'\)\)/);
+  assert.doesNotMatch(hook, /split\(\/\[\?#\]\/\)/);
+});

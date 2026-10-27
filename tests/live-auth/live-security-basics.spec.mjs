@@ -43,3 +43,25 @@ test("LIVE-AUTH-025: basic HTTPS, no-cache session endpoint, and anti-framing re
   // Partial coverage: cookie policy and authenticated caching still require dedicated assertions.
   expect(Boolean(headers["content-security-policy"] || headers["x-frame-options"])).toBe(true);
 });
+
+test("LIVE-AUTH-040: an invalid email-verification link is refused and the page never starts a session", async ({ page }) => {
+  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-040" });
+  // Partial coverage: the suspended/deleted/migrated_pending cases need an administrator and a captured link (see the case's steps).
+  const response = await page.goto("/verify-email?token=" + "x".repeat(43));
+  expect(response?.status()).toBe(200);
+  await expect(page.getByText("This link is invalid, expired, or has already been used.")).toBeVisible();
+  const cookies = await page.context().cookies();
+  expect(cookies.some((cookie) => /session/i.test(cookie.name) && cookie.value.length > 0)).toBe(false);
+});
+
+test("LIVE-AUTH-041: anonymous client-error reports always return a correlation id, whatever the caller's headers say", async ({ request }) => {
+  test.info().annotations.push({ type: "live-auth-partial-cases", description: "LIVE-AUTH-041" });
+  // Partial coverage: alert volume and alert text are checked in the Technical Support mailbox (see the case's steps). A few requests only,
+  // so this probe stays well inside the shared limit.
+  const hostile = { Referer: "https://staging.idoc.club/updates/verify-your-account-at-https://idoc-support.example/login", "User-Agent": "injected-client-text/1.0 <b>urgent</b>" };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await request.post("/api/client-error", { headers: hostile, data: {} });
+    expect(response.status()).toBe(200);
+    expect(typeof (await response.json()).requestId).toBe("string");
+  }
+});

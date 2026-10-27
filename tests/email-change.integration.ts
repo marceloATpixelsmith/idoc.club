@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { consumeEmailVerification, issueEmailVerification } from '../lib/membership/email-verification.ts';
-import { closeHarness, concurrently, createCompleteGraph, createUser, persistedGraph, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, asAdmin, closeHarness, concurrently, createCompleteGraph, createUser, persistedGraph, resetIdoc, sql } from './postgres-harness.ts';
+import { suspendUserAccount } from '../lib/membership/account-suspension.ts';
 
 beforeEach(async () => {
   process.env.BASE_URL = 'https://idoc.club';
@@ -174,3 +175,42 @@ test('claiming an address that collides only case-insensitively with an existing
     globalThis.fetch = originalFetch;
   }
 });
+
+// Pentest 2026-10-27, finding 4: redeeming a verification link used to write account_state = 'active' without looking at the state it
+// overwrote, so a link issued before an administrator's suspension (or the member's own deletion) undid it and rebound the login email.
+async function issueAndCapture(userId: number, email: string): Promise<string> {
+  const originalFetch = globalThis.fetch;
+  let raw = '';
+  globalThis.fetch = async (_input, init) => {
+    raw = capturedToken(JSON.parse(String(init?.body)).htmlContent);
+    return new Response('{"messageId":"<test@smtp-relay.brevo.com>"}', { status: 201 });
+  };
+  try { assert.equal((await issueEmailVerification(userId, email)).delivered, true); } finally { globalThis.fetch = originalFetch; }
+  return raw;
+}
+
+test('suspending an account retires its outstanding verification links, and a link redeemed anyway cannot lift the suspension', async () => {
+  const admin = await adminUser();
+  const { user } = await createCompleteGraph();
+  const raw = await issueAndCapture(user.id, 'attacker-chosen@example.test');
+  await asAdmin(admin.id, () => suspendUserAccount(user.id, 'Review'));
+  assert.equal((await sql`select count(*)::int as count from idoc.email_verification_tokens where user_id=${user.id} and consumed_at is null`)[0].count, 0, 'suspension retires the link at the source');
+  assert.deepEqual(await consumeEmailVerification(raw), { status: 'invalid' });
+  const [after] = await sql`select account_state, email from idoc.users where id=${user.id}`;
+  assert.equal(after.account_state, 'suspended');
+  assert.notEqual(after.email, 'attacker-chosen@example.test', 'the login identity is not rebound either');
+});
+
+for (const state of ['suspended', 'deleted', 'migrated_pending'] as const) {
+  test(`a verification link issued before the account became ${state} is refused, burns the link, and leaves the account untouched`, async () => {
+    const { user } = await createCompleteGraph();
+    const raw = await issueAndCapture(user.id, 'late@example.test');
+    // Set the state directly, bypassing the retirement above, to prove redemption re-checks the account itself.
+    await sql`update idoc.users set account_state=${state} where id=${user.id}`;
+    const [before] = await sql`select account_state, email, email_verified_at from idoc.users where id=${user.id}`;
+    assert.deepEqual(await consumeEmailVerification(raw), { status: 'invalid' });
+    const [after] = await sql`select account_state, email, email_verified_at from idoc.users where id=${user.id}`;
+    assert.deepEqual(after, before);
+    assert.equal((await sql`select count(*)::int as count from idoc.email_verification_tokens where user_id=${user.id} and consumed_at is null`)[0].count, 0, 'the link cannot be tried again once the account is eligible');
+  });
+}

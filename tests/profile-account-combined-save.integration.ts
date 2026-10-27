@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { eq } from 'drizzle-orm';
 import { saveOwnAccountAndProfileForm } from '../app/(dashboard)/account/actions.ts';
+import { hashPassword } from '../lib/auth/password-hash.ts';
 import { setSession } from '../lib/auth/session.ts';
 import { withTestRequestCookies, type MutableCookieStore } from '../lib/auth/request-cookies.ts';
 import { db } from '../lib/db/drizzle.ts';
 import { users } from '../lib/db/schema.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { csrfCookieName } from '../lib/security/csrf-tokens.ts';
-import { closeHarness, createCompleteGraph, judgeRole, profileInput, resetIdoc, sql } from './postgres-harness.ts';
+import { closeHarness, createCompleteGraph, createUser, judgeRole, profileInput, resetIdoc, sql } from './postgres-harness.ts';
 
 // My Profile's single Save button submits one combined FormData to saveOwnAccountAndProfileForm
 // (app/(dashboard)/account/actions.ts), which composes the existing updateAccount (email, MFA-gated
@@ -87,11 +88,50 @@ test('a valid profile-only save (email unchanged) updates the profile and never 
   assert.equal((await sql`select count(*)::int as count from idoc.email_verification_tokens where user_id=${user.id} and consumed_at is null`)[0].count, 0);
 });
 
+const CURRENT_PASSWORD = 'Current-Password-For-Tests-2026!';
+async function givePassword(userId: number) {
+  const hash = await hashPassword(CURRENT_PASSWORD);
+  await sql`update idoc.users set password_hash=${hash}, password_set_at=now() where id=${userId}`;
+}
+
+// Pentest 2026-10-27, finding 1: a session alone must not be able to change the login email (which is also where the password-reset
+// and sign-in codes go), because members have no authenticator for the step-up to ask for.
+test('changing the login email requires the current password, checked before anything is issued or any address is probed', async () => {
+  const { user } = await createCompleteGraph();
+  await givePassword(user.id);
+  const attempt = (password: string | null, email = 'changed@example.test') => withRealSession(user.id, async (form) => {
+    form.set('email', email);
+    if (password !== null) form.set('currentPassword', password);
+    return saveOwnAccountAndProfileForm({}, form);
+  });
+  assert.deepEqual(await attempt(null), { error: 'Enter your current password to change your login email.' });
+  assert.deepEqual(await attempt('wrong-password-123'), { error: 'Current password is incorrect.' });
+  // The duplicate check must not answer a caller that has not proved the password: the same refusal either way.
+  const other = await createUser();
+  const [taken] = await sql`select email from idoc.users where id=${other.id}`;
+  assert.deepEqual(await attempt('wrong-password-123', taken.email), { error: 'Current password is incorrect.' });
+  assert.equal((await sql`select count(*)::int as count from idoc.email_verification_tokens where user_id=${user.id}`)[0].count, 0, 'no verification mail is ever issued without the password');
+});
+
+test('an account with no password (Google-only) cannot change its login email until one is set', async () => {
+  const { user } = await createCompleteGraph();
+  await sql`update idoc.users set password_set_at=null where id=${user.id}`;
+  const result = await withRealSession(user.id, async (form) => {
+    form.set('email', 'changed@example.test');
+    form.set('currentPassword', 'anything-at-all-123');
+    return saveOwnAccountAndProfileForm({}, form);
+  });
+  assert.deepEqual(result, { error: 'Set a password under Security before changing your login email, or contact support.' });
+  assert.equal((await sql`select count(*)::int as count from idoc.email_verification_tokens where user_id=${user.id}`)[0].count, 0);
+});
+
 test('changing the email together with a valid profile save updates the profile immediately, leaves the login email pending verification, and says so', async () => {
   const { user, profile } = await createCompleteGraph();
+  await givePassword(user.id);
   const [before] = await sql`select email from idoc.users where id=${user.id}`;
   const result = await withRealSession(user.id, async (form) => {
     form.set('email', 'changed@example.test');
+    form.set('currentPassword', CURRENT_PASSWORD);
     form.set('city', 'A New City');
     return saveOwnAccountAndProfileForm({}, form);
   });
@@ -107,8 +147,10 @@ test('changing the email together with a valid profile save updates the profile 
 test('an invalid profile submitted alongside a new email is rejected before any verification email is sent', async () => {
   const { user, profile } = await createCompleteGraph();
   const [beforeProfile] = await sql`select city from idoc.profiles where id=${profile.id}`;
+  await givePassword(user.id);
   const result = await withRealSession(user.id, async (form) => {
     form.set('email', 'changed@example.test');
+    form.set('currentPassword', CURRENT_PASSWORD);
     form.set('city', 'A New City');
     // Clear every Judge status checkbox -- the HTML form permits this, but memberProfileSchema
     // requires at least one for a judge role. Exactly the Codex-cited scenario.
