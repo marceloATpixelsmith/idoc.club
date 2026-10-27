@@ -23,6 +23,10 @@ export const ALERT_SEVERITY = {
   // An address that permanently can't be delivered to (bad mailbox, bad domain, ...) -- worth an
   // operator's attention, but not urgent the way a complaint is.
   'email.hard_bounce': 'warning',
+  // An email Brevo accepted was never reported delivered (or failed permanently): a member may be waiting on a sign-in code or link.
+  'email.delivery_problem': 'high',
+  // A member asked for a code three or more times in 15 minutes and never entered one: the emails are almost certainly not reaching them.
+  'email.repeated_code_requests': 'high',
   // The same account or origin has been blocked by an auth-security rate limit across multiple
   // consecutive windows -- a single blocked request is routine, but sustained repeated blocking is
   // the correlated signal of an active credential-stuffing/brute-force attempt (AUTH-OPERATIONS-006).

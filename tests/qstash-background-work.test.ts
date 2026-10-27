@@ -32,6 +32,6 @@ test('event enqueue paths dispatch only after database commits and prefer QStash
 
 test('existing Vercel schedules remain during the credential-free migration phase', () => {
   const schedules = JSON.parse(read('vercel.json')) as { crons: Array<{path:string; schedule:string}> };
-  assert.equal(schedules.crons.length, 9);
+  assert.equal(schedules.crons.length, 10);
   assert.match(read('scripts/configure-qstash-schedules.mjs'), /QSTASH_CALLBACK_BASE_URL/);
 });
