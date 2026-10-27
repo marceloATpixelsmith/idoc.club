@@ -105,7 +105,8 @@ test('the flood summaries state how many are held, why, whether they will be rep
 
 test('URL schemes in untrusted text never reach an alert, because the send boundary refuses a message that mentions another IDOC host as a URL', async () => {
   const { nonCanonicalEmailHosts } = await import('../lib/notifications/email-link-policy.ts');
-  const hostile = 'rejected, see https://staging.idoc.club/x and http://my-idoc.vercel.app/y and ftp://idoc.test/z';
+  // The last two are spliced: removing the inner scheme joins the text around it into a working URL, so one pass is not enough.
+  const hostile = 'rejected, see https://staging.idoc.club/x and http://my-idoc.vercel.app/y and ftp://idoc.test/z and http:/x:///idoc-splice.example/p and https:/a:/b:////idoc.club.evil/q';
   const alert = buildDeliveryProblemAlert(problem({
     events: [{ at: now, event: 'deferred', reason: hostile }], member: { accountState: null, name: 'https://redesign.idoc.club', profileId: null, userId: 1 },
     // An unknown kind makes the Type row fall back to the subject line.

@@ -59,7 +59,13 @@ export function emailKindLabel(kind: string | null, subject: string | null): str
 /** Untrusted text (a Brevo reason written by the recipient's mail server, a member's name, a subject line) as it may appear in an alert.
  * HTML-escaped, and with URL schemes removed: the send boundary refuses any message that mentions another IDOC host as a URL, so a URL-like
  * string in a bounce reason could otherwise stop the alert about that very email from ever being delivered. */
-const stripSchemes = (value: string) => value.replace(/[a-z][a-z0-9+.-]*:\/\//gi, '');
+const SCHEME = /[a-z][a-z0-9+.-]*:\/\//gi;
+/** Repeats until nothing changes: removing a scheme can join the text around it into a new one ("http:/x:///host" becomes "http://host"). */
+function stripSchemes(value: string): string {
+  let current = value;
+  for (let previous = ''; previous !== current;) { previous = current; current = current.replace(SCHEME, ''); }
+  return current;
+}
 export const untrusted = (value: string) => escapeHtml(stripSchemes(value));
 
 export const utc = (at: Date) => `${at.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
@@ -69,8 +75,9 @@ export type EventLine = { at: Date; event: string; reason: string | null };
 
 /** The plain-English reading of where an email stands, and what to do next. Written for the person who has to troubleshoot it. */
 export function diagnose(input: { ageMinutes: number; brevoCheck: BrevoCheck; events: EventLine[]; status: string }): { steps: string[]; summary: string } {
-  const lastReason = [...input.events].reverse().find((event) => event.reason)?.reason?.replace(/[a-z][a-z0-9+.-]*:\/\//gi, '');
-  const reason = lastReason ? ` Brevo's reason: “${lastReason}”.` : '';
+  const lastReason = [...input.events].reverse().find((event) => event.reason)?.reason;
+  const safeReason = lastReason ? stripSchemes(lastReason) : lastReason;
+  const reason = safeReason ? ` Brevo's reason: “${safeReason}”.` : '';
   switch (input.status) {
     case 'hard_bounced':
       return { summary: `Permanent failure: the recipient's mail server says this address does not exist or refuses mail.${reason}`, steps: ['Ask the member for a different address, or check it for a typo.', 'Brevo will not retry a hard bounce and adds the address to its blocklist.'] };
