@@ -9,6 +9,23 @@ A member whose imported WordPress credential verifies successfully but fails any
 
 **Staging evidence:** LIVE-AUTH-039 provisions *two disposable* imported WordPress credentials in `idoc_staging`, tests a real noncompliant first-login/activation link/old-password rejection and a real compliant first-login/OTP flow, and cleans up test accounts and mailboxes. The separate breached-password first-login explanation should additionally be verified with a safe disposable fixture before launch. Staging must retain the communications and billing hold while enabling the staging-only authentication email exception. Do not accept ordinary signup/login results as evidence that legacy first-login behavior was exercised.
 
+## Member Journey Health — administrator monitoring
+
+The **Admin Dashboard** includes a **Member journey health** panel based on existing persisted state, not speculative browser tracking. The existing five-minute `/api/cron/email-delivery-watch` job also checks these signals and queues at most **one operational digest per UTC day** to the address in `IDOC_ADMIN_NOTIFICATION_EMAIL`. Digests go through the durable, leased, retrying `operational_alert_outbox`, with a persistent daily dedupe key. In an environment with member communications deliberately held, the watch does not alert. The dedicated alert kind is enabled by migration `0089`.
+
+The six report signals and thresholds are:
+
+- **Activation link repeatedly requested:** three or more migration activation requests in seven days while the imported account remains `migrated_pending`. Each actual link request is counted, including requests superseded by newer links.
+- **Activation email not sent:** an eligible activation email has waited unsent at least thirty minutes beyond its request time and is due for delivery; terminalized or dead-lettered records are excluded (other delivery issues remain visible in Communications).
+- **Sign-in verification repeated:** an imported member requested three or more login verification codes in an hour but has no newly authenticated session after the first request in that burst. This is a correlation signal, not proof of email delivery failure.
+- **Onboarding incomplete:** a legacy member remains in `onboarding` for more than 48 hours after their account's last update, with a successful sign-in within seven days. Not proof of an error: the member might have chosen to stop.
+- **Renewal notice not sent:** a renewal, expiration or grace reminder is queued, overdue for delivery and unsent for thirty minutes. This does not change the reminder queue.
+- **Renewal follow-up:** an imported member was sent an expiration/grace reminder in the last 35 days, is still expired or in grace more than five days after their membership validity date, and has no newer non-import membership payment. Follow-up is not automatically categorized as a technical failure.
+
+The digest includes category counts and up to twenty affected accounts, and links back to the Admin Dashboard where current concerns and member-sheet links are shown. Its subject is tagged **[HIGH]** if there is a stuck delivery or repeated login-code issue, otherwise **[WARNING]**. Already successful Brevo delivery results remain unmodified. Review member records and the Notifications tab before acting; do not proactively reset passwords, change renewal status, or contact a member solely because of a possibly benign indicator.
+
+**Existing complementary protections:** the transactional-email delivery watch escalates delayed delivery, bounces and repeated email codes; Stripe payment-failure webhooks and reconciliation monitor payment outcomes; Sentry, server error alerts and the authentication security verification suite monitor application errors. None of these systems can independently prove mailbox placement, that a member read an email, or every possible client-side abandonment. Investigations may require contacting the member.
+
 ## Communications: repeated activation requests
 
 The **Communications** dashboard reports Brevo's *Delivered* status as acceptance by the recipient's mail server, not proof that a member received, opened or read the message. A green delivery count must not be interpreted as successful activation.
