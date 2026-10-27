@@ -154,6 +154,22 @@ Codex automated review is advisory. When a pull request is opened or updated, th
 
 The repository owner removed `codex/review-complete` from both required-check lists on 25 September 2026. Keep `Fast PR checks` required. Full release and authentication/security workflows remain required by the merge procedure whenever `docs/26-ci-risk-classification-and-agent-merge-policy.md` classifies the change as requiring them. Staging acceptance and the live or manual checks required by this runbook remain mandatory before a staging-to-main promotion.
 
+## Database-aware deployment release gate
+
+**Required for IDOC Vercel production and staging:** `vercel.json` runs `scripts/assert-deployment-schema-ready.mjs` before Next.js compilation. The gate reads the selected schema's `__drizzle_migrations` using its existing restricted application login and compares its newest applied migration timestamp to the newest committed migration in `lib/db/migrations/meta/_journal.json`. It checks the critical email-delivery and operational-alert tables explicitly. Wrong/missing `DB_SCHEMA`, missing `POSTGRES_URL`, wrong DB login, missing tables, connection failure or migration lag causes the build to fail closed: the previously active Vercel deployment remains live, and the new incompatible code does not become active. CI and local builds without a Vercel deployment context do not access a live DB. This gate **never applies migrations** and does not grant migration privileges to Vercel.
+
+Migration jobs remain distinct and security-controlled: staging auto-migrates on committed migration changes; production uses `Auto-migrate Production Schema` on a `main` migration-bearing merge, with a required named GitHub environment reviewer, a verified offsite R2 backup and a post-migration ledger guard. These run asynchronously relative to the initial Vercel Git build. When a migration-bearing commit first triggers a build ahead of the migration, that build may be refused intentionally.
+
+**Automatic retry after a successful migration:** configure Vercel Deploy Hooks in the Vercel `idoc.club` project, one for branch `staging` and one for branch `main`. Copy their complete HTTPS URLs into GitHub Actions secrets:
+- `IDOC_VERCEL_STAGING_DEPLOY_HOOK_URL`, in the `idoc-db-staging-maintenance` GitHub environment;
+- `IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL`, in the `idoc-db-production-maintenance` GitHub environment.
+
+These are **GitHub environment secrets**, not Vercel environment variables; never paste hook URLs into code, logs or PRs. The corresponding migration workflow invokes its hook **only after** successful schema verification, rebuilding the latest merged branch head. If a hook is not configured, the workflow emits a warning and a privileged operator must click **Redeploy** in the appropriate Vercel deployment after confirming the migration. A Deploy Hook does not bypass the build's schema gate. Avoid triggering its hook for unreviewed feature branches.
+
+**Manual recovery if production drift is already present:** the production database may be at migration 0086 while code expects 0088. Use GitHub Actions > `Auto-migrate Production Schema` > **Run workflow** on `main`, approve the `idoc-db-production-maintenance` protected environment, confirm the R2 backup and schema guard succeeded, and then verify the email-delivery tables and new Vercel deployment. Do not run ad-hoc SQL, grant the application migration rights, disable the environment approval, or re-target production at the staging schema. A failed job or missing approval is a release blocker, never a reason to skip the schema readiness check.
+
+**Remaining operational limitation:** Vercel still attempts its first Git-triggered build in parallel with the migration, which may fail visibly. Once the hooks are configured, the migration workflow automatically retries a safe build after completion. Truly serial, single-deployment releases would require switching from Git-triggered Vercel deployment to a dedicated workflow-owned deployment orchestrator with Vercel credentials; do not remove the existing migration approval or deployment protection to simulate that arrangement.
+
 ## Branch, environment, and deployment workflow
 
 Two long-lived branches drive the two live Vercel deployments referenced throughout this document. There is no other route to either domain: a change reaches `staging.idoc.club` or `redesign.idoc.club` only by landing on the branch that feeds it.
