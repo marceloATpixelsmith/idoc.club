@@ -13,7 +13,7 @@ A member whose imported WordPress credential verifies successfully but fails any
 
 The **Admin Dashboard** includes a **Member journey health** panel based on existing persisted state, not speculative browser tracking. The existing five-minute `/api/cron/email-delivery-watch` job also checks these signals and queues at most **one operational digest per UTC day** to the address in `IDOC_ADMIN_NOTIFICATION_EMAIL`. Digests go through the durable, leased, retrying `operational_alert_outbox`, with a persistent daily dedupe key. In an environment with member communications deliberately held, the watch does not alert. The dedicated alert kind is enabled by migration `0089`.
 
-The six report signals and thresholds are:
+The eight report signals and thresholds are:
 
 - **Activation link repeatedly requested:** three or more migration activation requests in seven days while the imported account remains `migrated_pending`. Each actual link request is counted, including requests superseded by newer links.
 - **Activation email not sent:** an eligible activation email has waited unsent at least thirty minutes beyond its request time and is due for delivery; terminalized or dead-lettered records are excluded (other delivery issues remain visible in Communications).
