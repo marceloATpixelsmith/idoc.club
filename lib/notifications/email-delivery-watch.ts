@@ -93,7 +93,7 @@ async function remainingHourlyBudget(now: Date, family: 'delivery' | 'repeat'): 
   return Math.max(0, (family === 'delivery' ? HOURLY_ALERT_CAP : HOURLY_REPEAT_ALERT_CAP) - (row?.recent ?? 0));
 }
 
-async function reportDeliveryProblems(now: Date, adminEmail: string | null, budget: number) {
+async function reportDeliveryProblems(now: Date, adminEmail: string | null) {
   const summary = { alerted: 0, held: 0, reconciled: 0 };
   const since = new Date(now.getTime() - WATCH_LOOKBACK_MS).toISOString();
   const authCut = new Date(now.getTime() - AUTH_CODE_DEADLINE_MS).toISOString();
@@ -117,13 +117,10 @@ async function reportDeliveryProblems(now: Date, adminEmail: string | null, budg
       )
     order by l.sent_at limit 200`;
   const baseUrl = baseUrlForServer();
-  const limit = Math.min(MAX_ALERTS_PER_RUN, budget);
   for (const [index, row] of rows.entries()) {
-    if (summary.alerted >= limit) {
-      // Only the hourly cap holds emails back (and earns a summary); the per-run limit just leaves them for the next run.
-      summary.held = summary.alerted >= budget ? rows.length - index : 0;
-      break;
-    }
+    if (summary.alerted >= MAX_ALERTS_PER_RUN) break; // the per-run limit just leaves the rest for the next run
+    // The hour's allowance is re-read before every alert, not once per run: an overlapping invocation of the cron may have spent it since.
+    if (await remainingHourlyBudget(now, 'delivery') <= 0) { summary.held = rows.length - index; break; } // only the hourly cap earns a summary
     const sentAt = toDate(row.sent_at);
     let tier = alertTier({ kind: row.kind, now, sentAt, status: row.status });
     if (!tier || await alreadyQueued(`email-delivery-problem:${row.id}:${tier}`)) continue;
@@ -167,7 +164,7 @@ async function reportDeliveryProblems(now: Date, adminEmail: string | null, budg
   return summary;
 }
 
-async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, budget: number) {
+async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null) {
   let alerted = 0;
   let held = 0;
   const windowStart = new Date(now.getTime() - REPEAT_REQUEST_WINDOW_MS);
@@ -183,7 +180,8 @@ async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, 
     order by max(c.created_at) desc limit 25`;
   const baseUrl = baseUrlForServer();
   for (const [index, group] of groups.entries()) {
-    if (alerted >= budget) { held = groups.length - index; break; }
+    // Re-read per group, for the same reason as the delivery pass.
+    if (await remainingHourlyBudget(now, 'repeat') <= 0) { held = groups.length - index; break; }
     if (adminEmail && group.email === adminEmail) continue;
     const codes = await client<{ created_at: Date | string }[]>`
       select created_at from email_otp_codes where email=${group.email} and purpose=${group.purpose} and created_at >= ${windowStart.toISOString()}::timestamptz order by created_at`;
@@ -205,8 +203,8 @@ async function reportRepeatedCodeRequests(now: Date, adminEmail: string | null, 
 /** One pass of the watch. Safe to run repeatedly and concurrently: every alert is keyed, so the same email or request burst is reported once. */
 export async function runEmailDeliveryWatch(now: Date = new Date()) {
   const adminEmail = process.env.IDOC_ADMIN_NOTIFICATION_EMAIL?.trim().toLowerCase() || null;
-  const delivery = await reportDeliveryProblems(now, adminEmail, await remainingHourlyBudget(now, 'delivery'));
-  const repeated = await reportRepeatedCodeRequests(now, adminEmail, await remainingHourlyBudget(now, 'repeat'));
+  const delivery = await reportDeliveryProblems(now, adminEmail);
+  const repeated = await reportRepeatedCodeRequests(now, adminEmail);
   // Past a cap, one summary per family and hour replaces the individual alerts, so the administrator still hears that more exist.
   for (const [kind, held] of [['emails', delivery.held], ['requests', repeated.held]] as const) {
     if (held <= 0) continue;
