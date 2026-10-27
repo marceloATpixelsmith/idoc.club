@@ -1293,3 +1293,35 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-043 — Member password changes and session revocation require fresh purpose-bound single-use email proof
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-MFA-009, AUTH-PASSWORD-005
+- **CI coverage:** mapped — `tests/member-security-step-up.test.ts` — Regression checks cover both protected actions, separate OTP purposes, the consumed-code verification boundary and the in-place browser challenge. Real mailbox delivery and concurrent replay require deployed verification.
+- **Live:** required; email=yes; admin=no; destructive=yes
+- **Automation:** manual-only — Requires possession of a disposable member mailbox and deliberate session/password revocation.
+
+### Preconditions
+- Use a disposable entitled member account and mailbox on staging, never a real member credential.
+- Create two signed-in devices; keep a second copy of the active session before testing.
+
+### Steps
+1. Change the member password using the known current password; confirm a separate emailed security code is required before mutation.
+2. Try a wrong or expired code; confirm the password does not change. Enter the correct code; confirm the change completes and sessions are revoked.
+3. Sign in on two devices; revoke one session and then all other sessions; verify each action requires a new emailed security code and without it no session is revoked.
+4. Try to use a password-change code to approve session revocation, reuse a consumed code, or replay it from another browser; each must fail.
+5. For an administrator, confirm the existing authenticator TOTP challenge remains the required factor.
+
+### PASS
+- Member password and session security mutations occur only after consuming a correct, user-bound, purpose-bound code, and privileged accounts continue requiring TOTP.
+
+### FAIL
+- Any mutation proceeds with only an existing session or with an invalid/replayed/cross-purpose code, or administrator TOTP is bypassed.
+
+### Cleanup
+- Remove disposable devices and accounts once evidence has been recorded.
+
+### Evidence
+- Record role, intended operation, time, result and masked email delivery evidence. Never record passwords or OTPs.
