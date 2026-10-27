@@ -12,7 +12,7 @@ permissions:
 jobs:
   sentry-client-keys:
     runs-on: ubuntu-latest
-    environment: idoc-sentry-maintenance
+    environment: idoc-db-production-maintenance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
