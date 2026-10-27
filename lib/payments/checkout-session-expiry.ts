@@ -18,6 +18,8 @@ export type CheckoutExpiryStripeClient = Pick<CancellationStripeClient, 'checkou
  * Stripe could not expire stays open and the webhook guard still protects the membership.
  */
 export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStripeClient?: CheckoutExpiryStripeClient): Promise<{ checkoutExpiryFailed: number; checkoutSessionsExpired: number }> {
+  // Sessions found open, so a failure before any expire call (live-billing hold, Stripe client setup) is still reported, not silently zero.
+  let outstanding = 0;
   try {
     const [payable, setup] = await Promise.all([
       db.select({ externalId: membershipCheckoutSessions.externalCheckoutSessionId, id: membershipCheckoutSessions.id })
@@ -29,12 +31,13 @@ export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStr
         eq(renewalPreferences.profileId, profileId), eq(renewalPreferences.transitionState, 'awaiting_setup'), isNotNull(renewalPreferences.externalCheckoutSessionId),
       )),
     ]);
+    outstanding = payable.length + setup.length;
     if (payable.length === 0 && setup.length === 0) return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
     assertLiveBillingAllowed('billing.expireOpenCheckoutSessions');
     if (testStripeClient && process.env.NODE_ENV !== 'test') throw new Error('Stripe client overrides are test-only.');
     const stripe = (testStripeClient ?? getStripeServerClient()) as CheckoutExpiryStripeClient;
     const expire = stripe.checkout?.sessions?.expire;
-    if (!expire) return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
+    if (!expire) return { checkoutExpiryFailed: outstanding, checkoutSessionsExpired: 0 };
     let expired = 0;
     let failed = 0;
     for (const session of payable) {
@@ -53,6 +56,6 @@ export async function expireOpenCheckoutSessionsIfAny(profileId: number, testStr
     }
     return { checkoutExpiryFailed: failed, checkoutSessionsExpired: expired };
   } catch {
-    return { checkoutExpiryFailed: 0, checkoutSessionsExpired: 0 };
+    return { checkoutExpiryFailed: outstanding, checkoutSessionsExpired: 0 };
   }
 }

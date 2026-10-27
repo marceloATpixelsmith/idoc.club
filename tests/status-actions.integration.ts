@@ -315,3 +315,13 @@ test('repeating a cancellation whose Checkout links still cannot be expired retu
   const again = await asAdmin(admin.id, () => suspendMembership(profile.id, 'Retry', failing));
   assert.equal(again.checkoutExpiryFailed, 1);
 });
+
+test('open Checkout sessions are reported as failures when cleanup is blocked before any Stripe call', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenCheckoutSessions(profile.id);
+  const result = await asAdmin(admin.id, () => correctEntitlement(profile.id, { reason: 'Under review', status: 'review_required' }, { ...fakeStripeClient([]), checkout: undefined } as never));
+  assert.equal((result as { checkoutExpiryFailed?: number }).checkoutExpiryFailed, 1, 'a blocked cleanup is reported, not silently zero');
+});
