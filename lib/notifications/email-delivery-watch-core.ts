@@ -155,7 +155,7 @@ ${h('The email')}
 ${table([
     row('Recipient', `<b>${escapeHtml(email.to)}</b>`),
     memberRows(data.member, data.baseUrl),
-    row('Type', escapeHtml(label)),
+    row('Type', untrusted(label)),
     row('Subject', untrusted(email.subject ?? '—')),
     row('Accepted by Brevo', `${escapeHtml(utc(email.sentAt))} (${ageMinutes} minutes ago)`),
     row('Status now', `<b>${escapeHtml(email.status)}</b> since ${escapeHtml(utc(email.statusAt))}`),

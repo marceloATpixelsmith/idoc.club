@@ -108,7 +108,8 @@ test('URL schemes in untrusted text never reach an alert, because the send bound
   const hostile = 'rejected, see https://staging.idoc.club/x and http://my-idoc.vercel.app/y and ftp://idoc.test/z';
   const alert = buildDeliveryProblemAlert(problem({
     events: [{ at: now, event: 'deferred', reason: hostile }], member: { accountState: null, name: 'https://redesign.idoc.club', profileId: null, userId: 1 },
-    email: { ...problem().email, status: 'deferred', subject: 'http://idoc.vercel.app' },
+    // An unknown kind makes the Type row fall back to the subject line.
+    email: { ...problem().email, kind: 'some.unlabelled.kind', status: 'deferred', subject: 'http://idoc.vercel.app' },
   }));
   assert.deepEqual(nonCanonicalEmailHosts(alert.html), [], 'the alert HTML carries no non-canonical IDOC URL');
   const repeat = buildRepeatRequestAlert({ baseUrl: 'https://idoc.club', domain: { delivered: 0, domain: 'x.org', notDelivered: 1, total: 1 }, member: null, now, purpose: 'login_verification', to: 'a@x.org',
