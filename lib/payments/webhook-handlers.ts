@@ -395,6 +395,16 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     // Lock and reread the authoritative paid-through membership before creating any future Stripe charge schedule.
     // A one-time renewal or administrative extension may have changed valid_until after Setup Checkout began.
     const membership = await lockLatestMembership(tx, profileId);
+    // The same rule as the payment branch below: a Setup session opened before a cancellation, suspension or review hold stays completable
+    // for 24 hours, and completing it would create a live annual charge schedule for a membership an administrator (or the member) ended.
+    if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
+      await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
+        .where(eq(renewalPreferences.profileId, profileId));
+      await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
+        summary: `Renewal Setup completed for a membership that is currently ${membership.status.replace('_', ' ')}; no charge schedule was created.`,
+        details: { checkoutSessionId: session.id, membershipStatus: membership.status } });
+      return;
+    }
     if (!membership || membership.validUntil !== preference.effectiveOn) {
       await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
         .where(eq(renewalPreferences.profileId, profileId));
