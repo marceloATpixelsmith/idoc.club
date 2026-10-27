@@ -140,7 +140,7 @@ function MemberEmailSecurityDialog({ action, formDataRef, onOpenChange, onResult
   const [busy, start] = useTransition();
   const submit = () => {
     const original = formDataRef.current;
-    if (!original || busy || !/^\\d{6}$/.test(code)) return;
+    if (!original || busy || !/^\d{6}$/.test(code)) return;
     const attempt = new FormData();
     original.forEach((value, key) => attempt.append(key, value));
     attempt.set('memberSecurityCode', code);
