@@ -2,7 +2,7 @@
 
 Generated from `tests/auth/auth-test-matrix.json`.
 
-Summary: **42 cases** — CI mapped 39, CI gaps 2, not applicable 1.
+Summary: **43 cases** — CI mapped 40, CI gaps 2, not applicable 1.
 
 | ID | Requirement | CI | Live staging | Canonical controls |
 |---|---|---|---|---|
@@ -48,3 +48,4 @@ Summary: **42 cases** — CI mapped 39, CI gaps 2, not applicable 1.
 | LIVE-AUTH-040 | A pre-issued email-verification link cannot undo a suspension or deletion, rebind the login email afterward, or promote a legacy account | mapped | required | AUTH-EMAIL-003, AUTH-AUTHZ-004, AUTH-SESSION-008 |
 | LIVE-AUTH-041 | Anonymous endpoints that cause email cannot be driven by unauthenticated callers beyond shared limits, and cannot carry caller-chosen text to staff | mapped | required | AUTH-RATE-001, AUTH-RATE-005, AUTH-OPERATIONS-006 |
 | LIVE-AUTH-042 | Rich-text content cannot inject live markup into public pages or transactional emails | mapped | required | AUTH-HEADER-001, AUTH-AUTHZ-005 |
+| LIVE-AUTH-043 | Member password changes and session revocation require fresh purpose-bound single-use email proof | mapped | manual only | AUTH-MFA-009, AUTH-PASSWORD-005 |
