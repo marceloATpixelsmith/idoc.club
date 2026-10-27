@@ -119,7 +119,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
     const migrationCount = JSON.parse(await readFile(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')).entries.length;
-    assert.equal(count, migrationCount - 1, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and every later committed migration applies once');
+    assert.equal(count, migrationCount - 6, 'six historically skipped migrations remain reconciled by migration 0051; all later committed migrations apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
