@@ -9,12 +9,16 @@ test('member journey dashboard requires admin authorization and covers legacy fi
   for (const identifier of [
     'activation_repeated', 'activation_delivery_stuck', 'login_code_repeated',
     'onboarding_incomplete', 'renewal_delivery_stuck', 'renewal_followup',
+    'password_signin_refused', 'activation_link_rejected',
   ]) assert.ok(source.includes(identifier), `Missing journey signal ${identifier}`);
   assert.match(source, /requireAdministrator\(actor\)/);
   assert.match(source, /u\.account_state in \('migrated_pending','active','onboarding'\)/);
   assert.match(source, /not exists \([\s\S]*?auth_sessions s[\s\S]*?s\.authenticated_at >= a\.first_at/);
   assert.match(source, /p\.legacy_wp_user_id is not null/);
   assert.match(source, /account_delivery_outbox/);
+  assert.match(source, /user_activity_events/);
+  assert.match(source, /sign_in_password_failed/);
+  assert.match(source, /activation_link_opened/);
   assert.match(source, /notification_outbox/);
   assert.match(source, /payments pay/);
   const admin = read('app/(dashboard)/admin/page.tsx');
