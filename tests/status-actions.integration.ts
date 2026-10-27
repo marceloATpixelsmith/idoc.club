@@ -302,3 +302,16 @@ test('repeating a hold correction retries Stripe cleanup that failed the first t
   assert.deepEqual(calls, [`expire:cs_open_${profile.id}`]);
   assert.equal((await sql`select status from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].status, 'expired');
 });
+
+test('repeating a cancellation whose Checkout links still cannot be expired returns the warning result instead of "already canceled"', async () => {
+  const admin = await adminUser();
+  const member = await createUser();
+  const profile = await createProfile(member.id);
+  await createMembership(profile.id, true);
+  await withOpenCheckoutSessions(profile.id);
+  const calls: string[] = [];
+  const failing = { ...fakeStripeClient(calls), checkout: { sessions: { expire: async () => { throw new Error('stripe unavailable'); } } } };
+  await asAdmin(admin.id, () => suspendMembership(profile.id, 'Policy violation', failing));
+  const again = await asAdmin(admin.id, () => suspendMembership(profile.id, 'Retry', failing));
+  assert.equal(again.checkoutExpiryFailed, 1);
+});

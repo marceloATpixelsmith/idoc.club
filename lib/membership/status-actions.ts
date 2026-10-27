@@ -73,7 +73,7 @@ export async function suspendMembership(profileId: number, untrustedReason: unkn
       try { await unsubscribeFromMarketingAudience(account.email); } catch { /* best-effort only */ }
     }
   }
-  if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError && stripeResult.checkoutSessionsExpired === 0) {
+  if (wasAlreadySuspended && !stripeResult.stripeCancelled && !stripeResult.stripeCancelError && stripeResult.checkoutSessionsExpired === 0 && stripeResult.checkoutExpiryFailed === 0) {
     throw new Error('This membership is already canceled.');
   }
   return { membership, ...stripeResult };
