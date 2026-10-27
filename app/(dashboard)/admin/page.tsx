@@ -5,11 +5,19 @@ import { listAssignedOpenConversationsForDashboard, CATEGORY_LABELS, STATUS_LABE
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { listNewMembersLastWeek } from '@/lib/membership/new-members';
 import { getCommunicationsReport } from '@/lib/notifications/communications-report-data';
-import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
+import { getMemberJourneyConcerns, type MemberJourneyConcern } from '@/lib/notifications/member-journey-health';
 import { requireAdministrator } from '@/lib/membership/authorization';
 
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat('en', { currency, style: 'currency' }).format(cents / 100);
+}
+
+function JourneyConcernRow({ issue }: { issue: MemberJourneyConcern }) {
+  return <li className="py-3 first:pt-0 last:pb-0">
+    {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
+    <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
+    <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
+  </li>;
 }
 
 export default async function AdminPage() {
@@ -72,16 +80,17 @@ export default async function AdminPage() {
       <p className="text-2xl font-semibold">{journeyConcerns.length} <span className="text-sm font-normal text-muted-foreground">member journey concerns</span></p>
       {journeyConcerns.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">No monitored activation, login, onboarding, or renewal concerns meet the escalation thresholds.</p> : (
         <ul className="mt-4 divide-y divide-border">
-          {journeyConcerns.slice(0, 20).map((issue) => (
-            <li className="py-3 first:pt-0 last:pb-0" key={`${issue.kind}-${issue.userId}`}>
-              {issue.profileId ? <Link className="font-medium hover:underline" href={`/admin/members?profileId=${issue.profileId}`}>{issue.member === '—' ? issue.email : issue.member}</Link> : <span className="font-medium">{issue.member === '—' ? issue.email : issue.member}</span>}
-              <p className="mt-1 text-sm text-muted-foreground">{issue.email} · {issue.note}{issue.count > 1 ? ` (${issue.count} attempts / items)` : ''}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Last evidence: {issue.occurredAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</p>
-            </li>
-          ))}
+          {journeyConcerns.slice(0, 20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
         </ul>
       )}
-      {journeyConcerns.length > 20 ? <p className="mt-2 text-xs text-muted-foreground">Showing 20 of {journeyConcerns.length} concerns. Open Communications for additional delivery details.</p> : null}
+      {journeyConcerns.length > 20 ? (
+        <details className="mt-3 rounded-lg border border-border px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium">Show all {journeyConcerns.length - 20} additional member journey concerns</summary>
+          <ul className="mt-3 divide-y divide-border">
+            {journeyConcerns.slice(20).map((issue) => <JourneyConcernRow issue={issue} key={`${issue.kind}-${issue.userId}`} />)}
+          </ul>
+        </details>
+      ) : null}
       <Link className="idoc-secondary-button mt-4 px-4 py-2 text-sm" href="/admin/communications">Open Communications</Link>
     </AdminFormSection>
 

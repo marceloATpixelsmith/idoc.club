@@ -36,7 +36,7 @@ export async function runMemberJourneyWatch(now = new Date()) {
     `<li><strong>${escapeHtml(issue.member)}:</strong> ${escapeHtml(issue.email)} — ${escapeHtml(LABELS[issue.kind])} (${issue.count})</li>`,
   ).join('');
   const url = new URL('/admin', baseUrlForServer()).toString();
-  const bodyHtml = `<p>${issues.length} current journey concern(s) need review. These are observed signals, not proof of an email failure or a member's intentions.</p><ul>${summary}</ul><p>Recent affected accounts:</p><ul>${rows}</ul>${issues.length > 20 ? '<p>More concerns are listed in the administrator dashboard.</p>' : ''}${emailButton(url, 'Review member journey health')}`;
+  const bodyHtml = `<p>${issues.length} current journey concern(s) need review. These are observed signals, not proof of an email failure or a member's intentions.</p><ul>${summary}</ul><p>Recent affected accounts:</p><ul>${rows}</ul>${issues.length > 20 ? '<p>Showing the 20 most recent accounts here. Open the administrator dashboard and expand the additional concerns to review every remaining login, onboarding and renewal case.</p>' : ''}${emailButton(url, 'Review member journey health')}`;
   const inserted = await enqueueOperationalAlert({
     bodyHtml: renderTransactionalEmail({ bodyHtml, heading: 'Member journey health', footerNote: 'One digest per UTC day. Repeated login or activation requests can be reported even when email transport reports delivery.' }),
     dedupeKey: `member-journey-digest:${now.toISOString().slice(0, 10)}`,
