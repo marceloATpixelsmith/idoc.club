@@ -130,10 +130,10 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: 
   // flight at the moment of suspension/cancellation. The payment itself is still recorded above --
   // money genuinely changed hands and needs to stay reconcilable -- but entitlement is left exactly
   // as the member/administrator set it, and the conflict is surfaced for manual review instead.
-  if (membership?.status === 'suspended' || membership?.status === 'canceled') {
+  if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
     await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
-      summary: 'Stripe reported a successful renewal payment for a membership that is currently suspended or canceled; entitlement was not restored automatically.',
-      details: { invoiceId: invoice.id, paymentId: inserted.id } });
+      summary: `Stripe reported a successful renewal payment for a membership that is currently ${membership.status.replace('_', ' ')}; entitlement was not restored automatically.`,
+      details: { invoiceId: invoice.id, membershipStatus: membership.status, paymentId: inserted.id } });
     return;
   }
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
@@ -159,7 +159,7 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   // means this is a later retry, not a new failure, and must be a no-op. A 'suspended' or 'canceled'
   // membership (administrator action, or self-service cancellation) must not be moved into grace either -- that
   // would imply access continues until grace ends, contradicting the suspension/cancellation.
-  if (!membership || membership.status === 'grace' || membership.status === 'suspended' || membership.status === 'canceled') return;
+  if (!membership || membership.status === 'grace' || membership.status === 'suspended' || membership.status === 'canceled' || membership.status === 'review_required') return;
   // Stripe's invoice period start is the authoritative scheduled-renewal date. The fallback is
   // retained only for legacy/test invoices that predate that field.
   const failedRenewalDate = invoice.period_start
@@ -395,6 +395,16 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
     // Lock and reread the authoritative paid-through membership before creating any future Stripe charge schedule.
     // A one-time renewal or administrative extension may have changed valid_until after Setup Checkout began.
     const membership = await lockLatestMembership(tx, profileId);
+    // The same rule as the payment branch below: a Setup session opened before a cancellation, suspension or review hold stays completable
+    // for 24 hours, and completing it would create a live annual charge schedule for a membership an administrator (or the member) ended.
+    if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
+      await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
+        .where(eq(renewalPreferences.profileId, profileId));
+      await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
+        summary: `Renewal Setup completed for a membership that is currently ${membership.status.replace('_', ' ')}; no charge schedule was created.`,
+        details: { checkoutSessionId: session.id, membershipStatus: membership.status } });
+      return;
+    }
     if (!membership || membership.validUntil !== preference.effectiveOn) {
       await tx.update(renewalPreferences).set({ transitionState: 'failed', updatedAt: new Date() })
         .where(eq(renewalPreferences.profileId, profileId));
@@ -477,6 +487,16 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   await tx.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId })
     .onConflictDoNothing({ target: renewalPreferences.profileId });
   const membership = await lockLatestMembership(tx, profileId);
+  // Same rule as the renewal-invoice handler: a canceled, suspended or review-held membership is an administrator's (or the member's own
+  // cancellation) decision, and paying must not undo it. A Checkout Session stays payable for 24 hours, so one opened before the
+  // decision can still complete after it. The payment stays recorded above (the money is real and must stay reconcilable), entitlement
+  // stays exactly as it was left, and an administrator decides through the audited reinstatement action whether to restore it.
+  if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
+    await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
+      summary: `Stripe reported a completed Checkout payment for a membership that is currently ${membership.status.replace('_', ' ')}; entitlement was not restored automatically.`,
+      details: { checkoutSessionId: session.id, membershipStatus: membership.status, paymentId: inserted.id } });
+    return;
+  }
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
     await tx.update(memberships).set({ graceEndsOn: null, status: 'active', updatedAt: new Date(), validUntil })

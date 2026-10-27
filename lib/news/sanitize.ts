@@ -1,3 +1,5 @@
+import { rewriteTags } from '../security/html-rewrite.ts';
+
 /** Server-side allowlist sanitizer for News/Blog and seminar rich-text HTML. Active content (script,
  * style, iframe, object, embed, svg, math), event-handler attributes, unsafe links, and non-Cloudinary
  * image sources are removed. */
@@ -31,7 +33,7 @@ function safeCloudinaryImageUrl(value: string): string | null {
 
 export function sanitizeArticleContent(input: string): string {
   const withoutActiveContent = input.replace(/<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
-  return withoutActiveContent.replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi, (whole, rawTag: string, attributes: string) => {
+  return rewriteTags(withoutActiveContent, (whole, rawTag, attributes) => {
     const tag = rawTag.toLowerCase();
     if (!ALLOWED_TAGS.has(tag)) return '';
     if (whole.startsWith('</')) return tag === 'br' || tag === 'hr' || tag === 'img' ? '' : `</${tag}>`;

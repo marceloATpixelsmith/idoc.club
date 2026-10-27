@@ -5,6 +5,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { applicationRoles, auditLog, users } from '@/lib/db/schema';
 import { requireAccountAccess } from './data-access';
+import { retireEmailVerificationTokens } from './email-verification';
 import { requireAdministrator } from './authorization';
 import { revokeAllUserSessions } from '@/lib/auth/session-registry';
 import { revokeLoginDeviceTrustForUser } from '@/lib/auth/login-device-trust';
@@ -82,6 +83,7 @@ export async function suspendUserAccount(userId: number, untrustedReason: unknow
       sessionVersion: sql`${users.sessionVersion} + 1`,
       updatedAt: new Date(),
     }).where(eq(users.id, userId)).returning({ updatedAt: users.updatedAt });
+    await retireEmailVerificationTokens(tx, userId);
     await tx.insert(auditLog).values({
       action: 'admin.account.suspended', actorId: actor.id,
       afterJson: { accountState: 'suspended' }, beforeJson: { accountState: current.accountState },

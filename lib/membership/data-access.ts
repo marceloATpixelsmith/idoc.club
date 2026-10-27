@@ -21,6 +21,7 @@ import { mayAccessAccountFunction, type AccountFunction, type AccountState } fro
 import { isEntitled } from './entitlement';
 import { loadAccountFacts } from './session-gate-loader';
 import { lockLatestMembership } from './locking';
+import { retireEmailVerificationTokens } from './email-verification';
 import { injectProfileTransactionFailure, testBoundaryActor } from './test-boundary';
 
 export type OnboardingConsentInput = {
@@ -245,6 +246,7 @@ export async function deleteOwnAccount() {
       // address would otherwise survive indefinitely in this column alone.
       emailDisplay: sql`concat(${users.email}, '-', ${users.id}, '-deleted')`,
     }).where(eq(users.id, actor.id));
+    await retireEmailVerificationTokens(tx, actor.id);
     await tx.insert(auditLog).values({ action: 'account.deleted', actorId: actor.id, entityId: String(actor.id), entityType: 'user' });
   });
 }

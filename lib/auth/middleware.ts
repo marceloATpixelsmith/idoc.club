@@ -5,6 +5,12 @@ import { requireAccountAccess } from '@/lib/membership/data-access';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 
+/** A Server Action posted without its form payload (a hand-built or truncated request) reaches the action with `formData` undefined, and
+ * reading it threw an unhandled TypeError ("undefined is not iterable", "Cannot read properties of undefined (reading 'get')") that
+ * answered HTTP 500 and paged Sentry. It is the caller's malformed request, so it gets the ordinary validation answer instead. */
+export const MALFORMED_ACTION_REQUEST = { error: 'The request was not valid. Refresh the page and try again.' };
+const isFormData = (value: unknown): value is FormData => typeof FormData !== 'undefined' && value instanceof FormData;
+
 export type ActionState = {
   error?: string;
   success?: string;
@@ -26,6 +32,7 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
   options?: { skipCsrf?: boolean },
 ) {
   return async (prevState: ActionState, formData: FormData) => {
+    if (!isFormData(formData)) return MALFORMED_ACTION_REQUEST;
     if (!options?.skipCsrf) {
       await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
     }
@@ -57,6 +64,7 @@ export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
   options?: { allowWithoutEntitlement?: boolean },
 ) {
   return async (prevState: ActionState, formData: FormData) => {
+    if (!isFormData(formData)) return MALFORMED_ACTION_REQUEST;
     const user = await getUser();
     if (!user) {
       throw new Error('User is not authenticated');

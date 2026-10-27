@@ -10,7 +10,7 @@ export function CommunicationsTabs({ issueCounts, panels }: { issueCounts: { ren
   const [tab, setTab] = useState('system');
   const total = issueCounts.renewal + issueCounts.system;
   const notice = (count: number) => count > 0
-    ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">{count} {count === 1 ? 'email here was' : 'emails here were'} not confirmed as delivered. <button className="underline underline-offset-4 hover:opacity-80" onClick={() => setTab('issues')} type="button">See which addresses on the Delivery issues tab</button></p>
+    ? <p className="rounded-lg border border-amber-400/50 bg-amber-950/20 p-4 text-sm text-amber-200" role="status">{count} {count === 1 ? 'email here was' : 'emails here were'} not confirmed as delivered. <button className="bg-transparent font-medium normal-case tracking-normal underline underline-offset-4 hover:opacity-80" onClick={() => setTab('issues')} type="button">See which addresses on the Delivery issues tab</button></p>
     : null;
   return (
     <Tabs onValueChange={setTab} value={tab}>

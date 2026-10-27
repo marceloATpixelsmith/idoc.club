@@ -46,6 +46,7 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
   const steward = member?.roles.find((role) => role.roleType === 'steward');
   const official = judge ?? steward;
   const initialClassification: Classification = judge && steward ? 'judge_steward' : ((judge?.roleType ?? steward?.roleType) as Classification | undefined) ?? 'veterinarian';
+  const [emailChanged, setEmailChanged] = useState(false);
   const [classification, setClassification] = useState<Classification>(initialClassification);
 
   const [phone, setPhone] = useState(str(member?.profile.phone));
@@ -176,8 +177,13 @@ export function ProfileForm({ email, member }: { email: string; member: Member |
           <legend className="mb-1 w-full text-sm font-bold uppercase tracking-wider text-gold">Account</legend>
           <div className="max-w-sm">
             <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="email">Email</Label>
-            <Input defaultValue={email} id="email" name="email" required type="email" />
+            <Input defaultValue={email} id="email" name="email" onChange={(event) => setEmailChanged(event.target.value.trim().toLowerCase() !== email.trim().toLowerCase())} required type="email" />
           </div>
+          {emailChanged ? <div className="max-w-sm">
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground" htmlFor="currentPassword">Current password</Label>
+            <Input autoComplete="current-password" id="currentPassword" name="currentPassword" required type="password" />
+            <p className="mt-1 text-xs text-muted-foreground">Required to change your login email. We will email the new address to confirm it.</p>
+          </div> : null}
         </fieldset>
 
         {member ? <>

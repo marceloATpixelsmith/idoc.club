@@ -174,6 +174,48 @@ test('invoice.paid does not reactivate a suspended membership -- money is still 
   assert.ok(finding, 'the conflict must be surfaced for manual review');
 });
 
+// Pentest 2026-10-27, finding 5: the Checkout path lacked the guard the renewal-invoice path already has, so paying reversed an
+// administrator's decision (a Checkout Session stays payable for 24 hours, and review_required/suspended could pay without waiting).
+for (const held of ['canceled', 'suspended', 'review_required'] as const) {
+  test(`checkout.session.completed does not reactivate a ${held} membership -- the payment is recorded, entitlement is left alone, and a status_conflict finding is raised`, async () => {
+    const profile = await billedProfile(`cus_checkout_${held}`);
+    await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+      values(${profile.id}, ${held}, '2025-01-01', '2026-06-30', 'migration')`;
+    const event = fixtureEvent('checkout.session.completed', {
+      amount_total: 8000, currency: 'eur', customer: `cus_checkout_${held}`, id: `cs_${held}`,
+      metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: `pi_${held}`, payment_status: 'paid',
+    });
+    assert.equal(await processStripeEvent(event as any, fakeLineItemsClient('prod_membership_fixture')), 'processed');
+    const [payment] = await sql`select amount_cents from idoc.payments where external_payment_id=${`pi_${held}`}`;
+    assert.equal(payment.amount_cents, 8000, 'the money is real and stays reconcilable');
+    const [after] = await sql`select status, valid_until::text as valid_until from idoc.memberships where profile_id=${profile.id}`;
+    assert.equal(after.status, held);
+    assert.equal(after.valid_until, '2026-06-30', 'the paid-through date is not extended either');
+    const [finding] = await sql`select details from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`;
+    assert.ok(finding, 'an administrator must be told so the audited reinstatement action can decide');
+    assert.equal(finding.details.checkoutSessionId, `cs_${held}`);
+  });
+}
+
+// Pentest review (Strix on #713): a review_required hold must not be cleared by a renewal invoice either -- paid or failed.
+test('invoice.paid does not reactivate a review_required membership, and invoice.payment_failed does not move it into grace', async () => {
+  const profile = await billedProfile('cus_invoice_review_required');
+  await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+    values(${profile.id}, 'review_required', '2025-01-01', '2026-06-30', 'migration')`;
+  const paid = await postWebhook(fixtureEvent('invoice.paid', {
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_invoice_review_required', id: 'in_review_required_fixture',
+    status_transitions: { paid_at: Math.floor(Date.now() / 1000) },
+  }));
+  assert.equal(paid.status, 200);
+  assert.equal((await sql`select amount_cents from idoc.payments where external_payment_id='in_review_required_fixture'`)[0].amount_cents, 8000, 'the payment is still recorded');
+  const failed = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_review_required', id: 'in_review_required_failed', period_start: Math.floor(Date.now() / 1000) }));
+  assert.equal(failed.status, 200);
+  const [after] = await sql`select status, valid_until::text as valid_until from idoc.memberships where profile_id=${profile.id}`;
+  assert.equal(after.status, 'review_required');
+  assert.equal(after.valid_until, '2026-06-30');
+  assert.ok((await sql`select id from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`).length >= 1);
+});
+
 test('invoice.payment_failed does not move a suspended membership into grace', async () => {
   const profile = await billedProfile('cus_invoice_failed_suspended');
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
@@ -428,6 +470,33 @@ test('verified setup Checkout creates one future €80 schedule without changing
   assert.equal(preference.external_subscription_schedule_id, 'sub_sched_setup_fixture');
   assert.deepEqual(calls, { prices: 1, schedules: 1 });
 });
+
+// Pentest review (Strix on #713): a Setup Checkout opened before a cancellation/suspension/hold stays completable for 24 hours; completing it
+// must not create a live charge schedule for a membership that was ended.
+for (const held of ['canceled', 'suspended', 'review_required'] as const) {
+  test(`verified setup Checkout for a ${held} membership creates no charge schedule and raises a status_conflict finding`, async () => {
+    const profile = await billedProfile(`cus_setup_${held}`);
+    await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+      values(${profile.id}, ${held}, '2025-01-01', '2026-06-30', 'migration')`;
+    await sql`insert into idoc.renewal_preferences(profile_id,current_mode,pending_mode,effective_on,external_checkout_session_id,transition_state)
+      values(${profile.id},'non_recurring','recurring','2026-06-30',${`cs_setup_${held}`},'awaiting_setup')`;
+    let calls = 0;
+    const stripe = {
+      checkout: { sessions: { listLineItems: async () => ({ data: [] }) } },
+      paymentMethods: { retrieve: async () => { calls += 1; return {}; } },
+      prices: { create: async () => { calls += 1; return { id: 'x' }; } },
+      setupIntents: { retrieve: async () => { calls += 1; return {}; } },
+      subscriptionSchedules: { create: async () => { calls += 1; return { id: 'x' }; } },
+    };
+    const event = fixtureEvent('checkout.session.completed', { customer: `cus_setup_${held}`, id: `cs_setup_${held}`,
+      metadata: { kind: 'membership_renewal_setup', profileId: String(profile.id) }, mode: 'setup', setup_intent: `seti_${held}` });
+    assert.equal(await processStripeEvent(event as any, stripe as any), 'processed');
+    assert.equal(calls, 0, 'no price or schedule is created and no Stripe object is even retrieved');
+    assert.equal((await sql`select transition_state from idoc.renewal_preferences where profile_id=${profile.id}`)[0].transition_state, 'failed');
+    assert.equal((await sql`select status from idoc.memberships where profile_id=${profile.id}`)[0].status, held);
+    assert.ok((await sql`select id from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`).length >= 1);
+  });
+}
 
 test('a refund on a payment that is not a seminar registration creates no seminar finding', async () => {
   await processStripeEvent(fixtureEvent('refund.created', { amount: 8000, id: 're_legacy', object: 'refund', payment_intent: 'pi_legacy_payment', status: 'succeeded' }) as never, {} as never);

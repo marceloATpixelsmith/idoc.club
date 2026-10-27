@@ -8,6 +8,7 @@ export async function GET() {
     const rows = await listAllPaymentsForExport();
     return new Response(`\uFEFF${toCsv(rows, ['firstName', 'lastName', 'email', 'paidAt', 'amountCents', 'currency', 'source'])}`, {
       headers: {
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': 'attachment; filename="payments.csv"',
         'Content-Type': 'text/csv; charset=utf-8',
       },

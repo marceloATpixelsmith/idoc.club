@@ -20,7 +20,7 @@ function exportedNames(source: string): string[] {
 const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authentication' | 'authenticated-continuation' | 'delegates-to-data-access'>> = {
   'app/(login)/actions.ts': {
     signIn: 'pre-authentication', requestPasswordRecovery: 'pre-authentication', requestMigrationActivation: 'pre-authentication',
-    resetPassword: 'pre-authentication', activateMigratedAccount: 'pre-authentication', resendVerification: 'pre-authentication',
+    resetPassword: 'pre-authentication', activateMigratedAccount: 'pre-authentication',
     signOut: 'pre-authentication', updatePassword: 'session-boundary', deleteAccount: 'session-boundary', updateAccount: 'session-boundary',
   },
   'app/(login)/sign-up/actions.ts': {

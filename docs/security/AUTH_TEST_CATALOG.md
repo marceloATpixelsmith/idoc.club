@@ -459,29 +459,35 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 ### Evidence
 - Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
 
-## LIVE-AUTH-016 — Email change preserves identity uniqueness and requires the intended verification/step-up
+## LIVE-AUTH-016 — Email change preserves identity uniqueness and requires the current password and the intended verification/step-up
 
 - **Risk:** critical
 - **Applicability:** applicable
-- **Canonical controls:** AUTH-IDENTITY-003, AUTH-IDENTITY-005
-- **CI coverage:** mapped — `tests/email-change.integration.ts`, `tests/email-identity-normalization.integration.ts`
+- **Canonical controls:** AUTH-EMAIL-003, AUTH-IDENTITY-003, AUTH-IDENTITY-005
+- **CI coverage:** mapped — `tests/email-change.integration.ts`, `tests/email-identity-normalization.integration.ts`, `tests/profile-account-combined-save.integration.ts`
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
 - Use the designated staged/live hostname, never a Vercel preview or localhost.
 - Use only disposable test identities and test data.
+- The disposable member must have a password (a Google-only account cannot change its login email until it sets one).
 
 ### Steps
 1. Use the run's existing disposable account and create a second mailbox only when a distinct new email address is required for the change.
 2. Attempt a duplicate existing address and case/whitespace equivalent.
 3. Complete any real verification step.
 4. Test login/identity behavior at old and new addresses.
+5. Edit the login email on My Profile and confirm a Current password field appears; submit with the field empty, then with a wrong password, and confirm each is refused with no verification email sent to the new address.
+6. Repeat the wrong-password attempt using an address that already belongs to another account and confirm the response is identical (the duplicate check must not answer a caller that has not proved the password).
+7. Submit with the correct current password and complete the real verification step.
 
 ### PASS
 - Change requires intended authority/verification; duplicate normalized identities are rejected; resulting login identity is unambiguous.
+- A login email change is refused without the member's current password (pentest finding 1): no verification mail is issued, the response does not reveal whether the new address is taken, and a session alone can never rebind the recovery address.
 
 ### FAIL
 - Email can be changed to an existing normalized identity or without required verification/step-up.
+- The login email can be changed, or a verification mail issued, with only a valid session (no or wrong current password), or the duplicate-address answer differs before the password is proved.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
@@ -1087,8 +1093,8 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 - **Risk:** critical
 - **Applicability:** applicable
-- **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-SESSION-002
-- **CI coverage:** mapped — `tests/session-gate.test.ts`, `tests/membership-cancellation.integration.ts`, `tests/status-actions.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form.
+- **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-AUTHZ-005, AUTH-SESSION-002
+- **CI coverage:** mapped — `tests/checkout.integration.ts`, `tests/membership-cancellation.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts`, `tests/session-gate.test.ts`, `tests/status-actions.integration.ts`, `tests/stripe-webhook.integration.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form.
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
@@ -1096,6 +1102,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - Use only disposable test identities and test data.
 - Use a disposable, paid-up member. Staging shares the production database, so cleanup is required.
 - Moving the paid-through date requires administrator entitlement correction; record the original value first.
+- Stripe test mode only: staging must use the test-mode keys and the communications and billing hold; never a live card.
 
 ### Steps
 1. Sign in as the paid-up disposable member and cancel the membership from My Membership, confirming the dialog.
@@ -1103,14 +1110,19 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 3. Have an administrator move the paid-through date to yesterday (entitlement correction, with a reason).
 4. Reload any page in the member's session and confirm it is signed out, then attempt password sign-in.
 5. Have an administrator reverse the cancellation and confirm sign-in works again.
+6. Before the cancellation, open Pay on My Membership and leave the Stripe Checkout page unpaid. After the administrator cancels (or suspends) the membership, complete that Checkout Session with a Stripe test card.
+7. Confirm the membership status and paid-through date are unchanged, the payment is recorded, and a status_conflict reconciliation finding names the Checkout Session.
+8. With the membership suspended (or review required), confirm Pay refuses to create a new Checkout Session.
 
 ### PASS
 - Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.
 - After the paid-through date the existing session ends and password sign-in is refused, with the canceled-membership message shown only after a correct password.
 - An administrator's reversal restores sign-in.
+- Completing a Checkout Session never reactivates or extends a canceled, suspended or review-held membership (pentest finding 5): the payment is recorded, entitlement is unchanged, a reconciliation finding is raised, and only the audited administrator reinstatement restores access.
 
 ### FAIL
 - Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email.
+- A payment reactivates a canceled, suspended or review-held membership, or extends its paid-through date, without an administrator's audited action.
 
 ### Cleanup
 - Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
@@ -1184,3 +1196,100 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 
 ### Evidence
 - Capture browser assertion results, delivery of the activation link, the staging revision, OTP and final destination. Never log or retain raw hashes, passwords, activation tokens or mailbox credentials.
+
+## LIVE-AUTH-040 — A pre-issued email-verification link cannot undo a suspension or deletion, rebind the login email afterward, or promote a legacy account
+
+- **Risk:** critical
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-EMAIL-003, AUTH-AUTHZ-004, AUTH-SESSION-008
+- **CI coverage:** mapped — `tests/email-change.integration.ts`, `tests/account-suspension.integration.ts`, `tests/member-lifecycle.integration.ts` — Real-Postgres integration tests suspend, delete and migrated_pending-mark an account holding a captured verification token and prove redemption is refused, the link is burned and the account is untouched; suspension, self-deletion and bulk archive retire outstanding links.
+- **Live:** required; email=yes; admin=yes; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- Use a disposable member with a password and a second disposable mailbox for the new address.
+- An administrator is needed to suspend and reinstate the disposable member.
+
+### Steps
+1. As the disposable member, request a login email change to the second mailbox (with the current password) and capture the verification link from that mailbox without opening it.
+2. As an administrator, suspend the member.
+3. Open the captured link and confirm the page reports the link unavailable.
+4. Confirm the member is still suspended, the login email is unchanged, and the old address still cannot sign in.
+5. Reinstate the member and confirm the link is still dead (it was burned or retired by the suspension).
+6. Open /verify-email with an invalid token and confirm no session cookie is issued by the page.
+
+### PASS
+- A verification link issued before an administrative suspension or self-service deletion is refused and burned; the suspension holds, the login identity does not move, and /verify-email never starts a session (pentest finding 4).
+
+### FAIL
+- Opening the pre-issued link lifts the suspension, restores a deleted account, rebinds the login email, or sets a session cookie.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-041 — Anonymous endpoints that cause email cannot be driven by unauthenticated callers beyond shared limits, and cannot carry caller-chosen text to staff
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-RATE-001, AUTH-RATE-005, AUTH-OPERATIONS-006
+- **CI coverage:** mapped — `tests/admin-event-notifications.test.ts`, `tests/authorization-boundary-inventory.test.ts`, `tests/membership-foundation.test.ts` — Unit tests prove the alert path takes only a same-host plain path and a character-restricted browser string, that the route applies the shared database limiter per caller and deployment-wide, and that the unauthenticated resendVerification action no longer exists; the cross-instance volume behaviour needs the deployed platform.
+- **Live:** required; email=yes; admin=no; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- The Technical Support recipient mailbox must be a disposable @pixelsmith.space address for the run so alert content can be inspected.
+
+### Steps
+1. POST to /api/client-error repeatedly (at least 15 times within a few minutes, including from concurrent connections) with a hostile Referer such as a sentence containing a URL and a hostile User-Agent.
+2. Confirm every response is HTTP 200 with a correlation requestId (the caller is never blocked from its reference).
+3. Inspect the Technical Support mailbox: confirm the number of alerts stays within the shared limit (per caller address and deployment-wide) rather than scaling with concurrency, and that no alert subject or body contains the hostile Referer or User-Agent text.
+4. Confirm there is no anonymous way to trigger an email-verification email (the old resendVerification action is gone): signup, login and recovery sends remain bound to their rate-limited OTP flows.
+
+### PASS
+- Alert volume from anonymous client-error reports is bounded by the shared database limiter, the page named in an alert is a same-site path or absent, and no caller-chosen text reaches the alert subject or body (pentest findings 2 and 3).
+
+### FAIL
+- Alert volume scales with concurrent requests, an alert carries caller-chosen Referer or User-Agent text, or an unauthenticated caller can trigger a verification email.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
+
+## LIVE-AUTH-042 — Rich-text content cannot inject live markup into public pages or transactional emails
+
+- **Risk:** high
+- **Applicability:** applicable
+- **Canonical controls:** AUTH-HEADER-001, AUTH-AUTHZ-005
+- **CI coverage:** mapped — `tests/rich-text-sanitizer.test.ts`, `tests/news-articles.test.ts`, `tests/organization-settings.test.ts`, `tests/seminars.test.ts` — Unit tests prove stray, unterminated, underscore-named, comment and processing-instruction markup is escaped by both sanitizers, that sanitizing twice is stable, and that ordinary editor HTML is unchanged; rendering in a real browser and the deployed CSP are verified live.
+- **Live:** required; email=no; admin=yes; destructive=no
+
+### Preconditions
+- Use the designated staged/live hostname, never a Vercel preview or localhost.
+- Use only disposable test identities and test data.
+- An administrator saves a disposable, unpublished article; delete it afterward.
+
+### Steps
+1. As an administrator, save an unpublished article whose HTML contains an unterminated image tag with an event handler, an underscore-named tag (<img_x onerror=...>), a comment opener and a meta refresh.
+2. Publish it to a staging-only slug, open the public page as an anonymous visitor, and inspect the DOM.
+3. Confirm the payloads appear as visible text, no img/meta/div_x element with those attributes exists, and the browser is not redirected.
+4. Confirm ordinary formatting (headings, bold, lists, links, an image) in the same article still renders normally.
+
+### PASS
+- Unrecognised markup is shown as text and never becomes an element, while normal WYSIWYG formatting is preserved (pentest finding 6).
+
+### FAIL
+- Any injected element, handler attribute or redirect appears in the rendered page or an email body, or normal formatting is lost.
+
+### Cleanup
+- Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging.
+- Delete the disposable article.
+
+### Evidence
+- Record URL, role, action, HTTP status, relevant screenshot/trace, and any console/network error. Never record secrets.
