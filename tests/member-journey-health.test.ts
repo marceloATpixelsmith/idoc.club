@@ -24,6 +24,13 @@ test('member journey dashboard requires admin authorization and covers legacy fi
   const admin = read('app/(dashboard)/admin/page.tsx');
   assert.match(admin, /getMemberJourneyConcerns\(\)/);
   assert.match(admin, /Member journey health/);
+  assert.match(admin, /searchParams: Promise<\{ journeyPage\?: string \}>/);
+  assert.match(admin, /Math\.ceil\(journeyConcerns\.length \/ 20\)/);
+  assert.match(admin, /journeyConcerns\.slice\(journeyStart, journeyStart \+ 20\)/);
+  assert.match(admin, /journeyPage=\$\{journeyPage - 1\}/);
+  assert.match(admin, /journeyPage=\$\{journeyPage \+ 1\}/);
+  assert.match(admin, /member-journey-health/);
+  assert.doesNotMatch(admin, /Open Communications for additional delivery details/);
 });
 
 test('daily member journey digest uses existing admin recipient queue and avoids five-minute alert floods', () => {
@@ -35,6 +42,7 @@ test('daily member journey digest uses existing admin recipient queue and avoids
   assert.match(watch, /member-journey-digest:\$\{now\.toISOString\(\)\.slice\(0, 10\)\}/);
   assert.match(watch, /enqueueOperationalAlert/);
   assert.match(watch, /kind: 'member_journey_attention'/);
+  assert.match(watch, /dashboard pagination to review every remaining concern/);
   assert.match(queue, /process\.env\.IDOC_ADMIN_NOTIFICATION_EMAIL/);
   assert.match(cron, /runMemberJourneyWatch\(\)/);
   assert.match(cron, /catch \{ await logError\('member_journey_watch_failed'\); \}/);
