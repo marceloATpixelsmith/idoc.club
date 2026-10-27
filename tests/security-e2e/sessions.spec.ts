@@ -75,6 +75,13 @@ test('account security renders and revokes only the signed-in member active sess
   const databaseUrl = process.env.TEST_DATABASE_URL;
   expect(databaseUrl).toBeTruthy();
   const sql = postgres(databaseUrl!, { max: 1, onnotice: () => {} });
+  // Playwright retries against the same shared fixture database: undo revocation of the
+  // designated second session and retire probe sessions from a previous failed attempt.
+  await sql`update idoc.auth_sessions set revoked_at=now(), revoke_reason='security-e2e-retry-cleanup'
+    where user_id=${fixture.userId} and session_id not in (${fixture.currentSessionId}, ${fixture.secondSessionId})
+    and revoked_at is null and absolute_expires_at>now()`;
+  await sql`update idoc.auth_sessions set revoked_at=null, revoke_reason=null
+    where session_id=${fixture.secondSessionId} and user_id=${fixture.userId}`;
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/security');
