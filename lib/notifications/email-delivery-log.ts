@@ -1,11 +1,17 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { emailDeliveryEvents, emailDeliveryLog, emailDeliveryPendingEvents } from '@/lib/db/schema';
 import { type DeliveryEventName, recipientDomain, statusAfterEvent } from './email-delivery-log-core';
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Serializes the "log the send" and "apply a webhook event" paths for one Brevo message id: without it each could miss the other's
+ * uncommitted row, leaving an event held forever for a send that is logged. Released when the transaction ends. */
+async function lockMessage(tx: Transaction, providerMessageId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`email-delivery:${providerMessageId}`}, 0))`);
+}
 
 export type AcceptedEmail = { kind?: string | null; messageRef?: string | null; providerMessageId: string | null; subject: string; to: string; userId?: number | null };
 export type DeliveryEvent = { event: DeliveryEventName; messageId: string; occurredAt: Date; reason?: string };
@@ -33,6 +39,7 @@ async function applyToLoggedEmail(tx: Transaction, row: { deliveredAt: Date | nu
 export async function recordAcceptedEmail(input: AcceptedEmail): Promise<void> {
   const email = input.to.trim().toLowerCase();
   await db.transaction(async (tx) => {
+    if (input.providerMessageId) await lockMessage(tx, input.providerMessageId);
     const [created] = await tx.insert(emailDeliveryLog).values({
       kind: input.kind?.slice(0, 60) ?? null,
       messageRef: input.messageRef?.slice(0, 100) ?? null,
@@ -59,6 +66,7 @@ export async function recordAcceptedEmail(input: AcceptedEmail): Promise<void> {
  * applied when the send is logged, or discarded after two days if that never happens (a message sent before logging began). */
 export async function applyBrevoDeliveryEvent(input: DeliveryEvent): Promise<DeliveryEventResult> {
   return db.transaction(async (tx) => {
+    await lockMessage(tx, input.messageId);
     const [row] = await tx.select({ deliveredAt: emailDeliveryLog.deliveredAt, id: emailDeliveryLog.id, status: emailDeliveryLog.status })
       .from(emailDeliveryLog).where(eq(emailDeliveryLog.providerMessageId, input.messageId)).for('update');
     if (!row) {

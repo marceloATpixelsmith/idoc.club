@@ -162,3 +162,10 @@ test('two sends under 30 seconds apart where only the later one has a request ev
   assert.equal(checks.get('s2'), 'failed', 'the later send, which owns the request, is the one that bounced');
   assert.notEqual(checks.get('s1'), 'failed', 'the earlier send must not borrow its neighbour\'s message and bounce');
 });
+
+test('an earlier send without a request event cannot consume the outcome of a later send that owns it by message id', () => {
+  const sends = [{ email: 'a@x.org', id: 's1', sentAt: at('2026-10-27T10:00:00Z') }, { email: 'a@x.org', id: 's2', sentAt: at('2026-10-27T10:01:00Z') }];
+  const checks = checkAgainstBrevoLog(sends, [event('a@x.org', 'requests', '2026-10-27T10:00:58Z', 'm2'), event('a@x.org', 'delivered', '2026-10-27T10:00:59Z', 'm2')]);
+  assert.equal(checks.get('s2'), 'delivered');
+  assert.equal(checks.get('s1'), 'not_found', 'the earlier send must not be credited with the later message\'s delivery');
+});
