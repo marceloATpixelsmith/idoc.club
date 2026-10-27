@@ -137,7 +137,9 @@ test('the watch cron rejects an unauthenticated call and, when authorized, runs 
   assert.equal(response.status, 200);
   const body = await response.json() as Record<string, number>;
   assert.equal(body.alerted, 1);
-  assert.deepEqual(Object.keys(body).sort(), ['alerted', 'alertsRetryable', 'held', 'reconciled', 'repeatAlerted']);
+  assert.equal(typeof body.journeyConcerns, 'number');
+  assert.equal(typeof body.journeyDigestQueued, 'number');
+  assert.deepEqual(Object.keys(body).sort(), ['alerted', 'alertsRetryable', 'held', 'journeyConcerns', 'journeyDigestQueued', 'reconciled', 'repeatAlerted']);
 });
 
 test('emails already reported can never crowd a newer undelivered email out of the batch', async () => {
