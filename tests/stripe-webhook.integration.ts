@@ -174,6 +174,29 @@ test('invoice.paid does not reactivate a suspended membership -- money is still 
   assert.ok(finding, 'the conflict must be surfaced for manual review');
 });
 
+// Pentest 2026-10-27, finding 5: the Checkout path lacked the guard the renewal-invoice path already has, so paying reversed an
+// administrator's decision (a Checkout Session stays payable for 24 hours, and review_required/suspended could pay without waiting).
+for (const held of ['canceled', 'suspended', 'review_required'] as const) {
+  test(`checkout.session.completed does not reactivate a ${held} membership -- the payment is recorded, entitlement is left alone, and a status_conflict finding is raised`, async () => {
+    const profile = await billedProfile(`cus_checkout_${held}`);
+    await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+      values(${profile.id}, ${held}, '2025-01-01', '2026-06-30', 'migration')`;
+    const event = fixtureEvent('checkout.session.completed', {
+      amount_total: 8000, currency: 'eur', customer: `cus_checkout_${held}`, id: `cs_${held}`,
+      metadata: { profileId: String(profile.id) }, mode: 'payment', payment_intent: `pi_${held}`, payment_status: 'paid',
+    });
+    assert.equal(await processStripeEvent(event as any, fakeLineItemsClient('prod_membership_fixture')), 'processed');
+    const [payment] = await sql`select amount_cents from idoc.payments where external_payment_id=${`pi_${held}`}`;
+    assert.equal(payment.amount_cents, 8000, 'the money is real and stays reconcilable');
+    const [after] = await sql`select status, valid_until::text as valid_until from idoc.memberships where profile_id=${profile.id}`;
+    assert.equal(after.status, held);
+    assert.equal(after.valid_until, '2026-06-30', 'the paid-through date is not extended either');
+    const [finding] = await sql`select details from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`;
+    assert.ok(finding, 'an administrator must be told so the audited reinstatement action can decide');
+    assert.equal(finding.details.checkoutSessionId, `cs_${held}`);
+  });
+}
+
 test('invoice.payment_failed does not move a suspended membership into grace', async () => {
   const profile = await billedProfile('cus_invoice_failed_suspended');
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)

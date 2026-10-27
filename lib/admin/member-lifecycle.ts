@@ -182,6 +182,7 @@ export async function archiveMembers(ids: string[], actorId: number) {
     for (const row of rows) {
       await sql`update users set account_state='deleted',deleted_at=null,session_version=session_version+1,updated_at=now() where id=${row.id}`;
       await sql`delete from auth_sessions where user_id=${row.id}`;
+      await sql`update email_verification_tokens set consumed_at=now() where user_id=${row.id} and consumed_at is null`;
       await sql`insert into audit_log(actor_id,action,entity_type,entity_id,before_json,after_json,reason) values (${actorId},'admin.member.archived','user',${String(row.id)},${JSON.stringify({ accountState: 'active' })}::jsonb,${JSON.stringify({ accountState: 'archived' })}::jsonb,'Bulk archive from Members admin table')`;
     }
     return rows.length;

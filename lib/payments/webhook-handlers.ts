@@ -477,6 +477,16 @@ async function handleCheckoutSessionCompleted(tx: Transaction, event: Stripe.Eve
   await tx.insert(renewalPreferences).values({ currentMode: 'non_recurring', profileId })
     .onConflictDoNothing({ target: renewalPreferences.profileId });
   const membership = await lockLatestMembership(tx, profileId);
+  // Same rule as the renewal-invoice handler: a canceled, suspended or review-held membership is an administrator's (or the member's own
+  // cancellation) decision, and paying must not undo it. A Checkout Session stays payable for 24 hours, so one opened before the
+  // decision can still complete after it. The payment stays recorded above (the money is real and must stay reconcilable), entitlement
+  // stays exactly as it was left, and an administrator decides through the audited reinstatement action whether to restore it.
+  if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
+    await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
+      summary: `Stripe reported a completed Checkout payment for a membership that is currently ${membership.status.replace('_', ' ')}; entitlement was not restored automatically.`,
+      details: { checkoutSessionId: session.id, membershipStatus: membership.status, paymentId: inserted.id } });
+    return;
+  }
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
   if (membership) {
     await tx.update(memberships).set({ graceEndsOn: null, status: 'active', updatedAt: new Date(), validUntil })

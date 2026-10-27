@@ -50,3 +50,20 @@ export function scrubErrorText(value: string): string {
 export function pathWithoutQuery(value: string | null | undefined): string | null {
   return value ? value.split(/[?#]/)[0].slice(0, 300) : null;
 }
+
+/** The page a browser error report came from, taken from the anonymous caller's Referer header. That header is free text to the server,
+ * so only a same-site path made of plain path characters is accepted: no host, query, fragment, colon or doubled slash, which is what a
+ * lure sentence or a spoofed URL needs. Anything else is dropped and the alert simply names no page. */
+export function reportedPagePath(referer: string | null | undefined, requestHost: string | null | undefined): string | null {
+  if (!referer || !requestHost) return null;
+  let url: URL;
+  try { url = new URL(referer); } catch { return null; }
+  if (url.host.toLowerCase() !== requestHost.toLowerCase()) return null;
+  return /^\/[A-Za-z0-9_\-./]{0,199}$/.test(url.pathname) && !url.pathname.includes('//') ? url.pathname : null;
+}
+
+/** A browser's User-Agent is also caller-chosen text. Keep only the characters a real one uses, and cut it short. */
+export function reportedUserAgent(value: string | null | undefined): string | null {
+  const cleaned = value?.replace(/[^A-Za-z0-9 ./;,()_-]/g, '').slice(0, 150).trim();
+  return cleaned || null;
+}

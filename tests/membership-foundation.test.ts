@@ -79,8 +79,8 @@ test('verification uses digests, one-time claims, and the approved sender bounda
 test('verification delivery is recoverable and Stripe synchronization remains retryable', () => {
   const actions = readFileSync(new URL('../app/(login)/actions.ts', import.meta.url), 'utf8');
   const verification = readFileSync(new URL('../lib/membership/email-verification.ts', import.meta.url), 'utf8');
-  assert.match(actions, /export const resendVerification/);
-  assert.match(actions, /If an unverified account uses this address/);
+  // The unauthenticated resend action was removed (pentest 2026-10-27): it had no bot check, rate limit or cooldown and no UI used it.
+  assert.doesNotMatch(actions, /resendVerification/);
   assert.match(verification, /kind: 'stripe\.customer_email_sync'/);
   assert.match(verification, /THE OUTBOX RECORD RETAINS THE JOB FOR A RETRYING WORKER/);
 });

@@ -4,7 +4,7 @@ import 'server-only';
 import { communicationHoldFields, communicationHoldTimestamp, memberCommunicationsDisabled } from '@/lib/runtime/member-launch-hold';
 
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLog, billingAccounts, emailVerificationTokens, notificationOutbox, profiles, users } from '@/lib/db/schema';
 import { sendTransactionalEmail } from '@/lib/notifications/brevo-transactional';
@@ -14,6 +14,7 @@ import { emailDisplayForm, normalizeEmail } from './validation';
 import { baseUrlForServer } from '@/lib/runtime/configuration';
 
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000;
+const VERIFIABLE_ACCOUNT_STATES = ['unverified', 'onboarding', 'active'];
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const recipientDiscriminator = (email: string) => createHash('sha256').update(email).digest('hex').slice(0, 16);
 
@@ -63,6 +64,12 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
       eq(emailVerificationTokens.id, record.id), isNull(emailVerificationTokens.consumedAt),
     )).returning({ id: emailVerificationTokens.id });
     if (!claimed) return { status: 'invalid' };
+    // The token was issued while the account was in some state; what counts is its state now. The row is locked so a suspension or
+    // deletion cannot land between this read and the write below. Only states that may legitimately verify an address are accepted:
+    // 'suspended' and 'deleted' are administrative or self-service decisions a link must never undo, and 'migrated_pending' must
+    // pass the migration activation checks, not be promoted by an email link. The token stays consumed either way, so the link is dead.
+    const [owner] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).for('update');
+    if (!owner || !VERIFIABLE_ACCOUNT_STATES.includes(owner.accountState)) return { status: 'invalid' };
     const [existing] = await tx.select({ id: users.id }).from(users).where(eq(users.email, record.pendingEmail)).limit(1);
     if (existing && existing.id !== record.userId) return { status: 'invalid' };
     const [currentUser] = await tx.select({ email: users.email }).from(users).where(eq(users.id, record.userId)).limit(1);
@@ -75,7 +82,7 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
       emailVerifiedAt: now,
       sessionVersion: sql`${users.sessionVersion} + 1`,
       updatedAt: now,
-    }).where(eq(users.id, record.userId));
+    }).where(and(eq(users.id, record.userId), inArray(users.accountState, VERIFIABLE_ACCOUNT_STATES)));
     if (billing?.externalCustomerId && profile) {
       await tx.insert(notificationOutbox).values({ ...communicationHoldFields(true),
         kind: 'stripe.customer_email_sync',
@@ -139,4 +146,10 @@ export async function consumeEmailVerification(token: string): Promise<Verificat
   }
   if (result.status === 'verified') dispatchQueuedEmailAfterResponse(() => processAuthSecurityNotificationBatch(1), 'account-delivery');
   return result.status === 'verified' ? { status: 'verified', userId: result.userId } : result;
+}
+
+/** Kills every outstanding verification link for an account. Called in the same transaction that suspends or deletes it, so a link
+ * issued before the decision cannot outlive it (redemption also re-checks the account state, this closes the window at the source). */
+export async function retireEmailVerificationTokens(tx: Pick<typeof db, 'update'>, userId: number) {
+  await tx.update(emailVerificationTokens).set({ consumedAt: new Date() }).where(and(eq(emailVerificationTokens.userId, userId), isNull(emailVerificationTokens.consumedAt)));
 }

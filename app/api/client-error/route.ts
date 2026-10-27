@@ -1,7 +1,8 @@
 import { headers } from 'next/headers';
 import { rawCanonicalUserId } from '@/lib/auth/session';
-import { deferAdminNotification, notifyTechnicalError, pathWithoutQuery } from '@/lib/notifications/admin-event-alerts';
+import { deferAdminNotification, notifyTechnicalError, reportedPagePath, reportedUserAgent } from '@/lib/notifications/admin-event-alerts';
 import { currentRequestId } from '@/lib/observability/request-id';
+import { checkOriginRateLimit, requestOrigin } from '@/lib/security/rate-limit';
 
 // Accepts a best-effort crash report from a client error boundary and logs it server-side, so a
 // browser error can carry a server-generated correlation reference without sending its diagnostics
@@ -20,12 +21,19 @@ export async function POST() {
   // Delivery runs after the response so the correlation reference (and the browser's Sentry report that waits on it) is never delayed.
   try {
     const requestHeaders = await headers();
-    const report = {
-      context: [['Note', 'Reported by the browser error screen. If a server error caused it, a separate email with the stack trace is sent from the server.']] as const,
-      path: pathWithoutQuery(requestHeaders.get('referer')), requestId, source: 'browser',
-      user: await rawCanonicalUserId().then((id) => (id ? { id } : null)), userAgent: requestHeaders.get('user-agent'),
-    };
-    deferAdminNotification(() => notifyTechnicalError(report));
+    // The caller is anonymous and its headers are free text, so both the volume and the text are bounded here. The volume limit is
+    // shared through the database (per caller address, and for the whole deployment), because the in-process budget inside
+    // notifyTechnicalError is per serverless instance and does not add up across the instances a burst of requests lands on.
+    // Over the limit the caller still gets its correlation reference; only the staff email is skipped.
+    const allowed = await checkOriginRateLimit('client_error_report', await requestOrigin()) && await checkOriginRateLimit('client_error_report', 'deployment-wide');
+    if (allowed) {
+      const report = {
+        context: [['Note', 'Reported by the browser error screen. If a server error caused it, a separate email with the stack trace is sent from the server.']] as const,
+        path: reportedPagePath(requestHeaders.get('referer'), requestHeaders.get('host')), requestId, source: 'browser',
+        user: await rawCanonicalUserId().then((id) => (id ? { id } : null)), userAgent: reportedUserAgent(requestHeaders.get('user-agent')),
+      };
+      deferAdminNotification(() => notifyTechnicalError(report));
+    }
   } catch {
     // Reporting must still return the correlation reference.
   }
