@@ -123,7 +123,7 @@ export async function correctEntitlementForm(_state: FormState, formData: FormDa
       validUntil: validUntil ? String(validUntil) : undefined,
     });
     if ('stripeCancelError' in result && result.stripeCancelError) {
-      return { attentionRequired: true, success: `Entitlement corrected. Warning: could not end the Stripe subscription at period end (${result.stripeCancelError}) — submit the same correction again to retry, or end it manually in Stripe.` };
+      return { attentionRequired: true, error: `Entitlement corrected, but the Stripe subscription could not be ended at period end (${result.stripeCancelError}) — submit the same correction again to retry, or end it manually in Stripe.` };
     }
     return { success: 'Entitlement corrected.' };
   } catch (error) {
