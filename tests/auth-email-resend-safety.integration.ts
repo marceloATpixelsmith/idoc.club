@@ -102,7 +102,8 @@ test('a resent code supersedes (invalidates) the one it replaces, rather than le
     where email=${email} and purpose='signup_verification' and consumed_at is null`;
   assert.equal(liveAfterResend, 2, 'the previous code and the new code are both live after one resend');
 
-  await sql`update idoc.email_otp_codes set created_at = now() - interval '31 seconds'
+  // Shift (not overwrite) so the two codes keep their issuance order; the resend keeps the newest by created_at.
+  await sql`update idoc.email_otp_codes set created_at = created_at - interval '31 seconds'
     where email=${email} and purpose='signup_verification'`;
   await withTestRequestCookies(cookies, async () => {
     const resend = new FormData(); resend.set('csrf_token', csrfToken);
