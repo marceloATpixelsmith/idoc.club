@@ -326,6 +326,17 @@ Four additions record or constrain member-related activity:
 - **Email-domain guard.** Every outgoing transactional email passes through `assertEmailLinksCanonical` in `sendTransactionalEmail`. On the Production deployment (`VERCEL_ENV=production`) a message containing a link or image on any IDOC host other than `idoc.club` (staging, redesign, `*.vercel.app`, localhost, `www`) is refused before it reaches Brevo and goes through the existing retry and dead-letter handling.
 - **Brevo click tracking** can be switched off once identifying links are live, because the server now records clicks itself; the Brevo log remains the source for delivery, bounce and open events.
 
+## Email delivery log
+
+Every email IDOC hands to Brevo is recorded in `email_delivery_log` (migration `0087`), and Brevo's webhook reports what became of it in `email_delivery_events`, so an administrator can follow any message by Brevo's own message id instead of matching by recipient and time. This covers emails no outbox records, such as sign-in, sign-up and password-reset codes.
+
+- **What is stored.** For each accepted email: Brevo's message id, the recipient address and its domain, the member id when known, a closed `kind` (for example `auth.otp.login_verification`, `account.migration_activation`), the subject line, IDOC's own message reference, when it was accepted, its current status (`accepted`, `deferred`, `soft_bounced`, `delivered`, `hard_bounced`, `blocked`, `invalid`, `error`, `spam`) and when that status was set. Each webhook event adds a row with the event, Brevo's timestamp and Brevo's reason text (capped at 200 characters).
+- **What is never stored.** The message body, a verification code, a link or a token. A code or link exists only in the email itself.
+- **Status precedence.** A later, more final outcome replaces an earlier one; a late-arriving earlier event (for example "deferred" after "delivered") is kept in the history but never downgrades the status. Opens and clicks are history only.
+- **Best effort.** The log is written after Brevo has accepted the email; a failure to write it (or a database that is slow, with a 3-second bound) never fails or delays the send. An event for a message the log never recorded is accepted and ignored.
+- **Webhook trust.** Unchanged: Brevo does not sign deliveries, so `BREVO_WEBHOOK_KEY` in the Notify URL remains the only authentication (docs/07 §15). The worst a forged event can do is change the status of an email whose Brevo message id the forger already knows.
+- **Retention.** Rows are purged 90 days after the email was accepted by the daily retention job, with their events (cascade). 90 days matches the window of Brevo's own log.
+
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting defaults to blocking. Only exact `false` releases member communications and live application billing; validated Stripe test-mode mutations remain available. Configure staging and Production independently. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for coverage, terminal queue handling, webhook reconciliation, pre-launch verification, release and emergency re-hold.

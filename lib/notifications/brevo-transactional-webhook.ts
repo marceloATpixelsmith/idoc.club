@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { brevoEventTime, type DeliveryEventName, normalizeBrevoEventName, normalizeBrevoMessageId } from './email-delivery-log-core.ts';
 
 // AUTH-EMAIL-007: unlike Mandrill (which HMAC-signs every webhook delivery), Brevo does not sign
 // webhook deliveries at all -- no signature header, no JWT. The shared secret in BREVO_WEBHOOK_KEY is
@@ -33,4 +34,18 @@ export function parseBrevoEvent(rawBody: unknown): BrevoEvent | null {
   const email = typeof record.email === 'string' ? record.email : undefined;
   const rawReason = typeof record.reason === 'string' ? record.reason : undefined;
   return { email, event: record.event as BrevoEventType, reason: rawReason ? rawReason.slice(0, MAX_REASON_LENGTH) : undefined };
+}
+
+export type BrevoDeliveryEvent = { event: DeliveryEventName; messageId: string; occurredAt: Date; reason?: string };
+
+/** The part of a webhook delivery the email delivery log needs: which message (Brevo's own id), what happened (either spelling
+ * of the event name) and when. Null when the event is not one the log tracks or carries no message id. */
+export function parseBrevoDeliveryEvent(rawBody: unknown, now: Date = new Date()): BrevoDeliveryEvent | null {
+  if (!rawBody || typeof rawBody !== 'object') return null;
+  const record = rawBody as Record<string, unknown>;
+  const event = normalizeBrevoEventName(record.event);
+  const messageId = normalizeBrevoMessageId(record['message-id']);
+  if (!event || !messageId) return null;
+  const reason = typeof record.reason === 'string' && record.reason ? record.reason.slice(0, MAX_REASON_LENGTH) : undefined;
+  return { event, messageId, occurredAt: brevoEventTime(record, now), reason };
 }

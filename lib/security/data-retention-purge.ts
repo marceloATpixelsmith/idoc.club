@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import {
   accountTokens,
   authSessions,
+  emailDeliveryLog,
   emailOtpCodes,
   loginTrustedDevices,
   mfaChallengeTransactions,
@@ -23,6 +24,9 @@ const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 // The administrator Member timeline's own activity log (docs/05): about thirteen months, long enough to answer a member's
 // question about last year's renewal, short enough not to become a standing record of visitor behavior.
 const ACTIVITY_RETENTION_MS = 400 * 24 * 60 * 60 * 1000;
+// The email delivery log (docs/05): long enough to investigate a delivery complaint after the fact and to cover Brevo's own 90-day
+// log window, short enough not to become a standing record of who was emailed.
+const DELIVERY_LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** Physically deletes rows from every table AUTH-STORAGE-007 named as growing unbounded, once each
  * row's own expiry is more than RETENTION_MS in the past. Safe to run repeatedly and concurrently:
@@ -31,7 +35,8 @@ const ACTIVITY_RETENTION_MS = 400 * 24 * 60 * 60 * 1000;
 export async function purgeExpiredAuthRecords(now: Date = new Date()) {
   const cutoff = new Date(now.getTime() - RETENTION_MS);
   const activityCutoff = new Date(now.getTime() - ACTIVITY_RETENTION_MS);
-  const [emailOtp, mfaChallenge, mfaEnrollment, accountToken, authSession, loginTrustedDevice, userActivity] = await Promise.all([
+  const deliveryLogCutoff = new Date(now.getTime() - DELIVERY_LOG_RETENTION_MS);
+  const [emailOtp, mfaChallenge, mfaEnrollment, accountToken, authSession, loginTrustedDevice, userActivity, deliveryLog] = await Promise.all([
     db.delete(emailOtpCodes).where(lt(emailOtpCodes.expiresAt, cutoff)).returning({ id: emailOtpCodes.id }),
     db.delete(mfaChallengeTransactions).where(lt(mfaChallengeTransactions.expiresAt, cutoff)).returning({ id: mfaChallengeTransactions.transactionId }),
     db.delete(mfaEnrollmentTransactions).where(lt(mfaEnrollmentTransactions.expiresAt, cutoff)).returning({ id: mfaEnrollmentTransactions.transactionId }),
@@ -39,9 +44,12 @@ export async function purgeExpiredAuthRecords(now: Date = new Date()) {
     db.delete(authSessions).where(lt(authSessions.absoluteExpiresAt, cutoff)).returning({ id: authSessions.id }),
     db.delete(loginTrustedDevices).where(lt(loginTrustedDevices.expiresAt, cutoff)).returning({ id: loginTrustedDevices.trustedDeviceId }),
     db.delete(userActivityEvents).where(lt(userActivityEvents.occurredAt, activityCutoff)).returning({ id: userActivityEvents.id }),
+    // Its webhook events go with it (ON DELETE CASCADE).
+    db.delete(emailDeliveryLog).where(lt(emailDeliveryLog.sentAt, deliveryLogCutoff)).returning({ id: emailDeliveryLog.id }),
   ]);
   return {
     accountTokens: accountToken.length,
+    emailDeliveryLog: deliveryLog.length,
     authSessions: authSession.length,
     emailOtpCodes: emailOtp.length,
     loginTrustedDevices: loginTrustedDevice.length,

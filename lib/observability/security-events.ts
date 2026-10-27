@@ -73,6 +73,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   mailchimp_webhook_unexpected_audience: { attribution: 'system', category: 'operational', resource: 'mailchimp-webhook', retentionClass: 'operational' },
   marketing_preference_sync_failed: { attribution: 'system', category: 'operational', resource: 'marketing-preference-sync', retentionClass: 'operational', sentry: true },
   brevo_webhook_soft_bounce: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },
+  brevo_webhook_delivery_log_failed: { attribution: 'system', category: 'operational', resource: 'brevo-webhook', retentionClass: 'operational' },
   mfa_recovery_transition_failed: { attribution: 'subject', category: 'auth', metadata: { subjectId: 'positiveInteger' }, resource: 'mfa-recovery', retentionClass: 'security', sentry: true },
   news_scheduled_publish_failed: { attribution: 'system', category: 'operational', resource: 'news-scheduled-publish', retentionClass: 'operational', sentry: true },
   operational_alert_dead_lettered: { attribution: 'system', category: 'delivery', metadata: { kind: ['incident_response_action_taken', 'rate_limit_correlation_alert'] }, resource: 'operational-alert-outbox', retentionClass: 'operational', sentry: true },

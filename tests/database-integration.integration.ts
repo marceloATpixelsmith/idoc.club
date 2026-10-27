@@ -118,7 +118,7 @@ test('forward recovery repairs migrations skipped after an out-of-order producti
         `idoc.seminar_registrations.${columnName} must be restored by the forward recovery migration`);
     }
     const [{ count }] = await sql<{ count: number }[]>`select count(*)::int as count from idoc.__drizzle_migrations`;
-    assert.equal(count, 81, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0086, still apply once');
+    assert.equal(count, 82, 'the ledger records applied timestamps; skipped historical files are repaired by migration 0051 and later migrations, including migrations through 0087, still apply once');
   } finally {
     await rm(through0043, { force: true, recursive: true });
     await rm(through0046, { force: true, recursive: true });
@@ -356,7 +356,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0086_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0087_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];
@@ -386,6 +386,9 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   expectedSchema['idoc.cron_job_runs'] = currentSnapshot.tables['idoc.cron_job_runs'];
   // Migration 0085 added the member activity events the administrator Member timeline reads.
   expectedSchema['idoc.user_activity_events'] = currentSnapshot.tables['idoc.user_activity_events'];
+  // Migration 0087 added the email delivery log (one row per email handed to Brevo) and its webhook events.
+  expectedSchema['idoc.email_delivery_log'] = currentSnapshot.tables['idoc.email_delivery_log'];
+  expectedSchema['idoc.email_delivery_events'] = currentSnapshot.tables['idoc.email_delivery_events'];
 
   const tables = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables
