@@ -60,16 +60,19 @@ async function consumeEmailVerificationTransaction(token: string): Promise<Email
     )).limit(1);
     if (!record) return { status: 'invalid' };
     const now = new Date();
+    // Lock order is user, then token -- the same order suspendUserAccount, deleteOwnAccount and the bulk archive use when they retire the
+    // account's tokens -- so a redemption overlapping one of them waits instead of deadlocking (a deadlock would abort whichever
+    // transaction Postgres picked, possibly the suspension). The token row read above is not locked until it is claimed below.
+    // What counts is the account's state now, not when the token was issued. Only states that may legitimately verify an address are
+    // accepted: 'suspended' and 'deleted' are administrative or self-service decisions a link must never undo, and 'migrated_pending'
+    // must pass the migration activation checks, not be promoted by an email link.
+    const [owner] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).for('update');
+    const eligible = Boolean(owner) && VERIFIABLE_ACCOUNT_STATES.includes(owner.accountState);
     const [claimed] = await tx.update(emailVerificationTokens).set({ consumedAt: now }).where(and(
       eq(emailVerificationTokens.id, record.id), isNull(emailVerificationTokens.consumedAt),
     )).returning({ id: emailVerificationTokens.id });
-    if (!claimed) return { status: 'invalid' };
-    // The token was issued while the account was in some state; what counts is its state now. The row is locked so a suspension or
-    // deletion cannot land between this read and the write below. Only states that may legitimately verify an address are accepted:
-    // 'suspended' and 'deleted' are administrative or self-service decisions a link must never undo, and 'migrated_pending' must
-    // pass the migration activation checks, not be promoted by an email link. The token stays consumed either way, so the link is dead.
-    const [owner] = await tx.select({ accountState: users.accountState }).from(users).where(eq(users.id, record.userId)).for('update');
-    if (!owner || !VERIFIABLE_ACCOUNT_STATES.includes(owner.accountState)) return { status: 'invalid' };
+    // The token is consumed either way, so a refused link is dead and cannot be tried again once the account becomes eligible.
+    if (!claimed || !eligible) return { status: 'invalid' };
     const [existing] = await tx.select({ id: users.id }).from(users).where(eq(users.email, record.pendingEmail)).limit(1);
     if (existing && existing.id !== record.userId) return { status: 'invalid' };
     const [currentUser] = await tx.select({ email: users.email }).from(users).where(eq(users.id, record.userId)).limit(1);

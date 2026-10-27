@@ -197,6 +197,25 @@ for (const held of ['canceled', 'suspended', 'review_required'] as const) {
   });
 }
 
+// Pentest review (Strix on #713): a review_required hold must not be cleared by a renewal invoice either -- paid or failed.
+test('invoice.paid does not reactivate a review_required membership, and invoice.payment_failed does not move it into grace', async () => {
+  const profile = await billedProfile('cus_invoice_review_required');
+  await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)
+    values(${profile.id}, 'review_required', '2025-01-01', '2026-06-30', 'migration')`;
+  const paid = await postWebhook(fixtureEvent('invoice.paid', {
+    amount_paid: 8000, currency: 'eur', lines: { data: [{ pricing: { price_details: { product: 'prod_membership_fixture' }, type: 'price_details' } }] }, customer: 'cus_invoice_review_required', id: 'in_review_required_fixture',
+    status_transitions: { paid_at: Math.floor(Date.now() / 1000) },
+  }));
+  assert.equal(paid.status, 200);
+  assert.equal((await sql`select amount_cents from idoc.payments where external_payment_id='in_review_required_fixture'`)[0].amount_cents, 8000, 'the payment is still recorded');
+  const failed = await postWebhook(fixtureEvent('invoice.payment_failed', { customer: 'cus_invoice_review_required', id: 'in_review_required_failed', period_start: Math.floor(Date.now() / 1000) }));
+  assert.equal(failed.status, 200);
+  const [after] = await sql`select status, valid_until::text as valid_until from idoc.memberships where profile_id=${profile.id}`;
+  assert.equal(after.status, 'review_required');
+  assert.equal(after.valid_until, '2026-06-30');
+  assert.ok((await sql`select id from idoc.reconciliation_findings where kind='status_conflict' and profile_id=${profile.id}`).length >= 1);
+});
+
 test('invoice.payment_failed does not move a suspended membership into grace', async () => {
   const profile = await billedProfile('cus_invoice_failed_suspended');
   await sql`insert into idoc.memberships(profile_id, status, starts_on, valid_until, source)

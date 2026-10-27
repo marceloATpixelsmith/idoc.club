@@ -130,10 +130,10 @@ async function handleInvoicePaid(tx: Transaction, event: Stripe.Event, _stripe: 
   // flight at the moment of suspension/cancellation. The payment itself is still recorded above --
   // money genuinely changed hands and needs to stay reconcilable -- but entitlement is left exactly
   // as the member/administrator set it, and the conflict is surfaced for manual review instead.
-  if (membership?.status === 'suspended' || membership?.status === 'canceled') {
+  if (membership?.status === 'suspended' || membership?.status === 'canceled' || membership?.status === 'review_required') {
     await tx.insert(reconciliationFindings).values({ kind: 'status_conflict', profileId,
-      summary: 'Stripe reported a successful renewal payment for a membership that is currently suspended or canceled; entitlement was not restored automatically.',
-      details: { invoiceId: invoice.id, paymentId: inserted.id } });
+      summary: `Stripe reported a successful renewal payment for a membership that is currently ${membership.status.replace('_', ' ')}; entitlement was not restored automatically.`,
+      details: { invoiceId: invoice.id, membershipStatus: membership.status, paymentId: inserted.id } });
     return;
   }
   const validUntil = nextValidUntil({ currentValidUntil: membership?.validUntil ?? null, paidAt: paidAt.toISOString().slice(0, 10) });
@@ -159,7 +159,7 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   // means this is a later retry, not a new failure, and must be a no-op. A 'suspended' or 'canceled'
   // membership (administrator action, or self-service cancellation) must not be moved into grace either -- that
   // would imply access continues until grace ends, contradicting the suspension/cancellation.
-  if (!membership || membership.status === 'grace' || membership.status === 'suspended' || membership.status === 'canceled') return;
+  if (!membership || membership.status === 'grace' || membership.status === 'suspended' || membership.status === 'canceled' || membership.status === 'review_required') return;
   // Stripe's invoice period start is the authoritative scheduled-renewal date. The fallback is
   // retained only for legacy/test invoices that predate that field.
   const failedRenewalDate = invoice.period_start
