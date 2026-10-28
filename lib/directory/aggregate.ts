@@ -52,7 +52,7 @@ async function queryMemberConcentration(): Promise<ConcentrationArea[]> {
         nullif(p.country_code, '')
       ) as country_code
     ) c
-    where c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
+    where p.directory_visible and c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
       and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
     group by c.country_code
     having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
