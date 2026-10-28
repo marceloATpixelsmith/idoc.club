@@ -1,9 +1,12 @@
 import Link from 'next/link';
+import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
+import { getTablePreferences } from '@/lib/admin/table-preferences';
+import { formatTableDate } from '@/lib/format';
+import { getMembershipHealthReport, parseHealthRange } from '@/lib/membership/health-report';
+import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
 import { MembershipHealthFilters } from './membership-health-filters';
-import { getMembershipHealthReport, parseHealthRange, type RenewalCycle } from '@/lib/membership/health-report';
 
 type Tab = 'overview' | 'tracking' | 'issues' | 'notifications' | 'cohorts';
-type Params = { from?: string | string[]; to?: string | string[]; tab?: string | string[] };
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'tracking', label: 'Renewal Tracking' },
@@ -11,106 +14,172 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'notifications', label: 'Notification Performance' },
   { id: 'cohorts', label: 'Trends & Cohorts' },
 ];
-const date = (value: string | null) => value ? value.slice(0, 10) : '—';
-const single = (value?: string | string[]) => typeof value === 'string' ? value : undefined;
+const today = () => new Date().toISOString().slice(0, 10);
 const int = (value: number) => new Intl.NumberFormat('en').format(value);
-const percentage = (numerator: number, denominator: number) => denominator ? `${(numerator * 100 / denominator).toFixed(1)}%` : '—';
-function MemberLink({ cycle }: { cycle: RenewalCycle }) {
-  return <Link className="font-medium text-foreground underline-offset-2 hover:underline" href={`/admin/members?profileId=${cycle.profile_id}`}>{cycle.member || cycle.email}</Link>;
+const percentage = (num: number, den: number) => den ? `${(num * 100 / den).toFixed(1)}%` : '—';
+const isoTimestamp = (value: string | null) => value ? value.slice(0, 10) + 'T00:00:00.000Z' : undefined;
+function Metric({ label, value, note }: { label: string; value: number | string; note: string }) {
+  return <article className="rounded-lg border p-4"><h3 className="text-sm text-muted-foreground">{label}</h3><p className="mt-2 text-2xl font-semibold">{value}</p><p className="mt-2 text-xs text-muted-foreground">{note}</p></article>;
 }
-function Metric({ label, value, note }: { label: string; value: string | number; note: string }) {
-  return <article className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p><p className="mt-2 text-xs text-muted-foreground">{note}</p></article>;
-}
-function Table({ headings, children }: { headings: string[]; children: React.ReactNode }) {
-  return <div className="overflow-x-auto rounded-lg border"><table className="min-w-full text-left text-sm"><thead className="bg-muted/40"><tr>{headings.map((heading) => <th className="whitespace-nowrap px-3 py-3 font-medium" key={heading}>{heading}</th>)}</tr></thead><tbody className="divide-y divide-border">{children}</tbody></table></div>;
-}
-function Cell({ children }: { children: React.ReactNode }) { return <td className="px-3 py-3 align-top">{children}</td>; }
-function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-lg border px-4 py-8 text-sm text-muted-foreground">{children}</p>; }
+function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-lg border p-5 text-sm text-muted-foreground">{children}</p>; }
+function heading(value: string) { return <h2 className="text-xl font-semibold">{value}</h2>; }
 
-export default async function MembershipHealthPage({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function MembershipHealthPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const params = await searchParams;
-  const tab = TABS.find((item) => item.id === single(params.tab))?.id ?? 'overview';
-  const from = single(params.from);
-  const to = single(params.to);
-  let error: string | null = null;
-  let range: { from?: string; to?: string } = {};
-  try { range = parseHealthRange(from, to); }
-  catch (cause) { error = cause instanceof Error ? cause.message : 'Invalid date range'; }
-  // PERMISSION CHECK REMAINS SERVER-SIDE EVEN IF FILTERS ARE INVALID.
-  const report = await getMembershipHealthReport(error ? {} : range);
-  const cycles = report.cycles;
-  const due = cycles.filter((cycle) => cycle.expires_on <= new Date().toISOString().slice(0, 10));
+  const tab = TABS.find((value) => value.id === params.tab)?.id ?? 'overview';
+  const [savedRange, trackingPrefs, issuePrefs, noticePrefs, cohortPrefs] = await Promise.all([
+    getTablePreferences('membership_health_range'),
+    getTablePreferences('membership_health_tracking'),
+    getTablePreferences('membership_health_issues'),
+    getTablePreferences('membership_health_notifications'),
+    getTablePreferences('membership_health_cohorts'),
+  ]);
+  const range = parseHealthRange(
+    typeof savedRange?.from === 'string' ? savedRange.from : undefined,
+    typeof savedRange?.to === 'string' ? savedRange.to : undefined,
+  );
+  const [report, journeyConcerns] = await Promise.all([getMembershipHealthReport(range), getMemberJourneyConcerns()]);
+  const periods = report.cycles;
+  const due = periods.filter((cycle) => cycle.expires_on <= today());
   const paid = due.filter((cycle) => Number(cycle.payment_count) > 0);
   const attempted = due.filter((cycle) => Number(cycle.checkout_count) > 0);
-  const failed = cycles.filter((cycle) => Number(cycle.failed_checkout_count) > 0 || Number(cycle.notice_failure_count) > 0);
-  const imported = cycles.filter((cycle) => cycle.imported);
-  const current = new URLSearchParams();
-  if (range.from) current.set('from', range.from);
-  if (range.to) current.set('to', range.to);
-  const link = (target: Tab) => {
-    const qs = new URLSearchParams(current);
-    qs.set('tab', target);
-    return '/admin/membership-health?' + qs.toString();
-  };
-  const groups = new Map<string, { due: number; paid: number; attempted: number }>();
+  const failures = periods.filter((cycle) => Number(cycle.failed_checkout_count) > 0 || Number(cycle.notice_failure_count) > 0);
+  const renewalConcerns = journeyConcerns.filter((concern) => concern.kind.startsWith('renewal_'));
+  const imported = periods.filter((cycle) => cycle.imported);
+  const groups = new Map<string, { count: number; paid: number; attempted: number }>();
   for (const cycle of due) {
-    const month = cycle.expires_on.slice(0, 7);
-    const group = groups.get(month) ?? { due: 0, paid: 0, attempted: 0 };
-    group.due += 1;
+    const key = cycle.expires_on.slice(0, 7);
+    const group = groups.get(key) ?? { count: 0, paid: 0, attempted: 0 };
+    group.count += 1;
     if (Number(cycle.payment_count) > 0) group.paid += 1;
     if (Number(cycle.checkout_count) > 0) group.attempted += 1;
-    groups.set(month, group);
+    groups.set(key, group);
   }
+  const trackingRows: ReadOnlyRow[] = periods.slice(0, 2000).map((cycle) => ({
+    id: cycle.profile_id + ':' + cycle.expires_on,
+    member: cycle.member || cycle.email, link: `/admin/members?profileId=${cycle.profile_id}`,
+    email: cycle.email, expiration: isoTimestamp(cycle.expires_on), status: cycle.status,
+    imported: cycle.imported ? 'Legacy import' : 'New account', classification: cycle.classification,
+    notices: `${cycle.notice_sent} / ${cycle.notice_count}`, checkout: String(cycle.checkout_count),
+    checkoutFailures: String(cycle.failed_checkout_count), payments: String(cycle.payment_count),
+    lastPayment: isoTimestamp(cycle.last_payment), notificationFailures: String(cycle.notice_failure_count),
+  }));
+  const issueRows: ReadOnlyRow[] = [
+    ...report.findings.map((finding) => ({
+      id: 'finding:' + finding.id, detected: isoTimestamp(finding.created_at),
+      category: 'Stripe reconciliation', type: finding.kind.replaceAll('_', ' '),
+      member: finding.member, link: finding.profile_id ? `/admin/members?profileId=${finding.profile_id}` : undefined,
+      detail: finding.summary, status: 'Needs reconciliation',
+    })),
+    ...renewalConcerns.map((concern) => ({
+      id: 'journey:' + concern.kind + ':' + concern.userId, detected: isoTimestamp(concern.occurredAt.toISOString()),
+      category: 'Member journey', type: concern.kind.replaceAll('_', ' '),
+      member: concern.member || concern.email,
+      link: concern.profileId ? `/admin/members?profileId=${concern.profileId}` : undefined,
+      detail: concern.note, status: 'Follow-up needed',
+    })),
+    ...failures.slice(0, 2000).map((cycle) => ({
+      id: 'period:' + cycle.profile_id + ':' + cycle.expires_on,
+      detected: isoTimestamp(cycle.expires_on), category: 'Renewal period',
+      type: Number(cycle.failed_checkout_count) > 0 ? 'Checkout failed' : 'Notice send issue',
+      member: cycle.member || cycle.email, link: `/admin/members?profileId=${cycle.profile_id}`,
+      detail: `${cycle.failed_checkout_count} failed checkouts; ${cycle.notice_failure_count} notice errors`,
+      status: 'Investigate',
+    })),
+  ];
+  const noticeRows: ReadOnlyRow[] = report.notices.map((notice) => ({
+    id: String(notice.id), queued: isoTimestamp(notice.created_at),
+    member: notice.member || notice.email, link: `/admin/members?profileId=${notice.profile_id}&tab=notifications`,
+    email: notice.email, kind: notice.kind.replace('membership.', '').replaceAll('_', ' '),
+    sent: isoTimestamp(notice.sent_at), status: notice.status,
+    providerStatus: notice.provider_status ?? 'Unverified',
+    paidAfter: notice.paid_after ? 'Recorded payment afterward' : 'No recorded payment afterward',
+  }));
+  const cohortRows: ReadOnlyRow[] = [...groups.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([month, group]) => ({
+    id: month, month, due: String(group.count), attempted: String(group.attempted),
+    paid: String(group.paid), rate: percentage(group.paid, group.count),
+  }));
   return <main className="flex-1 space-y-6 px-5 py-8 lg:px-8">
-    <header>
-      <p className="eyebrow">Administration</p>
-      <h1 className="mt-2 font-display text-3xl text-gold">Membership Health</h1>
-      <p className="mt-3 max-w-4xl text-sm leading-relaxed text-muted-foreground">Investigate renewal notices, checkout attempts, recorded payments and unresolved Stripe reconciliation findings. A sent notification does not prove delivery, and a payment does not independently prove entitlement was extended.</p>
+    <header><p className="eyebrow">Administration</p><h1 className="mt-2 font-display text-3xl text-gold">Membership Health</h1>
+      <p className="mt-3 max-w-4xl text-sm leading-relaxed text-muted-foreground">Monitor renewal periods, notifications, checkout attempts, payments and operational concerns across members. Each signal is attributed to its recorded source; payment evidence is not itself proof of a completed entitlement change.</p>
     </header>
     <MembershipHealthFilters from={range.from} to={range.to} />
-    {error && <p role="alert" className="rounded-md border border-red-500 p-3 text-sm text-red-600">{error}</p>}
-    <nav aria-label="Membership Health sections" className="flex flex-wrap gap-2 border-b pb-3">{TABS.map((item) => <Link aria-current={tab === item.id ? 'page' : undefined} className={`rounded-md border px-3 py-2 text-sm ${tab === item.id ? 'border-gold text-gold' : 'border-border text-muted-foreground hover:text-foreground'}`} href={link(item.id)} key={item.id}>{item.label}</Link>)}</nav>
+    <nav aria-label="Membership Health sections" className="flex flex-wrap gap-2 border-b pb-3">{TABS.map((item) => <Link aria-current={tab === item.id ? 'page' : undefined} className={`rounded-md border px-3 py-2 text-sm ${tab === item.id ? 'border-gold text-gold' : 'border-border text-muted-foreground hover:text-foreground'}`} href={`/admin/membership-health?tab=${item.id}`} key={item.id}>{item.label}</Link>)}</nav>
     {tab === 'overview' && <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Renewal periods reached" value={int(due.length)} note="Expiration dates on or before today within selected range" />
-        <Metric label="Recorded payment in renewal window" value={int(paid.length)} note={percentage(paid.length, due.length) + ' of reached expiration periods; not verified renewal conversion'} />
-        <Metric label="Checkout attempted" value={int(attempted.length)} note={percentage(attempted.length, due.length) + ' of reached expiration periods'} />
-        <Metric label="Problems with evidence" value={int(failed.length + report.findings.length)} note="Failed checkout/notice signals plus current reconciliation findings; may overlap" />
-      </div>
-      <section className="space-y-3"><h2 className="text-xl font-semibold">Renewal lifecycle</h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Notices recorded" value={int(report.notices.length)} note="Most recent 2,000 in selected date range" />
-          <Metric label="Checkout sessions created" value={int(report.checkoutAttempts)} note="Includes unsuccessful and incomplete sessions" />
-          <Metric label="Completed checkouts" value={int(report.completedCheckouts)} note="Checkout state, not an entitlement guarantee" />
-          <Metric label="Payments recorded" value={int(report.payments)} note="Excludes imported legacy payment history" />
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Renewal periods due" value={int(due.length)} note="Observed historical expiration periods due by today" />
+        <Metric label="Periods with payment evidence" value={int(paid.length)} note={percentage(paid.length, due.length) + ' have payment in the observation window; not a verified renewal rate'} />
+        <Metric label="Periods with checkout attempts" value={int(attempted.length)} note={percentage(attempted.length, due.length) + ' have a checkout attempt'} />
+        <Metric label="Current operational concerns" value={int(report.findings.length + renewalConcerns.length)} note="Stripe findings plus renewal member-journey signals" />
       </section>
-      <section className="space-y-3"><h2 className="text-xl font-semibold">Attention required</h2>
-        {report.findings.length === 0 && failed.length === 0 ? <Empty>No recorded reconciliation findings or checkout/notice failure signals.</Empty> : <>
-          <p className="text-sm text-muted-foreground">{report.findings.length} current reconciliation findings and {failed.length} renewal periods with observed failure signals. Reconciliation findings are always visible regardless of the selected dates.</p>
-          <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href={link('issues')}>Investigate issues</Link>
-        </>}
+      {heading('Renewal lifecycle')}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Notices queued" value={int(report.notices.length)} note="Recent 2,000 records in selected period" />
+        <Metric label="Checkout sessions" value={int(report.checkoutAttempts)} note="Created in selected period" />
+        <Metric label="Completed checkout sessions" value={int(report.completedCheckouts)} note="Does not independently prove entitlement" />
+        <Metric label="Payments recorded" value={int(report.payments)} note="Non-legacy payments recorded in selected period" />
       </section>
+      {heading('Unresolved renewal concerns')}
+      {report.findings.length + renewalConcerns.length === 0 ? <Empty>No recorded renewal reconciliation or member-journey concerns.</Empty> : <>
+        <p className="text-sm text-muted-foreground">{report.findings.length} open Stripe findings and {renewalConcerns.length} active member-journey signals. Stripe findings are always included regardless of the date range.</p>
+        <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/membership-health?tab=issues">Investigate issues</Link>
+      </>}
     </>}
-    {tab === 'tracking' && <section className="space-y-3"><h2 className="text-xl font-semibold">Renewal Tracking</h2><p className="text-sm text-muted-foreground">One row per member and expiration date. Historical notices, attempts and payments are associated using a 45-day pre-expiration and 35-day post-expiration observation window. This is evidence correlation, not proof of causation. Up to 2,000 periods are displayed.</p>
-      {cycles.length ? <Table headings={['Member','Expiration','Status','Notices sent','Checkout attempts','Recorded payments','Last payment','Investigation']}>{cycles.map((cycle) => <tr key={cycle.profile_id + ':' + cycle.expires_on}><Cell><MemberLink cycle={cycle}/><p className="text-xs text-muted-foreground">{cycle.email}</p></Cell><Cell>{cycle.expires_on}</Cell><Cell>{cycle.status}</Cell><Cell>{cycle.notice_sent} / {cycle.notice_count}</Cell><Cell>{cycle.checkout_count}{Number(cycle.failed_checkout_count) ? <span className="text-red-500"> ({cycle.failed_checkout_count} failed)</span> : null}</Cell><Cell>{cycle.payment_count}</Cell><Cell>{date(cycle.last_payment)}</Cell><Cell><Link className="underline" href={`/admin/members?profileId=${cycle.profile_id}&tab=notifications`}>Member history</Link></Cell></tr>)}</Table> : <Empty>No renewal periods match the selected expiration date range.</Empty>}
+    {tab === 'tracking' && <section className="space-y-3">
+      {heading('Renewal Tracking')}
+      <p className="text-sm text-muted-foreground">Expiration periods are reconstructed from durable renewal-period evidence. Notices and payments are correlated within an observation window around expiration; they do not establish causation. Showing up to 2,000 records; headline and cohort totals use all matching periods.</p>
+      <AdminReadOnlyTable columns={[
+        { id: 'member', label: 'Member' }, { id: 'email', label: 'Email' },
+        { id: 'expiration', label: 'Expiration' }, { id: 'status', label: 'Status' },
+        { id: 'imported', label: 'Account origin' }, { id: 'classification', label: 'Classification' },
+        { id: 'notices', label: 'Notices sent / queued' }, { id: 'checkout', label: 'Checkout attempts' },
+        { id: 'checkoutFailures', label: 'Checkout failures' }, { id: 'payments', label: 'Payments' },
+        { id: 'lastPayment', label: 'Last payment' }, { id: 'notificationFailures', label: 'Notice errors' },
+      ]} dateColumn="expiration" empty="No renewal periods match this range." filterColumns={['imported', 'classification']} initialPreferences={trackingPrefs} preferenceKey="membership_health_tracking" rows={trackingRows} searchLabel="Search renewal tracking" statusColumn="status" />
     </section>}
-    {tab === 'issues' && <section className="space-y-4"><h2 className="text-xl font-semibold">Issues & Alerts</h2><p className="text-sm text-muted-foreground">Open reconciliation findings are not limited by the date filter. Resolve or ignore financial findings through the existing Stripe reconciliation workflow; historical failures below remain investigation signals rather than independent incidents.</p>
+    {tab === 'issues' && <section className="space-y-3">
+      {heading('Issues & Alerts')}
+      <p className="text-sm text-muted-foreground">Stripe reconciliation findings remain visible regardless of the reporting date range. Member journey flags and checkout/notice failure signals are diagnostic, not automatic payment-failure conclusions. Use the existing authorized and audited reconciliation actions to resolve a finding.</p>
       <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/reconciliation">Open Stripe reconciliation</Link>
-      {report.findings.length ? <Table headings={['Detected','Issue','Member','Detail']}>{report.findings.map((finding) => <tr key={finding.id}><Cell>{date(finding.created_at)}</Cell><Cell>{finding.kind.replaceAll('_',' ')}</Cell><Cell>{finding.profile_id ? <Link className="underline" href={`/admin/members?profileId=${finding.profile_id}`}>{finding.member}</Link> : finding.member}</Cell><Cell>{finding.summary}</Cell></tr>)}</Table> : <Empty>No current renewal-related reconciliation findings.</Empty>}
-      <h3 className="text-lg font-semibold">Checkout and notice failure signals in selected expiration range</h3>
-      {failed.length ? <Table headings={['Member','Expiration','Failed checkout sessions','Notice errors','Investigate']}>{failed.map((cycle) => <tr key={cycle.profile_id + ':' + cycle.expires_on}><Cell><MemberLink cycle={cycle}/></Cell><Cell>{cycle.expires_on}</Cell><Cell>{cycle.failed_checkout_count}</Cell><Cell>{cycle.notice_failure_count}</Cell><Cell><Link className="underline" href={`/admin/members?profileId=${cycle.profile_id}&tab=notifications`}>Open member history</Link></Cell></tr>)}</Table> : <Empty>No failed checkout or notice signals matched this expiration period range.</Empty>}
+      <AdminReadOnlyTable columns={[
+        { id: 'detected', label: 'Detected / associated date' }, { id: 'category', label: 'Category' },
+        { id: 'type', label: 'Issue type' }, { id: 'member', label: 'Member' },
+        { id: 'status', label: 'Status' }, { id: 'detail', label: 'Evidence / next action' },
+      ]} dateColumn="detected" empty="No recorded renewal-related concerns." filterColumns={['category', 'type']} initialPreferences={issuePrefs} preferenceKey="membership_health_issues" rows={issueRows} searchLabel="Search membership issues" statusColumn="status" />
     </section>}
-    {tab === 'notifications' && <section className="space-y-4"><h2 className="text-xl font-semibold">Notification Performance</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Notices queued" value={report.notices.length} note="Up to 2,000 notice records shown" /><Metric label="Provider delivered" value={report.notices.filter((notice) => notice.provider_status === 'delivered').length} note="Confirmed by Brevo webhook when available" /><Metric label="Pending" value={report.pendingNotices} note="Not yet sent and not dead-lettered" /><Metric label="Failed" value={report.bouncedNotices} note="Outbox dead-lettered; not the same as Brevo bounce" /></div>
-      <p className="text-sm text-muted-foreground">To verify Brevo's delivered/bounced/blocked status, use the existing Communications delivery report. The payment-after-notice column is temporal correlation only; it is not evidence the email caused the renewal. Provider status is from the stored Brevo webhook log; an unavailable status is shown as unverified.</p>
-      <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/communications">View Brevo delivery checks</Link>
-      {report.notices.length ? <Table headings={['Queued','Member','Notice','Outbox state','Brevo status','Paid afterward','History']}>{report.notices.map((notice) => <tr key={notice.id}><Cell>{date(notice.created_at)}</Cell><Cell>{notice.member}<p className="text-xs text-muted-foreground">{notice.email}</p></Cell><Cell>{notice.kind.replace('membership.','').replaceAll('_',' ')}</Cell><Cell>{notice.status}</Cell><Cell>{notice.provider_status ?? 'Unverified'}</Cell><Cell>{notice.paid_after ? 'Yes' : 'Not recorded'}</Cell><Cell><Link className="underline" href={`/admin/members?profileId=${notice.profile_id}&tab=notifications`}>Investigate</Link></Cell></tr>)}</Table> : <Empty>No renewal notices were created within the selected date range.</Empty>}
+    {tab === 'notifications' && <section className="space-y-3">
+      {heading('Notification Performance')}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Notices queued" value={int(report.notices.length)} note="Displayed rows are capped at 2,000" />
+        <Metric label="Brevo delivered" value={int(report.notices.filter((notice) => notice.provider_status === 'delivered').length)} note="Provider webhook confirmed delivery" />
+        <Metric label="Still pending" value={int(report.pendingNotices)} note="Outbox has not marked sent or dead-lettered" />
+        <Metric label="Send failures" value={int(report.bouncedNotices)} note="Dead-lettered outbox records, not Brevo bounces" />
+      </div>
+      <p className="text-sm text-muted-foreground">Brevo status is matched by the recorded message reference. Missing status is Unverified. A payment after notice is temporal correlation only, not proof the notice caused renewal.</p>
+      <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/communications">Open full Communications delivery investigation</Link>
+      <AdminReadOnlyTable columns={[
+        { id: 'queued', label: 'Queued' }, { id: 'member', label: 'Member' }, { id: 'email', label: 'Email' },
+        { id: 'kind', label: 'Notice type' }, { id: 'sent', label: 'Sent' },
+        { id: 'status', label: 'Outbox status' }, { id: 'providerStatus', label: 'Brevo status' },
+        { id: 'paidAfter', label: 'Payment afterward' },
+      ]} dateColumn="queued" empty="No notices were queued during this period." filterColumns={['kind', 'providerStatus']} initialPreferences={noticePrefs} preferenceKey="membership_health_notifications" rows={noticeRows} searchLabel="Search renewal notices" statusColumn="status" />
     </section>}
-    {tab === 'cohorts' && <section className="space-y-4"><h2 className="text-xl font-semibold">Trends & Cohorts</h2><p className="text-sm text-muted-foreground">Only expiration months that have passed are counted as due. Recorded payments in a renewal observation window are not a verified successful renewal rate. Recent months may be incomplete due to grace periods and pending payments.</p>
-      {groups.size ? <Table headings={['Expiration month','Renewal periods due','Checkout attempted','Payment recorded','Payment evidence rate']}>{[...groups.entries()].sort(([a],[b]) => b.localeCompare(a)).map(([month, group]) => <tr key={month}><Cell>{month}</Cell><Cell>{group.due}</Cell><Cell>{group.attempted}</Cell><Cell>{group.paid}</Cell><Cell>{percentage(group.paid, group.due)}</Cell></tr>)}</Table> : <Empty>No completed expiration months or due renewal periods in the date range.</Empty>}
-      <h3 className="text-lg font-semibold">Legacy-imported members</h3><div className="grid gap-4 sm:grid-cols-3"><Metric label="Imported expiration periods" value={imported.length} note="Within selected expiration range" /><Metric label="Imported with payment evidence" value={imported.filter((row) => Number(row.payment_count) > 0).length} note="Excludes legacy-import payment history" /><Metric label="Imported with checkout attempts" value={imported.filter((row) => Number(row.checkout_count) > 0).length} note="Potential activation or billing follow-up" /></div>
-      <p className="text-sm text-muted-foreground">Member classification is taken from each membership period, not the member's current classification. Geographic and renewal-mode segments can be added once period-specific historical attribution is confirmed.</p>
+    {tab === 'cohorts' && <section className="space-y-3">
+      {heading('Trends & Cohorts')}
+      <p className="text-sm text-muted-foreground">Renewal periods are grouped by expiration month, using recorded historical periods. A period is due only after its expiration date; recent groups can be incomplete during the grace period. Payment evidence is not a certified conversion rate.</p>
+      <AdminReadOnlyTable columns={[
+        { id: 'month', label: 'Expiration month' }, { id: 'due', label: 'Periods due' },
+        { id: 'attempted', label: 'Checkout attempted' }, { id: 'paid', label: 'Payment evidence' },
+        { id: 'rate', label: 'Payment evidence rate' },
+      ]} empty="No due renewal periods in this range." initialPreferences={cohortPrefs} preferenceKey="membership_health_cohorts" rows={cohortRows} searchLabel="Search renewal cohorts" />
+      {heading('Legacy member activation and renewal')}
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Metric label="Imported expiration periods" value={int(imported.length)} note="Durable periods in selected date range" />
+        <Metric label="Imported with payment evidence" value={int(imported.filter((row) => Number(row.payment_count) > 0).length)} note="Excludes imported legacy payment history" />
+        <Metric label="Imported with checkout attempts" value={int(imported.filter((row) => Number(row.checkout_count) > 0).length)} note="Not necessarily paid or renewed" />
+      </section>
+      <p className="text-sm text-muted-foreground">Classification is captured from the matching membership period when available; older inferred periods may be marked unknown rather than assigned a current classification. Historical visibility before renewal-period tracking is incomplete.</p>
     </section>}
-    <p className="text-xs text-muted-foreground">Read-only operational report. Historical row displays are limited to 2,000 per list to keep administration responsive; aggregate payment and checkout counts cover the selected period. No billing operations are performed here.</p>
+    <p className="text-xs text-muted-foreground">Operational monitoring is read-only. Tables limit rendered rows; aggregate period totals use the complete set. Review the Membership Health operations runbook before interpreting or acting on apparent discrepancies.</p>
   </main>;
 }
