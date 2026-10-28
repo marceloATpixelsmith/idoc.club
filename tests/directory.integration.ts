@@ -169,12 +169,16 @@ test('paid directory: text search matches first name, last name, the full name, 
   assert.deepEqual(await names('nobody-by-this-name'), []);
 });
 
-test('paid directory: only active, non-admin member accounts appear in directory results', async () => {
+test('directory and map: eligible administrators appear, but Super Admins and inactive accounts do not', async () => {
   const archived = await entitledMemberIn('DE', [judgeRole], { firstName: 'Archived', lastName: 'Member' });
   const suspended = await entitledMemberIn('ES', [veterinarianRole], { firstName: 'Suspended', lastName: 'Member' });
   const admin = await adminUser();
   const adminProfile = await createProfileIn(admin.id, 'IT', [judgeRole], { firstName: 'Admin', lastName: 'Member' });
   await createMembership(adminProfile.id, true);
+  const superAdmin = await createUser();
+  const superProfile = await createProfileIn(superAdmin.id, 'NL', [judgeRole], { firstName: 'Super', lastName: 'Member' });
+  await createMembership(superProfile.id, true);
+  await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${superAdmin.id},'super_admin',${superAdmin.id})`;
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
 
   await sql`update idoc.users set account_state='deleted' where id=${archived.user.id}`;
@@ -183,8 +187,13 @@ test('paid directory: only active, non-admin member accounts appear in directory
   assert.equal(archivedAccount.deleted_at, null);
 
   const listing = await asMember(searcher.id, () => listMemberDirectory());
-  assert.equal(listing.total, 1);
-  assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`), ['Grace Hopper']);
+  assert.equal(listing.total, 2);
+  assert.deepEqual(listing.rows.map((row) => `${row.firstName} ${row.lastName}`).sort(), ['Admin Member', 'Grace Hopper']);
+  const map = await getPublicMemberConcentration();
+  assert.ok(map.ok);
+  assert.equal(map.areas.find((area) => area.countryCode === 'IT')?.memberCount, 1);
+  assert.equal(map.areas.find((area) => area.countryCode === 'NL'), undefined);
+  assert.equal(map.areas.find((area) => area.countryCode === 'ES'), undefined);
 });
 
 test('paid directory: an imported member who has not activated their account is listed, with email and contact hidden unless they opted in', async () => {
