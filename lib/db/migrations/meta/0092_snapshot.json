@@ -2519,7 +2519,7 @@
               "expression": "last_seen_at",
               "isExpression": false,
               "asc": false,
-              "nulls": "first"
+              "nulls": "last"
             }
           ],
           "isUnique": false,
@@ -2540,7 +2540,7 @@
               "expression": "first_seen_at",
               "isExpression": false,
               "asc": false,
-              "nulls": "first"
+              "nulls": "last"
             }
           ],
           "isUnique": false,
