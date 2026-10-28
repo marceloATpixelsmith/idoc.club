@@ -67,7 +67,7 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
       boardTitle: formData.get('boardTitle'),
       isBoardMember: formData.get('isBoardMember') === '1',
     });
-    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, directoryVisible: formData.get('directoryVisibilityPresent') === '1' ? formData.get('directoryVisible') === '1' : undefined, reason });
+    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, directoryVisible: formData.get('directoryVisibilityPresent') === '1' ? formData.get('directoryHidden') !== '1' : undefined, reason });
     revalidateTag(MEMBER_DIRECTORY_CACHE_TAG);
     // An administrator can only switch marketing email off for a member; opting in is the member's own
     // consent (docs/19). The toggle is submitted only while the member is opted in, so an unchecked box
