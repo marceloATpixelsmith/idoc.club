@@ -13,7 +13,7 @@ export type RenewalCycle = {
 };
 export type RenewalNotice = {
   id: number; profile_id: number; member: string; email: string; kind: string;
-  created_at: string; sent_at: string | null; status: string; paid_after: boolean;
+  created_at: string; sent_at: string | null; status: string; paid_after: boolean; provider_status: string | null;
 };
 export type HealthFinding = {
   id: number; profile_id: number | null; member: string; kind: string;
@@ -104,12 +104,15 @@ export async function getMembershipHealthReport(range: HealthRange): Promise<Hea
         case when o.dead_lettered_at is not null then 'Failed'
           when o.sent_at is not null then 'Sent to provider'
           when o.last_error_code is not null then 'Retrying'
-          else 'Pending' end as status,
+          else 'Pending' end as status, delivery.status as provider_status,
         exists(select 1 from payments pay where pay.profile_id = p.id
           and pay.source <> 'legacy_import' and pay.paid_at >= o.created_at
           and pay.paid_at < o.created_at + interval '90 days') as paid_after
       from notification_outbox o
       join profiles p on p.id = o.profile_id join users u on u.id = p.user_id
+      left join lateral (select d.status from email_delivery_log d
+        where d.message_ref = o.kind || '-' || o.id::text
+        order by d.sent_at desc limit 1) delivery on true
       where o.kind = any(${NOTICE_KINDS}::text[])
         and o.created_at >= ${from}::date
         and o.created_at < (${to}::date + interval '1 day')
