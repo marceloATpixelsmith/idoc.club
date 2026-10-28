@@ -170,6 +170,14 @@ test('promotion workflow reports CI, reviews, merge, Vercel and production healt
   assert.match(workflow, /monitored-production-promotion\.mjs merge/);
   assert.match(workflow, /monitored-production-promotion\.mjs deploy/);
   assert.match(workflow, /monitored-production-promotion\.mjs health/);
+  const recovery = readFileSync('.github/workflows/auto-migrate-production.yml', 'utf8');
+  assert.match(recovery, /environment: idoc-db-production-maintenance/);
+  assert.match(recovery, /backup-idoc-r2\.sh/);
+  assert.match(recovery, /guard-pending-migrations\.mjs after/);
+  assert.match(recovery, /monitored-production-promotion\.mjs trigger/);
+  assert.match(recovery, /monitored-production-promotion\.mjs deploy/);
+  assert.match(recovery, /monitored-production-promotion\.mjs health/);
+  assert.doesNotMatch(recovery, /redeploy production manually/);
   assert.match(script, /reviewThreads\(first:100\)/);
   assert.match(script, /hold-merge/);
   assert.match(script, /Fast PR verification/);
