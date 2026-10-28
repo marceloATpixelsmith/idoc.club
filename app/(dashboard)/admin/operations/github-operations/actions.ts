@@ -52,7 +52,7 @@ export async function runOperationAction(
     if (stepUp.required) return { stepUpRequired: true };
 
     const active = (await listManualGithubOperationRuns()).some((run) =>
-      run.workflow === value && (run.status === 'queued' || run.status === 'in_progress'));
+      (run.workflow === value || (value === 'production-promotion' && run.workflow === 'production-recovery')) && (run.status === 'queued' || run.status === 'in_progress'));
     if (active) return { error: 'This GitHub workflow is already queued or running. Refresh the page after it finishes.' };
     if (!(await reserveRequest(actor.id, value))) {
       return { error: 'This operation was requested in the last two minutes. Refresh the page before trying again.' };
@@ -62,7 +62,11 @@ export async function runOperationAction(
     revalidatePath('/admin/operations/production-promotion');
     revalidatePath('/admin/operations/live-auth-tests');
     return {
-      success: value === 'production-promotion' ? 'Promotion monitoring requested. The GitHub workflow will verify CI/reviews, merge and check Vercel deployment and production health. Follow its status below.' : 'The operation was dispatched to the staging branch.',
+      success: value === 'production-promotion'
+        ? (promotionUrl === MANUAL_GITHUB_WORKFLOWS['production-recovery'].url
+          ? 'Production recovery requested. Staging is already included in main; the protected workflow requires approval, takes an offsite backup, applies pending production migrations, and then rebuilds production. Follow its status below.'
+          : 'Promotion monitoring requested. The GitHub workflow will verify CI/reviews, merge and check Vercel deployment and production health. Follow its status below.')
+        : 'The operation was dispatched to the staging branch.',
       workflowUrl: promotionUrl ?? MANUAL_GITHUB_WORKFLOWS[value].url,
     };
   } catch (error) {

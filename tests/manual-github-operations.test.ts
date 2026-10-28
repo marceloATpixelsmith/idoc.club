@@ -17,6 +17,7 @@ test('the approved promotion opens a protected staging-to-main PR, while live au
     const url = String(input);
     requests.push({ url, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? init.body : undefined });
     if (url.includes('/pulls?')) return new Response('[]', { status: 200 });
+    if (url.includes('/compare/main...staging')) return new Response(JSON.stringify({ ahead_by: 1 }), { status: 200 });
     if (url.endsWith('/pulls')) return new Response(JSON.stringify({ html_url: 'https://github.com/marceloATpixelsmith/idoc.club/pull/999' }), { status: 201 });
     if (url.endsWith('/pulls/999')) return new Response(JSON.stringify({ state: 'open', head: { ref: 'staging', sha: 'a'.repeat(40) }, base: { ref: 'main' } }), { status: 200 });
     return new Response(null, { status: 204 });
@@ -24,21 +25,23 @@ test('the approved promotion opens a protected staging-to-main PR, while live au
   try {
     assert.equal(isManualGithubWorkflow('staging-migrations'), false);
     assert.equal(isManualGithubWorkflow('production-promotion'), true);
+    assert.equal(isManualGithubWorkflow('production-recovery'), false);
     assert.equal(isManualGithubWorkflow('live-auth'), true);
     assert.equal(isManualGithubWorkflow('manual-promotion-0071'), false);
     const result = await dispatchManualGithubOperation('production-promotion');
     await dispatchManualGithubOperation('live-auth');
     assert.equal(result, 'https://github.com/marceloATpixelsmith/idoc.club/pull/999');
-    assert.equal(requests.length, 5);
+    assert.equal(requests.length, 6);
     assert.equal(requests[0].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/pulls?state=open&base=main&per_page=100');
-    assert.equal(requests[1].method, 'POST');
-    assert.equal(requests[1].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/pulls');
-    assert.deepEqual(JSON.parse(requests[1].body ?? '{}').head, 'staging');
-    assert.deepEqual(JSON.parse(requests[1].body ?? '{}').base, 'main');
-    assert.equal(requests[3].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/monitored-production-promotion.yml/dispatches');
-    assert.deepEqual(JSON.parse(requests[3].body ?? '{}'), { ref: 'main', inputs: { pr_number: '999', expected_head_sha: 'a'.repeat(40) } });
-    assert.equal(requests[4].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/live-auth-staging.yml/dispatches');
-    assert.deepEqual(JSON.parse(requests[4].body ?? '{}'), { ref: 'staging' });
+    assert.equal(requests[1].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/compare/main...staging');
+    assert.equal(requests[2].method, 'POST');
+    assert.equal(requests[2].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/pulls');
+    assert.deepEqual(JSON.parse(requests[2].body ?? '{}').head, 'staging');
+    assert.deepEqual(JSON.parse(requests[2].body ?? '{}').base, 'main');
+    assert.equal(requests[4].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/monitored-production-promotion.yml/dispatches');
+    assert.deepEqual(JSON.parse(requests[4].body ?? '{}'), { ref: 'main', inputs: { pr_number: '999', expected_head_sha: 'a'.repeat(40) } });
+    assert.equal(requests[5].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/live-auth-staging.yml/dispatches');
+    assert.deepEqual(JSON.parse(requests[5].body ?? '{}'), { ref: 'staging' });
   } finally {
     globalThis.fetch = oldFetch;
     if (oldToken === undefined) delete process.env.GITHUB_BACKUP_TOOL_TOKEN;
@@ -69,6 +72,33 @@ test('an existing staging-to-main promotion PR is reused', async () => {
   }
 });
 
+test('an already merged staging release dispatches approved backup-first production recovery, never an empty PR', async () => {
+  const oldToken = process.env.GITHUB_BACKUP_TOOL_TOKEN;
+  const oldFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body?: string }> = [];
+  process.env.GITHUB_BACKUP_TOOL_TOKEN = 'test-github-token';
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, body: typeof init?.body === 'string' ? init.body : undefined });
+    if (url.includes('/pulls?')) return new Response('[]', { status: 200 });
+    if (url.includes('/compare/main...staging')) return Response.json({ ahead_by: 0, behind_by: 1 });
+    if (url.endsWith('/auto-migrate-production.yml/dispatches')) return new Response(null, { status: 204 });
+    throw new Error('Unexpected API request: ' + url);
+  }) as typeof fetch;
+  try {
+    const result = await dispatchManualGithubOperation('production-promotion');
+    assert.equal(result, 'https://github.com/marceloATpixelsmith/idoc.club/actions/workflows/auto-migrate-production.yml');
+    assert.equal(calls.length, 3);
+    assert.equal(calls[2].url, 'https://api.github.com/repos/marceloATpixelsmith/idoc.club/actions/workflows/auto-migrate-production.yml/dispatches');
+    assert.deepEqual(JSON.parse(calls[2].body ?? '{}'), { ref: 'main' });
+    assert.ok(calls.every((call) => !call.url.endsWith('/pulls')));
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldToken === undefined) delete process.env.GITHUB_BACKUP_TOOL_TOKEN;
+    else process.env.GITHUB_BACKUP_TOOL_TOKEN = oldToken;
+  }
+});
+
 test('recent runs expose only safe status and run-link fields', async () => {
   const oldToken = process.env.GITHUB_BACKUP_TOOL_TOKEN;
   const oldFetch = globalThis.fetch;
@@ -87,7 +117,7 @@ test('recent runs expose only safe status and run-link fields', async () => {
 
   try {
     const runs = await listManualGithubOperationRuns();
-    assert.equal(runs.length, 2);
+    assert.equal(runs.length, 3);
     assert.equal(runs.find((run) => run.workflow === 'production-promotion')?.steps?.[0]?.conclusion, 'success');
     assert.equal(runs[0].status, 'failure');
     assert.equal(runs[0].event, 'workflow_dispatch');
@@ -140,6 +170,14 @@ test('promotion workflow reports CI, reviews, merge, Vercel and production healt
   assert.match(workflow, /monitored-production-promotion\.mjs merge/);
   assert.match(workflow, /monitored-production-promotion\.mjs deploy/);
   assert.match(workflow, /monitored-production-promotion\.mjs health/);
+  const recovery = readFileSync('.github/workflows/auto-migrate-production.yml', 'utf8');
+  assert.match(recovery, /environment: idoc-db-production-maintenance/);
+  assert.match(recovery, /backup-idoc-r2\.sh/);
+  assert.match(recovery, /guard-pending-migrations\.mjs after/);
+  assert.match(recovery, /monitored-production-promotion\.mjs trigger/);
+  assert.match(recovery, /monitored-production-promotion\.mjs deploy/);
+  assert.match(recovery, /monitored-production-promotion\.mjs health/);
+  assert.doesNotMatch(recovery, /redeploy production manually/);
   assert.match(script, /reviewThreads\(first:100\)/);
   assert.match(script, /hold-merge/);
   assert.match(script, /Fast PR verification/);

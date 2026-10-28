@@ -12,14 +12,14 @@ export default async function ProductionPromotionPage() {
   try { requireSuperAdmin(actor); } catch (error) { if (error instanceof AuthorizationError) notFound(); throw error; }
   let runs: Awaited<ReturnType<typeof listManualGithubOperationRuns>> = [];
   let error: string | null = null;
-  try { runs = (await listManualGithubOperationRuns()).filter(run => run.workflow === 'production-promotion'); }
+  try { runs = (await listManualGithubOperationRuns()).filter(run => (run.workflow === 'production-promotion' || run.workflow === 'production-recovery')); }
   catch { error = 'Could not load GitHub promotion runs.'; }
 
   return <main className="space-y-6 px-5 py-8 lg:px-8">
     <header className="space-y-2">
       <p className="eyebrow">Super Admin Operations</p>
       <h1 className="text-3xl font-semibold text-gold">Promote Staging To Production</h1>
-      <p className="max-w-3xl text-muted-foreground">Runs the protected staging-to-main promotion, verifies CI and reviews, merges only when allowed, and checks Vercel production deployment and health. Every launch is audited and requires fresh verification.</p>
+      <p className="max-w-3xl text-muted-foreground">Runs the protected staging-to-main promotion. If the code was already merged into main without completing the release, starts the protected backup-first production migration and rebuild recovery instead of creating an empty PR. Both paths require GitHub environment approval.</p>
     </header>
     <section className="space-y-3 rounded-lg border border-border bg-surface/40 p-5">
       <div className="flex items-center gap-2"><GitBranch className="size-5 text-gold"/><h2 className="text-lg font-semibold">Start Promotion</h2></div>
