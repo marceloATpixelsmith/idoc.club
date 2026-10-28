@@ -28,7 +28,8 @@ function heading(value: string) { return <h2 className="text-xl font-semibold">{
 export default async function MembershipHealthPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[]; caseId?: string | string[] }> }) {
   const params = await searchParams;
   const tab = TABS.find((value) => value.id === params.tab)?.id ?? 'overview';
-  const [savedRange, trackingPrefs, issuePrefs, noticePrefs, cohortPrefs] = await Promise.all([
+  const [savedRange, casePrefs, trackingPrefs, issuePrefs, noticePrefs, cohortPrefs] = await Promise.all([
+    getTablePreferences('membership_health_cases'),
     getTablePreferences('membership_health_range'),
     getTablePreferences('membership_health_tracking'),
     getTablePreferences('membership_health_issues'),
@@ -157,7 +158,7 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
         { id: 'status', label: 'Status' }, { id: 'type', label: 'Issue type' },
         { id: 'owner', label: 'Assigned to' }, { id: 'detected', label: 'First seen' },
         { id: 'lastSeen', label: 'Last seen' },
-      ]} empty="No saved investigation cases." filterColumns={['severity', 'type']} rows={caseRows} searchLabel="Search investigation cases" statusColumn="status" />
+      ]} empty="No saved investigation cases." filterColumns={['severity', 'type']} rows={caseRows} initialPreferences={casePrefs} preferenceKey="membership_health_cases" searchLabel="Search investigation cases" statusColumn="status" />
       <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/reconciliation">Open Stripe reconciliation</Link>
       <AdminReadOnlyTable columns={[
         { id: 'detected', label: 'Detected / associated date' }, { id: 'category', label: 'Category' },
