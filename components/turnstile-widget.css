@@ -1,18 +1,25 @@
-/* Containment for the Turnstile widget itself -- travels with the component so every caller
- * (canonical auth pages, the public contact form, or any future usage) gets identical layout
- * behavior without depending on a page-specific stylesheet being loaded. */
-
+/*//KEEP CLOUDFLARE'S CHALLENGE UNCLIPPED AND REMOVE APPLICATION-OWNED FRAMING. */
 .idoc-auth-turnstile {
   width: 100%;
   min-width: 0;
   min-height: 65px;
-  overflow: hidden;
-  border-radius: 10px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
+/*//ONLY STYLE THE OUTER IFRAME ELEMENT; NEVER ATTEMPT TO ALTER THE CROSS-ORIGIN CHALLENGE. */
 .idoc-auth-turnstile > div,
 .idoc-auth-turnstile iframe {
   max-width: 100% !important;
+}
+
+.idoc-auth-turnstile iframe {
+  display: block;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .idoc-auth-turnstile__error {
@@ -22,9 +29,7 @@
   background: oklch(0.6 0.21 25 / 16%);
   font-size: 14px;
   line-height: 1.5;
-  /* --auth-error-color (brighter, tuned for the dark auth-shell background) is only defined
-   * within .idoc-auth-shell; a caller outside that scope (e.g. the contact page) falls back to
-   * the global --destructive token. */
+  /*//USE THE AUTH-SHELL ERROR COLOR WHEN AVAILABLE. */
   color: var(--auth-error-color, var(--destructive));
 }
 
