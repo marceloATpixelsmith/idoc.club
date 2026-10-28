@@ -76,6 +76,13 @@ test('the paid member directory rate-limits searches per account and per origin 
   assert.match(rateLimitSource, /takeBucket\(purpose, allEmailsMarker, originHash, windowStartedAt, originMax\)/);
 });
 
+test('directory and public map include administrators but exclude Super Admins', () => {
+  assert.match(memberDirectorySource, /ar\.role = 'super_admin'/);
+  assert.doesNotMatch(memberDirectorySource, /ar\.role in \('administrator', 'super_admin'\)/);
+  assert.match(aggregateSource, /ar\.role = 'super_admin'/);
+  assert.match(aggregateSource, /u\.account_state in \('active', 'migrated_pending'\)/);
+});
+
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.id "profileId"'), memberDirectorySource.indexOf('${from} where ${where} order'));
   const liveSelect = memberDirectorySource.slice(memberDirectorySource.indexOf('async function liveDirectoryDetails'), memberDirectorySource.indexOf('const cachedDirectoryQuery'));
@@ -85,7 +92,7 @@ test('the paid member directory returns email only for the re-authorized member 
   assert.match(select, /null::text email/);
   assert.match(memberDirectorySource, /where sp\.directory_email_opt_in and coalesce\(su\.email_display, su\.email\) ilike/);
   assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state in \('active', 'migrated_pending'\)/);
-  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
+  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role = 'super_admin'\)/);
   assert.doesNotMatch(select, /address|postal_code|userId/i);
   // The internal profile id exists only to join the live check and is stripped from every returned row.
   assert.match(memberDirectorySource, /rows\.flatMap\(\(\{ profileId, \.\.\.row \}\)/);
