@@ -198,6 +198,29 @@ test('directory and map: eligible administrators appear, but Super Admins and in
   assert.equal(map.areas.find((area) => area.countryCode === 'ES'), undefined);
 });
 
+test('admin-controlled opt-out removes a profile from the directory and public country counts', async () => {
+  const admin = await adminUser();
+  const profile = await createProfileIn(admin.id, 'IT', [veterinarianRole], { firstName: 'Hidden', lastName: 'Admin' });
+  await createMembership(profile.id, true);
+  const { user: searcher } = await entitledMemberIn('FR', [veterinarianRole], { firstName: 'Visible', lastName: 'Searcher' });
+  const first = await asMember(searcher.id, () => listMemberDirectory({ q: 'Hidden Admin' }));
+  assert.equal(first.rows.length, 1);
+  const publicBefore = await getPublicMemberConcentration();
+  assert.ok(publicBefore.ok);
+  assert.equal(publicBefore.areas.find((area) => area.countryCode === 'IT')?.memberCount, 1);
+
+  await sql`update idoc.profiles set directory_visible = false where id = ${profile.id}`;
+  const hidden = await asMember(searcher.id, () => listMemberDirectory({ q: 'Hidden Admin' }));
+  assert.equal(hidden.rows.length, 0);
+  const publicAfter = await getPublicMemberConcentration();
+  assert.ok(publicAfter.ok);
+  assert.equal(publicAfter.areas.find((area) => area.countryCode === 'IT'), undefined);
+
+  await sql`update idoc.profiles set directory_visible = true where id = ${profile.id}`;
+  const restored = await asMember(searcher.id, () => listMemberDirectory({ q: 'Hidden Admin' }));
+  assert.equal(restored.rows.length, 1);
+});
+
 test('paid directory: an imported member who has not activated their account is listed, with email and contact hidden unless they opted in', async () => {
   const { user: imported } = await entitledMemberIn('DE', [judgeRole], { firstName: 'Imported', lastName: 'Member' });
   await sql`update idoc.users set account_state='migrated_pending' where id=${imported.id}`;
