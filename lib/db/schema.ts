@@ -362,6 +362,18 @@ export const memberships = idocSchema.table('memberships', {
   index('memberships_profile_latest_idx').on(table.profileId, table.validUntil.desc().nullsFirst(), table.id.desc().nullsFirst()),
 ]);
 
+/** Durable expiration cohorts: a renewal mutates memberships.valid_until in place,
+ * so a trigger records both the old and new periods instead of losing history. */
+export const membershipRenewalPeriods = idocSchema.table('membership_renewal_periods', {
+  profileId: integer('profile_id').notNull().references(() => profiles.id),
+  expiresOn: date('expires_on').notNull(),
+  firstObservedAt: timestamp('first_observed_at', { withTimezone: true }).notNull().defaultNow(),
+  evidenceSource: varchar('evidence_source', { length: 40 }).notNull().default('membership'),
+}, (table) => [
+  primaryKey({ columns: [table.profileId, table.expiresOn] }),
+  index('membership_renewal_periods_expiration_idx').on(table.expiresOn, table.profileId),
+]);
+
 export const profileChangeHistory = idocSchema.table('profile_change_history', {
   id: serial('id').primaryKey(),
   profileId: integer('profile_id').notNull().references(() => profiles.id),
