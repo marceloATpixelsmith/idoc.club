@@ -61,6 +61,14 @@ async function realUser(accountState: 'active' | 'deleted' | 'suspended' = 'acti
   return (await db.select().from(users).where(eq(users.id, fixture.id)).limit(1))[0];
 }
 
+
+async function seedMemberSecurityCode(user: { id: number; email: string }, purpose: 'member_password_change' | 'member_session_revoke') {
+  const code = '654321';
+  await sql`insert into idoc.email_otp_codes(user_id,email,purpose,code_hash,expires_at)
+    values(${user.id},${user.email},${purpose},${createHash('sha256').update(code).digest('hex')},now()+interval '10 minutes')`;
+  return code;
+}
+
 function totp(secret: string, nowMs = Date.now()) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   let bits = 0; let value = 0; const bytes: number[] = [];
@@ -201,11 +209,14 @@ test('AUTH-PASSWORD-005: an ordinary member (no configured MFA factor) changes p
   });
 
   const csrf_token = csrfTokenFrom(cookies);
+  const memberSecurityCode = await seedMemberSecurityCode(user, 'member_password_change');
   await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, async () => {
     await redirected(() => updatePassword({}, form({
-      confirmPassword: 'A New Correct Battery 77!', csrf_token, currentPassword: password, newPassword: 'A New Correct Battery 77!',
+      confirmPassword: 'A New Correct Battery 77!', csrf_token, currentPassword: password, newPassword: 'A New Correct Battery 77!', memberSecurityCode,
     })));
   }));
+  assert.equal((await sql`select count(*)::int count from idoc.email_otp_codes where user_id=${user.id}
+    and purpose='member_password_change' and consumed_at is not null`)[0].count, 1, 'security code is consumed');
 
   const [row] = await sql`select password_hash, session_version from idoc.users where id=${user.id}`;
   assert.notEqual(row.password_hash, user.passwordHash);
@@ -437,14 +448,18 @@ test('AUTH-STORAGE-002: logOutSession revokes only a session the authenticated c
   // Adversarial: the owner's authenticated action cannot revoke the bystander's session id, even
   // though it is a syntactically valid session id the caller can simply supply as form input.
   const ownerCsrfToken = csrfTokenFrom(ownerCookies);
-  await withTestRequestCookies(ownerCookies, () => withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () =>
+  const unauthorized = await withTestRequestCookies(ownerCookies, () => withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () =>
     logOutSession({}, form({ csrf_token: ownerCsrfToken, sessionId: bystanderSessionId }))));
+  assert.deepEqual(unauthorized, { error: 'That session is no longer available.' });
+  assert.equal((await sql`select count(*)::int count from idoc.email_otp_codes where user_id=${owner.id}
+    and purpose='member_session_revoke'`)[0].count, 0, 'invalid target cannot trigger a security code');
   assert.equal((await sql`select revoked_at from idoc.auth_sessions where session_id=${bystanderSessionId}`)[0].revoked_at, null);
   const auditCountBeforeSuccess = (await sql`select count(*)::int count from idoc.audit_log where actor_id=${owner.id} and action='security.session.logged_out'`)[0].count;
 
   // Positive: the same action, given a session id the caller actually owns, succeeds.
+  const memberSecurityCode = await seedMemberSecurityCode(owner, 'member_session_revoke');
   const result = await withTestRequestCookies(ownerCookies, () => withTestMembershipBoundary({ actor: { id: owner.id, roles: [] } }, () =>
-    logOutSession({}, form({ csrf_token: ownerCsrfToken, sessionId: targetSessionId }))));
+    logOutSession({}, form({ csrf_token: ownerCsrfToken, sessionId: targetSessionId, memberSecurityCode }))));
   assert.deepEqual(result, { success: 'That session has been logged out.' });
   assert.ok((await sql`select revoked_at from idoc.auth_sessions where session_id=${targetSessionId}`)[0].revoked_at);
   const auditCountAfterSuccess = (await sql`select count(*)::int count from idoc.audit_log where actor_id=${owner.id} and action='security.session.logged_out'`)[0].count;
@@ -503,8 +518,10 @@ for (const operation of ['change', 'create'] as const) {
         values(${user.id},${user.email},'google_disconnect_verification',${createHash('sha256').update(code).digest('hex')},now()+interval '10 minutes')`;
     }
     process.env.DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING = 'true';
+    const memberSecurityCode = operation === 'change'
+      ? await seedMemberSecurityCode(user, 'member_password_change') : undefined;
     const fields = { csrf_token: csrfTokenFrom(cookies), newPassword: 'Another Correct Battery 88!',
-      confirmPassword: 'Another Correct Battery 88!', currentPassword: password, otpCode: code };
+      confirmPassword: 'Another Correct Battery 88!', currentPassword: password, otpCode: code, memberSecurityCode };
     await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
       redirected(() => operation === 'change' ? updatePassword({}, form(fields)) : createPasswordAndDisconnectGoogle({}, form(fields)))));
     const [saved] = await sql`select session_version from idoc.users where id=${user.id}`;
