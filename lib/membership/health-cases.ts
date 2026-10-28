@@ -44,7 +44,7 @@ export async function scanMembershipHealthCases(now = new Date()) {
         and d.sent_at >= ${since}::timestamptz
       union all
       select 'stripe:' || f.kind || ':' || coalesce(f.external_subscription_id, f.external_customer_id, f.profile_id::text, f.id::text),
-        f.profile_id, f.kind, 
+        f.profile_id, f.kind,
         case when f.kind in ('status_conflict','orphaned_subscription') then 'critical' else 'high' end,
         f.summary, jsonb_build_object('findingId', f.id, 'kind', f.kind)
       from reconciliation_findings f
