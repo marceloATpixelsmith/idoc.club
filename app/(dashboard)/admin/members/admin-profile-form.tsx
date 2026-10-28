@@ -117,11 +117,11 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
         </CardHeader>
         <CardContent>
           <FormToggle
-            defaultChecked={member.profile.directoryVisible !== false}
-            description="Administrator-only setting. Uncheck to hide this member from both the member directory listing and the public map's country counts. Super Admins are always excluded."
-            id="directoryVisible"
-            label="Show this member in the directory and map"
-            name="directoryVisible"
+            defaultChecked={member.profile.directoryVisible === false}
+            description="Administrator-only. Checking this box hides the member from both the directory listing and public map country counts. Super Admins are always excluded."
+            id="directoryHidden"
+            label="Keep this member off the directory completely"
+            name="directoryHidden"
             value="1"
           />
           <input name="directoryVisibilityPresent" type="hidden" value="1" />
