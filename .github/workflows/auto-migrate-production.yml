@@ -6,15 +6,8 @@ name: Auto-migrate Production Schema
 # approval, takes a verified offsite backup first, refuses unless idoc_staging is already at the newest
 # committed migration, and verifies the ledger afterwards. This file itself is deliberately NOT in the
 # trigger paths, so adding or editing it never migrates Production.
+# BREAK-GLASS MANUAL RECOVERY ONLY. NORMAL RELEASES USE monitored-production-promotion.yml.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - lib/db/migrations/**
-      - scripts/migrate-selected-schema.ts
-      - scripts/schema-migration-sql.mjs
-      - scripts/guard-pending-migrations.mjs
   workflow_dispatch:
 
 permissions:
@@ -22,7 +15,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: pending-migrations-maintenance
+  group: idoc-production-release
   cancel-in-progress: false
 
 jobs:
