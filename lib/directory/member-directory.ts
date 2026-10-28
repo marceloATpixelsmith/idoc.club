@@ -97,7 +97,7 @@ const federationExpression = sql`coalesce(roles.federation, nullif(p.country_cod
 
 /** Whether a member's current membership lists them in the directory at all. Shared by the
  * (cacheable) listing query and the live per-page check, so both always apply the same rule. */
-const eligibleCondition = sql`m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`;
+const eligibleCondition = sql`p.directory_visible and m.status <> 'archived' and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))`;
 
 function queryParts(raw: MemberDirectoryFilters) {
   const filters = normalizeDirectoryFilters(raw);
