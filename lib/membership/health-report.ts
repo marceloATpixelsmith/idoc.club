@@ -49,11 +49,16 @@ export async function getMembershipHealthReport(range: HealthRange): Promise<Hea
   const [cycles, notices, findings, checkoutTotals, paymentTotals, noticeTotals] = await Promise.all([
     client<RenewalCycle[]>`
       with cycles as (
-        select distinct on (m.profile_id, m.valid_until)
-          m.profile_id, m.valid_until, m.status, m.membership_type
-        from memberships m
-        where m.valid_until between ${from}::date and ${to}::date
-        order by m.profile_id, m.valid_until, m.id desc
+        select e.profile_id, e.expires_on as valid_until,
+          coalesce(m.status, 'historical') as status,
+          coalesce(m.membership_type, 'unknown') as membership_type
+        from membership_renewal_periods e
+        left join lateral (
+          select m.status, m.membership_type
+          from memberships m where m.profile_id = e.profile_id and m.valid_until = e.expires_on
+          order by m.id desc limit 1
+        ) m on true
+        where e.expires_on between ${from}::date and ${to}::date
       )
       select c.profile_id, trim(concat(p.first_name, ' ', p.last_name)) as member,
         u.email, c.valid_until::text as expires_on, c.status,
@@ -96,7 +101,6 @@ export async function getMembershipHealthReport(range: HealthRange): Promise<Hea
       from cycles c join profiles p on p.id = c.profile_id
       join users u on u.id = p.user_id
       order by c.valid_until desc, c.profile_id
-      limit 2000
     `,
     client<RenewalNotice[]>`
       select o.id, p.id as profile_id, trim(concat(p.first_name, ' ', p.last_name)) as member,
