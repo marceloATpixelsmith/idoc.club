@@ -4,6 +4,13 @@ on:
     branches: [main, staging]
     paths:
       - '.github/workflows/auth-security-verification.yml'
+      - '.github/workflows/monitored-production-promotion.yml'
+      - '.github/workflows/auto-migrate-production.yml'
+      - '.github/workflows/manual-apply-migrations.yml'
+      - '.github/workflows/manual-promotion-0071.yml'
+      - 'scripts/monitored-production-promotion.mjs'
+      - 'scripts/assert-deployment-schema-ready.mjs'
+      - 'vercel.json'
       - 'app/(login)/**'
       - 'app/api/auth/**'
       - 'app/(dashboard)/dashboard/security/**'
