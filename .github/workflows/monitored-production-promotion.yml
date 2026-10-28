@@ -1,5 +1,7 @@
 name: Monitored staging to production promotion
 
+# SINGLE CONTROLLED RELEASE: VERIFY -> MERGE -> BACKUP -> MIGRATE -> VERIFY -> DEPLOY -> HEALTH.
+# DO NOT ALLOW GIT PUSHES TO DEPLOY MAIN BEFORE THE PROTECTED DATABASE GATE FINISHES.
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +15,7 @@ on:
         type: string
 
 concurrency:
-  group: monitored-production-promotion
+  group: idoc-production-release
   cancel-in-progress: false
 
 permissions:
@@ -26,12 +28,27 @@ permissions:
 
 jobs:
   promote:
-    name: Verify, merge, deploy and health-check
+    name: Verify, merge, migrate, deploy and health-check
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    environment: production-promotion
+    # ONE EXPLICIT PROTECTED APPROVAL COVERS THE ENTIRE RELEASE, INCLUDING PRODUCTION MIGRATIONS.
+    environment: idoc-db-production-maintenance
     steps:
+      - name: Verify the Production environment requires a named reviewer and disables administrator bypass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A sole owner must be able to approve their own run, so self-review prevention is not required; a named
+          # reviewer's explicit approval and disabled administrator bypass still are.
+          configuration="$(gh api "repos/${GITHUB_REPOSITORY}/environments/idoc-db-production-maintenance")"
+          if ! jq -e '.can_admins_bypass == false and (.protection_rules | any(.type == "required_reviewers" and (.reviewers | length > 0)))' <<<"$configuration" >/dev/null; then
+            echo "Observed environment protection (no secrets):"
+            jq -c '{can_admins_bypass, rules: [(.protection_rules // [])[] | {type, prevent_self_review, reviewers: ((.reviewers // []) | length)}]}' <<<"$configuration"
+            echo "::error::Production environment must require at least one reviewer and disable administrator bypass."
+            exit 1
+          fi
       - name: Check out protected main workflow code
         uses: actions/checkout@v4
         with:
@@ -53,16 +70,75 @@ jobs:
           PROMOTION_PR_NUMBER: ${{ inputs.pr_number }}
           PROMOTION_EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
         run: node scripts/monitored-production-promotion.mjs merge
+      - name: Check out the exact merged production commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ steps.merge.outputs.merge_sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install PostgreSQL 17 backup utilities
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17 gnupg
+          aws --version
+      - name: Mandatory IDOC offsite pre-migration backup
+        id: backup
+        env:
+          DATABASE_BACKUP_URL: ${{ secrets.IDOC_BACKUP_DATABASE_URL }}
+          IDOC_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.IDOC_BACKUP_ENCRYPTION_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.IDOC_R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.IDOC_R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IDOC_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IDOC_R2_SECRET_ACCESS_KEY }}
+          BACKUP_KIND: pre-migration
+          PROMOTION_TARGET_SCHEMA: idoc_production
+        run: bash scripts/backup-idoc-r2.sh
+      - name: Guard - bind to the backed-up server, require the ledger at 0070 or later, and require staging at the newest migration
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          TARGET_SCHEMA: idoc_production
+          IDOC_BACKUP_SERVER_FINGERPRINT: ${{ steps.backup.outputs.server_fingerprint }}
+        run: node scripts/guard-pending-migrations.mjs before
+      - name: Apply every pending committed migration to idoc_production
+        env:
+          POSTGRES_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          DB_SCHEMA: idoc_production
+        run: pnpm db:migrate
+      - name: Verify the ledger reached the newest committed migration
+        env:
+          IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
+          TARGET_SCHEMA: idoc_production
+        run: node scripts/guard-pending-migrations.mjs after
+      - name: Trigger production deploy only after schema verification succeeds
+        id: trigger
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+          DEPLOY_HOOK: ${{ secrets.IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL }}
+        run: node scripts/monitored-production-promotion.mjs trigger
       - name: Verify Vercel production deployment of exact merge commit
         env:
           GH_TOKEN: ${{ github.token }}
           PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+          PROMOTION_TRIGGERED_AT: ${{ steps.trigger.outputs.triggered_at }}
         run: node scripts/monitored-production-promotion.mjs deploy
       - name: Verify production health
         env:
           GH_TOKEN: ${{ github.token }}
           PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
-          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL || 'https://idoc.club/api/health' }}
         run: node scripts/monitored-production-promotion.mjs health
       - name: Write final result
         if: always()
