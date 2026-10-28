@@ -3,6 +3,8 @@ import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-r
 import { getTablePreferences } from '@/lib/admin/table-preferences';
 import { getMembershipHealthReport, parseHealthRange } from '@/lib/membership/health-report';
 import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
+import { getMembershipHealthCases } from '@/lib/membership/health-cases';
+import { MembershipHealthCaseDrawer } from './membership-health-case-drawer';
 import { MembershipHealthFilters } from './membership-health-filters';
 
 type Tab = 'overview' | 'tracking' | 'issues' | 'notifications' | 'cohorts';
@@ -23,7 +25,7 @@ function Metric({ label, value, note }: { label: string; value: number | string;
 function Empty({ children }: { children: React.ReactNode }) { return <p className="rounded-lg border p-5 text-sm text-muted-foreground">{children}</p>; }
 function heading(value: string) { return <h2 className="text-xl font-semibold">{value}</h2>; }
 
-export default async function MembershipHealthPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+export default async function MembershipHealthPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[]; caseId?: string | string[] }> }) {
   const params = await searchParams;
   const tab = TABS.find((value) => value.id === params.tab)?.id ?? 'overview';
   const [savedRange, trackingPrefs, issuePrefs, noticePrefs, cohortPrefs] = await Promise.all([
@@ -37,7 +39,16 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
     typeof savedRange?.from === 'string' ? savedRange.from : undefined,
     typeof savedRange?.to === 'string' ? savedRange.to : undefined,
   );
-  const [report, journeyConcerns] = await Promise.all([getMembershipHealthReport(range), getMemberJourneyConcerns()]);
+  const [report, journeyConcerns, cases] = await Promise.all([getMembershipHealthReport(range), getMemberJourneyConcerns(), getMembershipHealthCases()]);
+  const selectedCase = typeof params.caseId === 'string' && /^\d{1,9}$/.test(params.caseId)
+    ? cases.find((item) => item.id === Number(params.caseId)) : undefined;
+  const openCases = cases.filter((item) => item.status === 'new' || item.status === 'investigating');
+  const caseRows: ReadOnlyRow[] = cases.map((item) => ({
+    id: String(item.id), member: item.title, link: `/admin/membership-health?tab=issues&caseId=${item.id}`,
+    severity: item.severity, status: item.status, type: item.kind.replaceAll('_', ' '),
+    owner: item.assigned_email ?? 'Unassigned', detected: isoTimestamp(item.first_seen_at),
+    lastSeen: isoTimestamp(item.last_seen_at),
+  }));
   const periods = report.cycles;
   const due = periods.filter((cycle) => cycle.expires_on <= today());
   const paid = due.filter((cycle) => Number(cycle.payment_count) > 0);
@@ -109,7 +120,7 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
         <Metric label="Renewal periods due" value={int(due.length)} note="Observed historical expiration periods due by today" />
         <Metric label="Periods with payment evidence" value={int(paid.length)} note={percentage(paid.length, due.length) + ' have payment in the observation window; not a verified renewal rate'} />
         <Metric label="Periods with checkout attempts" value={int(attempted.length)} note={percentage(attempted.length, due.length) + ' have a checkout attempt'} />
-        <Metric label="Current operational concerns" value={int(report.findings.length + renewalConcerns.length)} note="Stripe findings plus renewal member-journey signals" />
+        <Metric label="Current operational concerns" value={int(openCases.length)} note="Unresolved cases from automated renewal health scans" />
       </section>
       {heading('Renewal lifecycle')}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -119,8 +130,8 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
         <Metric label="Payments recorded" value={int(report.payments)} note="Non-legacy payments recorded in selected period" />
       </section>
       {heading('Unresolved renewal concerns')}
-      {report.findings.length + renewalConcerns.length === 0 ? <Empty>No recorded renewal reconciliation or member-journey concerns.</Empty> : <>
-        <p className="text-sm text-muted-foreground">{report.findings.length} open Stripe findings and {renewalConcerns.length} active member-journey signals. Stripe findings are always included regardless of the date range.</p>
+      {openCases.length === 0 ? <Empty>No currently open automated renewal investigation cases.</Empty> : <>
+        <p className="text-sm text-muted-foreground">{openCases.length} unresolved investigation cases. Open cases remain visible regardless of the selected date range.</p>
         <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/membership-health?tab=issues">Investigate issues</Link>
       </>}
     </>}
@@ -139,6 +150,14 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
     {tab === 'issues' && <section className="space-y-3">
       {heading('Issues & Alerts')}
       <p className="text-sm text-muted-foreground">Stripe reconciliation findings remain visible regardless of the reporting date range. Member journey flags and checkout/notice failure signals are diagnostic, not automatic payment-failure conclusions. Use the existing authorized and audited reconciliation actions to resolve a finding.</p>
+      <h3 className="text-lg font-semibold">Managed investigation cases</h3>
+      <p className="text-sm text-muted-foreground">Automated scans persist case evidence. Open a case to assign an administrator, document investigation steps, and resolve or dismiss it with an audit record. All unresolved cases remain visible regardless of the selected dates.</p>
+      <AdminReadOnlyTable columns={[
+        { id: 'member', label: 'Investigation case' }, { id: 'severity', label: 'Severity' },
+        { id: 'status', label: 'Status' }, { id: 'type', label: 'Issue type' },
+        { id: 'owner', label: 'Assigned to' }, { id: 'detected', label: 'First seen' },
+        { id: 'lastSeen', label: 'Last seen' },
+      ]} empty="No saved investigation cases." filterColumns={['severity', 'type']} rows={caseRows} searchLabel="Search investigation cases" statusColumn="status" />
       <Link className="idoc-secondary-button inline-block px-4 py-2 text-sm" href="/admin/reconciliation">Open Stripe reconciliation</Link>
       <AdminReadOnlyTable columns={[
         { id: 'detected', label: 'Detected / associated date' }, { id: 'category', label: 'Category' },
@@ -179,6 +198,7 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
       </section>
       <p className="text-sm text-muted-foreground">Classification is captured from the matching membership period when available; older inferred periods may be marked unknown rather than assigned a current classification. Historical visibility before renewal-period tracking is incomplete.</p>
     </section>}
-    <p className="text-xs text-muted-foreground">Operational monitoring is read-only. Tables limit rendered rows; aggregate period totals use the complete set. Review the Membership Health operations runbook before interpreting or acting on apparent discrepancies.</p>
+    {selectedCase ? <MembershipHealthCaseDrawer key={selectedCase.id} record={selectedCase} /> : null}
+    <p className="text-xs text-muted-foreground">Operational reporting is read-only. Case status, owner and resolution notes are audited administrator actions. Tables limit rendered rows; aggregate period totals use the complete set. Review the Membership Health operations runbook before interpreting or acting on apparent discrepancies.</p>
   </main>;
 }
