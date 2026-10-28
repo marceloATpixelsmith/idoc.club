@@ -1,8 +1,8 @@
 name: Auto-migrate Production Schema
 
-# Applies committed Drizzle migrations to idoc_production whenever migration files change on main (that is,
-# when a staging-to-main promotion carries a migration), so the Production database cannot fall behind the
-# deployed code. The job is held by the idoc-db-production-maintenance environment: it needs reviewer
+# Manual recovery only: reapply committed Drizzle migrations to idoc_production after a failed
+# promotion or when maintenance is explicitly authorized. Normal promotions use the protected
+# monitored-production-promotion.yml pipeline, which applies migrations before deployment. The job is held by the idoc-db-production-maintenance environment: it needs reviewer
 # approval, takes a verified offsite backup first, refuses unless idoc_staging is already at the newest
 # committed migration, and verifies the ledger afterwards. This file itself is deliberately NOT in the
 # trigger paths, so adding or editing it never migrates Production.
