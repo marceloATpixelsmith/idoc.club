@@ -88,6 +88,7 @@ const actionFiles: Record<string, Record<string, 'session-boundary' | 'pre-authe
     forceRevokeAllAuthorityForm: 'delegates-to-data-access',
   },
   'app/(dashboard)/admin/email-previews/actions.ts': { sendPreviewForm: 'delegates-to-data-access' },
+  'app/(dashboard)/admin/membership-health/actions.ts': { updateMembershipHealthCase: 'delegates-to-data-access' },
   'app/(dashboard)/admin/operations/github-operations/actions.ts': { runOperationAction: 'delegates-to-data-access' },
   'app/(dashboard)/admin/organization/actions.ts': { saveOrganizationSettings: 'delegates-to-data-access', saveMembershipPerks: 'delegates-to-data-access' },
   // The public contact form: no session/entitlement involved on either side, only Turnstile +
@@ -119,6 +120,7 @@ const routeHandlers: Record<string, string> = {
   'app/api/cron/email-delivery-watch/route.ts': 'shared-secret-header',
   'app/api/cron/data-retention-purge/route.ts': 'shared-secret-header',
   'app/api/cron/marketing-preference-sync/route.ts': 'shared-secret-header',
+  'app/api/cron/membership-health-scan/route.ts': 'shared-secret-header',
   'app/api/cron/new-relic-health-check/route.ts': 'shared-secret-header',
   'app/api/cron/news-scheduled-publish/route.ts': 'shared-secret-header',
   'app/api/cron/reconciliation-scan/route.ts': 'shared-secret-header',
