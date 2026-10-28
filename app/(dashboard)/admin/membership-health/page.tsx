@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
 import { getTablePreferences } from '@/lib/admin/table-preferences';
-import { formatTableDate } from '@/lib/format';
 import { getMembershipHealthReport, parseHealthRange } from '@/lib/membership/health-report';
 import { getMemberJourneyConcerns } from '@/lib/notifications/member-journey-health';
 import { MembershipHealthFilters } from './membership-health-filters';
