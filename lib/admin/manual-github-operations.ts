@@ -96,7 +96,7 @@ async function loadPromotionSteps(runId: number): Promise<NonNullable<ManualGith
   const response = await github(`/actions/runs/${runId}/jobs?per_page=10`);
   const body = await response.json() as { jobs?: Array<{ steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
   return (body.jobs ?? []).flatMap((job) => job.steps ?? []).filter((step) =>
-    /Check PR, reviews|Merge verified promotion|Verify Vercel production|Verify production health/i.test(step.name));
+    /Check PR, reviews|Merge verified promotion|Verify Vercel production|Verify production health|Mandatory IDOC offsite pre-migration backup|Apply every pending committed migration|Verify the ledger reached|Rebuild production only after migrations/i.test(step.name));
 }
 
 export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]> {
