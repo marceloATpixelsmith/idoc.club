@@ -138,7 +138,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PROMOTION_MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
-          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL || 'https://idoc.club/api/health' }}
         run: node scripts/monitored-production-promotion.mjs health
       - name: Write final result
         if: always()
