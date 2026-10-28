@@ -175,9 +175,11 @@ test('directory and map: eligible administrators appear, but Super Admins and in
   const admin = await adminUser();
   const adminProfile = await createProfileIn(admin.id, 'IT', [judgeRole], { firstName: 'Admin', lastName: 'Member' });
   await createMembership(adminProfile.id, true);
+  await sql`update idoc.professional_roles set national_federation_country_code = null where profile_id = ${adminProfile.id}`;
   const superAdmin = await createUser();
   const superProfile = await createProfileIn(superAdmin.id, 'NL', [judgeRole], { firstName: 'Super', lastName: 'Member' });
   await createMembership(superProfile.id, true);
+  await sql`update idoc.professional_roles set national_federation_country_code = null where profile_id = ${superProfile.id}`;
   await sql`insert into idoc.application_roles(user_id,role,granted_by) values(${superAdmin.id},'super_admin',${superAdmin.id})`;
   const { user: searcher } = await entitledMemberIn('FR', [stewardRole], { firstName: 'Grace', lastName: 'Hopper' });
 
