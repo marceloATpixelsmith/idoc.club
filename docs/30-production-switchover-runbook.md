@@ -6,7 +6,7 @@ Single linear checklist for the day production replaces the WordPress site on `i
 
 ## A. Before the day (nothing here is visible to members)
 
-1. **A1** Production code and migrations are current: the Auto-migrate Production Schema run for the latest promotion is approved and green, and the production migration ledger's newest entry matches staging's.
+1. **A1** Production code and migrations are current: the protected Monitored staging to production promotion run is fully green (including its verified backup, production migration ledger, Vercel deployment and health check). The Auto-migrate Production Schema workflow is only for manual recovery. Follow docs/31 for the one-time workflow bootstrap.
 2. **A2** Clean production test data (test users, profiles and subscriptions created while testing) so the import starts from an empty member set. Administrators stay.
 3. **A3** Split the Stripe variables. `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_MEMBERSHIP_PRODUCT_ID` can exist as one entry covering Production and Preview, so both share one value. Give Preview (the `staging` branch) its own test-mode values and Production its own entries. Do not deploy between removing Production from the old entry and adding the new Production-only one.
 4. **A4** Create `BREVO_WEBHOOK_KEY` as a Production-only variable (a random value of 32 or more letters and numbers, for example `openssl rand -hex 32`). It is not issued by Brevo: the same value goes into the Brevo webhook URL in B5. It is visible to the site after the next production deployment.
