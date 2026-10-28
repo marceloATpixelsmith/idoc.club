@@ -9,7 +9,7 @@ const phase = process.argv[2];
 const deadline = Date.now() + 45 * 60 * 1000;
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-if (!repository || !token || !['verify', 'merge', 'deploy', 'health'].includes(phase)) {
+if (!repository || !token || !['verify', 'merge', 'trigger', 'deploy', 'health'].includes(phase)) {
   throw new Error('Required promotion runtime context is missing.');
 }
 
@@ -192,14 +192,34 @@ function mergeSha() {
   return sha;
 }
 
+async function trigger() {
+  const sha = mergeSha();
+  const main = await api('/branches/main');
+  if (main.commit.sha !== sha) throw new Error('Main changed before the protected deployment trigger.');
+  const hook = process.env.DEPLOY_HOOK;
+  if (!hook || !/^https:\/\/api\.vercel\.com\/v1\/integrations\/deploy\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/?$/.test(hook)) {
+    throw new Error('Valid IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL repository secret is required.');
+  }
+  // RECORD TIME BEFORE CALLING THE HOOK TO IGNORE STALE FAILED VERCEL STATUSES.
+  const startedAt = new Date(Date.now() - 5000).toISOString();
+  const response = await fetch(hook, { method: 'POST', signal: AbortSignal.timeout(20000) });
+  if (!response.ok) throw new Error('Production deploy hook failed with HTTP ' + response.status);
+  const payload = await response.json();
+  if (!payload?.job?.id) throw new Error('Production deploy hook did not return a queued job.');
+  appendFileSync(process.env.GITHUB_OUTPUT, 'triggered_at=' + startedAt + '\\n');
+  console.log('Queued post-migration production build for exact merged commit ' + sha + '.');
+}
+
 async function deploy() {
   const sha = mergeSha();
+  const triggeredAt = Date.parse(process.env.PROMOTION_TRIGGERED_AT ?? '');
+  if (!Number.isFinite(triggeredAt)) throw new Error('Deployment trigger time missing.');
   while (Date.now() < deadline) {
     const main = await api('/branches/main');
     if (main.commit.sha !== sha) throw new Error('Main advanced after promotion merge; deployment identity ambiguous.');
     const statuses = await api(`/commits/${sha}/statuses?per_page=100`);
     if (statuses.length === 100) throw new Error('Commit statuses exceeded safe page limit.');
-    const vercel = statuses.find((item) => item.context === 'Vercel');
+    const vercel = statuses.find((item) => item.context === 'Vercel' && Date.parse(item.created_at) >= triggeredAt);
     if (vercel?.state === 'success') {
       if (!vercel.target_url?.startsWith('https://vercel.com/ayni-team/idoc.club/')) {
         throw new Error('Vercel success status does not belong to the expected project.');
@@ -231,5 +251,6 @@ async function health() {
 
 if (phase === 'verify') await verify({ wait: true });
 if (phase === 'merge') await merge();
+if (phase === 'trigger') await trigger();
 if (phase === 'deploy') await deploy();
 if (phase === 'health') await health();
