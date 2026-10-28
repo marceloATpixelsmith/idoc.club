@@ -521,7 +521,8 @@ for (const operation of ['change', 'create'] as const) {
     const memberSecurityCode = operation === 'change'
       ? await seedMemberSecurityCode(user, 'member_password_change') : undefined;
     const fields = { csrf_token: csrfTokenFrom(cookies), newPassword: 'Another Correct Battery 88!',
-      confirmPassword: 'Another Correct Battery 88!', currentPassword: password, otpCode: code, memberSecurityCode };
+      confirmPassword: 'Another Correct Battery 88!', currentPassword: password, otpCode: code,
+      ...(memberSecurityCode ? { memberSecurityCode } : {}) };
     await withTestRequestCookies(cookies, () => withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () =>
       redirected(() => operation === 'change' ? updatePassword({}, form(fields)) : createPasswordAndDisconnectGoogle({}, form(fields)))));
     const [saved] = await sql`select session_version from idoc.users where id=${user.id}`;
