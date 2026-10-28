@@ -33,3 +33,7 @@ Do not mark that first promotion complete until the verified redeployment succee
 - After migration but before deployment: re-run the same guarded recovery workflow; its already-applied migration is a no-op, and it triggers a new production deployment of the exact `main` commit and verifies READY and health. Do not revert an applied database migration automatically. Do not rerun an unsafe migration or revert an applied database migration automatically.
 - If a deployment fails: leave the last working Vercel production deployment active; inspect Vercel build logs and correct the cause in staging before another promotion.
 - Any changes to promotion scripts, migration code, release settings or recovery procedures must be reviewed and tested together in one PR.
+
+## Staging history reconciliation after production promotions
+
+A protected staging-to-main promotion creates a new merge commit on `main`. After a successful production release, merge `main` back into `staging` through a normal reviewed, CI-verified PR before the next promotion. This retains production merge history in staging, prevents comparisons from showing staging as behind or diverged solely due to previous release merge commits, and preserves all staging-only changes. Never bypass staging branch protections or push directly to main to repair history.
