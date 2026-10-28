@@ -132,7 +132,9 @@ test('promotion workflow reports CI, reviews, merge, Vercel and production healt
   const workflow = readFileSync('.github/workflows/monitored-production-promotion.yml', 'utf8');
   const script = readFileSync('scripts/monitored-production-promotion.mjs', 'utf8');
   const page = readFileSync('app/(dashboard)/admin/operations/production-promotion/page.tsx', 'utf8');
-  assert.match(workflow, /environment: production-promotion/);
+  assert.match(workflow, /environment: idoc-db-production-maintenance/);
+  assert.match(workflow, /monitored-production-promotion\.mjs trigger/);
+  assert.match(workflow, /guard-pending-migrations\.mjs after/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /monitored-production-promotion\.mjs verify/);
   assert.match(workflow, /monitored-production-promotion\.mjs merge/);

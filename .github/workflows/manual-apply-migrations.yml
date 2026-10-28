@@ -20,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: pending-migrations-maintenance
+  group: idoc-production-release
   cancel-in-progress: false
 
 jobs:

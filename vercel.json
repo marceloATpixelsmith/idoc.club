@@ -1,5 +1,7 @@
 {
-  "regions": ["pdx1"],
+  "regions": [
+    "pdx1"
+  ],
   "crons": [
     {
       "path": "/api/cron/account-delivery",
@@ -46,7 +48,7 @@
   "git": {
     "deploymentEnabled": {
       "*": false,
-      "main": true,
+      "main": false,
       "staging": true
     }
   }
