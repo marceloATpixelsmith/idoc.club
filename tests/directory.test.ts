@@ -76,6 +76,15 @@ test('the paid member directory rate-limits searches per account and per origin 
   assert.match(rateLimitSource, /takeBucket\(purpose, allEmailsMarker, originHash, windowStartedAt, originMax\)/);
 });
 
+test('directory and public map include administrators but exclude Super Admins', () => {
+  assert.match(memberDirectorySource, /ar\.role = 'super_admin'/);
+  assert.doesNotMatch(memberDirectorySource, /ar\.role in \('administrator', 'super_admin'\)/);
+  assert.match(aggregateSource, /ar\.role = 'super_admin'/);
+  assert.match(aggregateSource, /where p\.directory_visible and c\.country_code/);
+  assert.match(memberDirectorySource, /p\.directory_visible and m\.status/);
+  assert.match(aggregateSource, /u\.account_state in \('active', 'migrated_pending'\)/);
+});
+
 test('the paid member directory returns email only for the re-authorized member tab and no exact address or database identifier', () => {
   const select = memberDirectorySource.slice(memberDirectorySource.indexOf('select p.id "profileId"'), memberDirectorySource.indexOf('${from} where ${where} order'));
   const liveSelect = memberDirectorySource.slice(memberDirectorySource.indexOf('async function liveDirectoryDetails'), memberDirectorySource.indexOf('const cachedDirectoryQuery'));
@@ -85,7 +94,7 @@ test('the paid member directory returns email only for the re-authorized member 
   assert.match(select, /null::text email/);
   assert.match(memberDirectorySource, /where sp\.directory_email_opt_in and coalesce\(su\.email_display, su\.email\) ilike/);
   assert.match(memberDirectorySource, /join users u on u\.id = p\.user_id and u\.deleted_at is null and u\.account_state in \('active', 'migrated_pending'\)/);
-  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role in \('administrator', 'super_admin'\)\)/);
+  assert.match(memberDirectorySource, /not exists \(select 1 from application_roles ar where ar\.user_id = u\.id and ar\.revoked_at is null and ar\.role = 'super_admin'\)/);
   assert.doesNotMatch(select, /address|postal_code|userId/i);
   // The internal profile id exists only to join the live check and is stripped from every returned row.
   assert.match(memberDirectorySource, /rows\.flatMap\(\(\{ profileId, \.\.\.row \}\)/);
@@ -238,7 +247,7 @@ test('the map camera fits the world responsively instead of a fixed desktop-size
 });
 
 test('the public map excludes blank or malformed country codes so a bad legacy value cannot crash the page', () => {
-  assert.match(aggregateSource, /where c\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
+  assert.match(aggregateSource, /where p\.directory_visible and c\.country_code in \(\$\{sql\.join\(ISO_COUNTRY_CODES/);
   assert.match(readFileSync('lib/membership/countries.ts', 'utf8'), /try \{[\s\S]*englishRegionNames\.of[\s\S]*\} catch/);
 });
 
@@ -281,8 +290,8 @@ const dailyCacheSource = readFileSync('lib/cache/daily-cache.ts', 'utf8');
 test('the map and the directory listing are cached for a day, but access control and rate limiting still run on every request', () => {
   assert.match(dailyCacheSource, /DAILY_REVALIDATE_SECONDS = 24 \* 60 \* 60/);
   assert.match(dailyCacheSource, /unstable_cache\(compute, keyParts, \{ revalidate: DAILY_REVALIDATE_SECONDS/);
-  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration'\]\)/);
-  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query'\]\)/);
+  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration-admin-visible-v2'\]\)/);
+  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query-admin-visible-v2'\]\)/);
   // The authorization and rate-limit checks sit before the cached call, never inside it.
   const listing = memberDirectorySource.slice(memberDirectorySource.indexOf('export async function listMemberDirectory'));
   const cachedCall = listing.indexOf('(cacheable ? cachedDirectoryQuery : runDirectoryQuery)(query)');
