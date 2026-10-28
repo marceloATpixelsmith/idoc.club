@@ -80,6 +80,8 @@ test('directory and public map include administrators but exclude Super Admins',
   assert.match(memberDirectorySource, /ar\.role = 'super_admin'/);
   assert.doesNotMatch(memberDirectorySource, /ar\.role in \('administrator', 'super_admin'\)/);
   assert.match(aggregateSource, /ar\.role = 'super_admin'/);
+  assert.match(aggregateSource, /where p\.directory_visible and c\.country_code/);
+  assert.match(memberDirectorySource, /p\.directory_visible and m\.status/);
   assert.match(aggregateSource, /u\.account_state in \('active', 'migrated_pending'\)/);
 });
 
