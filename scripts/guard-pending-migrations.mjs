@@ -67,7 +67,13 @@ try {
   // Production may only be migrated after staging reached the newest committed migration.
   if (schema === 'idoc_production') {
     const staging = await newestApplied(sql, 'idoc_staging');
-    if (staging !== newestCommitted) throw new Error('idoc_staging must be migrated to the newest committed migration before Production');
+    if (!Number.isSafeInteger(staging) || staging < newestCommitted) throw new Error('idoc_staging must be migrated to at least the newest committed migration before Production');
+    // VERIFY ALL REQUIRED MIGRATIONS EXIST, EVEN WHEN STAGING HAS ALREADY ADVANCED PAST THIS PRODUCTION COMMIT.
+    const required = journal.entries.filter((entry) => entry.idx >= 71).map((entry) => Number(entry.when));
+    const stagingLedger = await sql`SELECT created_at FROM idoc_staging.__drizzle_migrations`;
+    const stagingApplied = new Set(stagingLedger.map((entry) => Number(entry.created_at)));
+    const missing = required.filter((when) => !stagingApplied.has(when));
+    if (missing.length) throw new Error('idoc_staging is missing committed migrations required by Production: ' + missing.join(', '));
   }
 } finally {
   await sql.end({ timeout: 5 });

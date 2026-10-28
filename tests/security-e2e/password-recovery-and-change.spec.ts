@@ -133,7 +133,13 @@ test.describe('password change from the Security page', () => {
     // The form is cleared after a rejected submit, so both fields are entered again.
     await page.locator('input#current-password').fill(STRONG_PASSWORD);
     await page.locator('input#new-password').fill(NEW_PASSWORD);
+    const securityMailBefore = mailCount();
     await page.getByRole('button', { name: 'Update Password' }).click();
+    await expect(page.getByRole('heading', { name: 'Confirm this security change' })).toBeVisible();
+    expect(await passwordHashFor(email)).toBe(originalHash);
+    const securityCode = extractOtp(await waitForMail(email, 'Confirm your IDOC password change', securityMailBefore));
+    await page.getByRole('textbox', { name: 'Email security code' }).fill(securityCode);
+    await page.getByRole('button', { name: 'Verify and continue' }).click();
     await expect(page.getByText('Your password was changed. Sign in again on every device.')).toBeVisible({ timeout: 20_000 });
     expect(await passwordHashFor(email)).not.toBe(originalHash);
     await page.goto('/dashboard/security');

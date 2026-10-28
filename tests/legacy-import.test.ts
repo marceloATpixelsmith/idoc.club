@@ -349,7 +349,8 @@ test('the import page form is submitted by hand so the chosen files, backup box 
 
 test('the step-up dialog is mounted fresh for each challenge so an earlier verification cannot disable the next one', () => {
   const source = readFileSync(new URL('../components/auth/fresh-step-up-action.tsx', import.meta.url), 'utf8');
-  assert.match(source, /challengeOpen\s*\?\s*<FreshStepUpDialog[^>]*key=\{challengeId\}/);
+  assert.match(source, /challengeMethod === 'email'/);
+  assert.match(source, /<FreshStepUpDialog[^>]*key=\{challengeId\}/);
 });
 
 test('a completed payment whose reference is not a Stripe ID is imported as legacy history, not as a Stripe payment', () => {
