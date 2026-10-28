@@ -25,6 +25,7 @@ test('the approved promotion opens a protected staging-to-main PR, while live au
   try {
     assert.equal(isManualGithubWorkflow('staging-migrations'), false);
     assert.equal(isManualGithubWorkflow('production-promotion'), true);
+    assert.equal(isManualGithubWorkflow('production-recovery'), false);
     assert.equal(isManualGithubWorkflow('live-auth'), true);
     assert.equal(isManualGithubWorkflow('manual-promotion-0071'), false);
     const result = await dispatchManualGithubOperation('production-promotion');
