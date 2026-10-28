@@ -49,3 +49,30 @@ $$;
 create trigger membership_renewal_period_capture
   after insert or update of valid_until on idoc.memberships
   for each row execute function idoc.capture_membership_renewal_period();
+
+--> statement-breakpoint
+-- Incident records survive rescans and retain human investigation decisions.
+create table if not exists idoc.membership_health_cases (
+  id serial primary key,
+  issue_key varchar(200) not null unique,
+  kind varchar(60) not null,
+  profile_id integer references idoc.profiles(id),
+  severity varchar(10) not null default 'high',
+  status varchar(20) not null default 'new',
+  title text not null,
+  evidence jsonb not null default '{}'::jsonb,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  assigned_to_user_id integer references idoc.users(id),
+  resolution_note text,
+  resolved_at timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint membership_health_cases_severity_check check (severity in ('critical','high','medium')),
+  constraint membership_health_cases_status_check check (status in ('new','investigating','resolved','dismissed'))
+);
+--> statement-breakpoint
+create index if not exists membership_health_cases_status_time_idx
+  on idoc.membership_health_cases (status, last_seen_at desc);
+--> statement-breakpoint
+create index if not exists membership_health_cases_profile_idx
+  on idoc.membership_health_cases (profile_id, first_seen_at desc);
