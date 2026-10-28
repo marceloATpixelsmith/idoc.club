@@ -129,7 +129,7 @@ function queryParts(raw: MemberDirectoryFilters) {
 // link) is, and both come from `directory_email_opt_in` (default off) in the select below.
 const from = sql`from profiles p
   join users u on u.id = p.user_id and u.deleted_at is null and u.account_state in ('active', 'migrated_pending')
-  and not exists (select 1 from application_roles ar where ar.user_id = u.id and ar.revoked_at is null and ar.role in ('administrator', 'super_admin'))
+  and not exists (select 1 from application_roles ar where ar.user_id = u.id and ar.revoked_at is null and ar.role = 'super_admin')
   join lateral (select status, valid_until, grace_ends_on from memberships where profile_id = p.id order by valid_until desc, id desc limit 1) m on true
   left join lateral (
     select array_agg(distinct role_type)::text[] role_types, bool_or(role_type = 'judge') has_judge, bool_or(role_type = 'steward') has_steward,
@@ -165,7 +165,7 @@ type DirectoryQueryInput = {
 /** The cacheable part of a listing: one page of rows (ordering, names, federation, region, role
  * details) and the total, for a set of filters. It deliberately carries NO email and no live
  * eligibility: those are privacy-sensitive and are always read live in `liveDirectoryDetails`, so a
- * member withdrawing their email opt-in, being deleted, suspended or made an administrator takes
+ * member withdrawing their email opt-in, being deleted, suspended or granted Super Admin access takes
  * effect immediately even when this result is up to a day old. It throws on failure, so a failure
  * is never cached. */
 async function runDirectoryQuery(input: DirectoryQueryInput) {
@@ -186,7 +186,7 @@ async function runDirectoryQuery(input: DirectoryQueryInput) {
 }
 
 /** Always-live, per-request check of the members on one page: are they still listed (membership,
- * account state, not an administrator) and, only if they opted in, what is their email. */
+ * account state, not a Super Admin) and, only if they opted in, what is their email. */
 async function liveDirectoryDetails(profileIds: number[]): Promise<Map<number, string | null>> {
   if (profileIds.length === 0) return new Map();
   const rows = await db.execute<{ profileId: number; email: string | null }>(sql`
@@ -197,10 +197,10 @@ async function liveDirectoryDetails(profileIds: number[]): Promise<Map<number, s
 
 // The page structure is renewed at most once a day per distinct set of filters. Access control, rate
 // limiting and the live per-page check stay outside the cache and run on every request.
-const cachedDirectoryQuery = dailyCache(runDirectoryQuery, ['member-directory-query']);
+const cachedDirectoryQuery = dailyCache(runDirectoryQuery, ['member-directory-query-admin-visible-v2']);
 
 /** Server-side searchable/filterable directory. Re-authorizes every read and returns only active,
- * non-archived, non-administrator member records. The page structure is cached for a day per set of
+ * non-archived member records (excluding Super Admins). The page structure is cached for a day per set of
  * filters; email and eligibility are always live. A text search or an email sort is never cached,
  * because it can match or order by an email address whose owner has since withdrawn their opt-in. */
 export async function listMemberDirectory(input: MemberDirectoryFilters = {}) {
