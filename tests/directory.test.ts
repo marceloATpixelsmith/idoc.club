@@ -288,8 +288,8 @@ const dailyCacheSource = readFileSync('lib/cache/daily-cache.ts', 'utf8');
 test('the map and the directory listing are cached for a day, but access control and rate limiting still run on every request', () => {
   assert.match(dailyCacheSource, /DAILY_REVALIDATE_SECONDS = 24 \* 60 \* 60/);
   assert.match(dailyCacheSource, /unstable_cache\(compute, keyParts, \{ revalidate: DAILY_REVALIDATE_SECONDS/);
-  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration'\]\)/);
-  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query'\]\)/);
+  assert.match(aggregateSource, /dailyCache\(queryMemberConcentration, \['public-member-concentration-admin-visible-v2'\]\)/);
+  assert.match(memberDirectorySource, /dailyCache\(runDirectoryQuery, \['member-directory-query-admin-visible-v2'\]\)/);
   // The authorization and rate-limit checks sit before the cached call, never inside it.
   const listing = memberDirectorySource.slice(memberDirectorySource.indexOf('export async function listMemberDirectory'));
   const cachedCall = listing.indexOf('(cacheable ? cachedDirectoryQuery : runDirectoryQuery)(query)');
