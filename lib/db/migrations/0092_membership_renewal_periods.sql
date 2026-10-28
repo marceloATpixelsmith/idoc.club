@@ -2,11 +2,11 @@
 -- A renewal can change memberships.valid_until in place. Without this history,
 -- paid members disappear from the expiration cohort they successfully renewed.
 create table if not exists idoc.membership_renewal_periods (
-  profile_id integer not null references idoc.profiles(id) on delete cascade,
+  profile_id integer not null constraint membership_renewal_periods_profile_id_profiles_id_fk references idoc.profiles(id) on delete cascade,
   expires_on date not null,
   first_observed_at timestamptz not null default now(),
   evidence_source varchar(40) not null default 'membership',
-  primary key (profile_id, expires_on)
+  constraint membership_renewal_periods_profile_id_expires_on_pk primary key (profile_id, expires_on)
 );
 --> statement-breakpoint
 create index if not exists membership_renewal_periods_expiration_idx
@@ -54,16 +54,16 @@ create trigger membership_renewal_period_capture
 -- Incident records survive rescans and retain human investigation decisions.
 create table if not exists idoc.membership_health_cases (
   id serial primary key,
-  issue_key varchar(200) not null unique,
+  issue_key varchar(200) not null constraint membership_health_cases_issue_key_unique unique,
   kind varchar(60) not null,
-  profile_id integer references idoc.profiles(id) on delete cascade,
+  profile_id integer constraint membership_health_cases_profile_id_profiles_id_fk references idoc.profiles(id) on delete cascade,
   severity varchar(10) not null default 'high',
   status varchar(20) not null default 'new',
   title text not null,
   evidence jsonb not null default '{}'::jsonb,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
-  assigned_to_user_id integer references idoc.users(id) on delete set null,
+  assigned_to_user_id integer constraint membership_health_cases_assigned_to_user_id_users_id_fk references idoc.users(id) on delete set null,
   resolution_note text,
   resolved_at timestamptz,
   updated_at timestamptz not null default now(),
