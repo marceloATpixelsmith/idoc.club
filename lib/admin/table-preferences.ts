@@ -16,7 +16,7 @@ import { APPROVAL_STATUSES, PAYMENT_STATUSES, SEMINAR_STATUSES } from '@/lib/sem
 export const ADMIN_TABLE_IDENTIFIERS = [
   'memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline',
   'communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'communications_repeated_activations', 'reconciliation_findings', 'member_notifications',
-  'membership_health_range', 'membership_health_tracking', 'membership_health_issues', 'membership_health_notifications', 'membership_health_cohorts',
+  'membership_health_range', 'membership_health_cases', 'membership_health_tracking', 'membership_health_issues', 'membership_health_notifications', 'membership_health_cohorts',
 ] as const;
 export type AdminTableIdentifier = typeof ADMIN_TABLE_IDENTIFIERS[number];
 const identifierSchema = z.enum(ADMIN_TABLE_IDENTIFIERS);
@@ -72,6 +72,7 @@ const schemas = {
   reconciliation_findings: readOnlyReportTable,
   member_notifications: readOnlyReportTable,
   membership_health_range: z.object({ from: date, to: date }).strict(),
+  membership_health_cases: readOnlyReportTable,
   membership_health_tracking: readOnlyReportTable,
   membership_health_issues: readOnlyReportTable,
   membership_health_notifications: readOnlyReportTable,
