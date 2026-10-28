@@ -18,10 +18,10 @@ export const MANUAL_GITHUB_WORKFLOWS = {
   },
 } as const;
 
-export type ManualGithubWorkflow = keyof typeof MANUAL_GITHUB_WORKFLOWS;
+export type ManualGithubWorkflow = 'production-promotion' | 'live-auth';
 export type ManualGithubRun = {
   id: number;
-  workflow: ManualGithubWorkflow;
+  workflow: ManualGithubWorkflow | 'production-recovery';
   runNumber: number;
   status: 'queued' | 'in_progress' | 'success' | 'failure' | 'cancelled' | 'other';
   event: string;
@@ -41,7 +41,7 @@ export class ManualGithubOperationsError extends Error {
 }
 
 export function isManualGithubWorkflow(value: unknown): value is ManualGithubWorkflow {
-  return typeof value === 'string' && Object.hasOwn(MANUAL_GITHUB_WORKFLOWS, value);
+  return value === 'production-promotion' || value === 'live-auth';
 }
 
 function token() {
@@ -106,7 +106,7 @@ export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]
       const body = await response.json() as { workflow_runs?: Array<{ id: number; run_number: number; status: string; conclusion: string | null; event: string; created_at: string; html_url: string }> };
       return Promise.all((body.workflow_runs ?? []).map(async (run) => ({
         id: run.id,
-        workflow: workflow as ManualGithubWorkflow,
+        workflow: workflow as ManualGithubRun['workflow'],
         runNumber: run.run_number,
         status: runStatus(run.status, run.conclusion),
         event: run.event,
