@@ -1,3 +1,4 @@
+import { extractOtp, mailCount, waitForMail } from './support/helpers';
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
@@ -74,6 +75,13 @@ test('account security renders and revokes only the signed-in member active sess
   const databaseUrl = process.env.TEST_DATABASE_URL;
   expect(databaseUrl).toBeTruthy();
   const sql = postgres(databaseUrl!, { max: 1, onnotice: () => {} });
+  // Playwright retries against the same shared fixture database: undo revocation of the
+  // designated second session and retire probe sessions from a previous failed attempt.
+  await sql`update idoc.auth_sessions set revoked_at=now(), revoke_reason='security-e2e-retry-cleanup'
+    where user_id=${fixture.userId} and session_id not in (${fixture.currentSessionId}, ${fixture.secondSessionId})
+    and revoked_at is null and absolute_expires_at>now()`;
+  await sql`update idoc.auth_sessions set revoked_at=null, revoke_reason=null
+    where session_id=${fixture.secondSessionId} and user_id=${fixture.userId}`;
   const context = await browser.newContext({ storageState: '.security-e2e/member-a.json' });
   const page = await context.newPage();
   await page.goto('/dashboard/security');
@@ -99,7 +107,16 @@ test('account security renders and revokes only the signed-in member active sess
         form.append(input);
       }
     }, '999999');
+  const [memberIdentity] = await sql<{ email: string }[]>`select email from idoc.users where id=${fixture.userId}`;
+  const confirmMemberRevoke = async (before: number) => {
+    await expect(page.getByRole('heading', { name: 'Confirm this security change' })).toBeVisible();
+    const code = extractOtp(await waitForMail(memberIdentity.email, 'Confirm your IDOC session sign-out', before));
+    await page.getByRole('textbox', { name: 'Email security code' }).fill(code);
+    await page.getByRole('button', { name: 'Verify and continue' }).click();
+  };
+  let beforeSecurityMail = mailCount();
   await page.getByRole('button', { name: 'Log out this session' }).click();
+  await confirmMemberRevoke(beforeSecurityMail);
   await expect(page.getByText('That session has been logged out.')).toBeVisible();
   const [revoked] = await sql<{ revoked_at: Date | null; revoke_reason: string | null }[]>`
     select revoked_at,revoke_reason from idoc.auth_sessions where session_id=${fixture.secondSessionId}`;
@@ -125,7 +142,11 @@ test('account security renders and revokes only the signed-in member active sess
     input.value = forgedUserId;
     form.append(input);
   }, String(other.id));
+  const beforeForgedRequest = mailCount();
   await revokeForm.getByRole('button', { name: 'Log out this session' }).click();
+  await expect(page.getByText('That session is no longer available.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Confirm this security change' })).toHaveCount(0);
+  expect(mailCount()).toBe(beforeForgedRequest);
   expect((await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions
     where session_id=${other.session_id} and revoked_at is null`)[0].count).toBe(1);
 
@@ -135,7 +156,9 @@ test('account security renders and revokes only the signed-in member active sess
       (${extraIds[1]},${fixture.userId},0,now(),now(),now()+interval '12 hours')`;
   await page.reload();
   await expect(page.getByText('Another session')).toHaveCount(3);
+  beforeSecurityMail = mailCount();
   await page.getByRole('button', { name: 'Log out other sessions' }).click();
+  await confirmMemberRevoke(beforeSecurityMail);
   await expect(page.getByText('Your other sessions have been logged out.')).toBeVisible();
   expect((await sql<{ count: number }[]>`select count(*)::int count from idoc.auth_sessions where user_id=${fixture.userId}
     and revoked_at is null and absolute_expires_at>now()`)[0].count).toBe(1);

@@ -345,10 +345,10 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // taken (null means the account has never had a real, member-known password -- see lib/db/schema.ts).
   expectedSchema['idoc.users'].columns.password_set_at = { name: 'password_set_at', type: 'timestamp', primaryKey: false, notNull: false };
 
-  // Migration 0054 widened email_otp_codes_purpose_check to add the google_disconnect_verification
-  // purpose (lib/auth/email-otp.ts) after this frozen snapshot was taken.
+  // Migrations 0054 and 0090 expanded email_otp_codes_purpose_check for Google
+  // disconnect and separate one-time member security proofs.
   expectedSchema['idoc.email_otp_codes'].checkConstraints.email_otp_codes_purpose_check.value =
-    '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\')';
+    '"idoc"."email_otp_codes"."purpose" in (\'signup_verification\', \'login_verification\', \'password_reset\', \'google_disconnect_verification\', \'member_password_change\', \'member_session_revoke\')';
 
   // Migrations 0055/0056/0057/0058/0061/0063/0064/0069/0070/0071/0072 reshaped these tables after this frozen snapshot was taken
   // (payment method moved from the seminar to each registration; multi-day dates; dual

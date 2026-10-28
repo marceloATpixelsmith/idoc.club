@@ -631,6 +631,13 @@
       "when": 1793130000000,
       "tag": "0089_member_journey_alert_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793135000000,
+      "tag": "0090_member_security_step_up_codes",
+      "breakpoints": true
     }
   ]
 }

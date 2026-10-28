@@ -22,6 +22,7 @@ import {
 import { unlinkGoogleIdentity } from '@/lib/auth/google-identity-linking';
 import { checkPasswordBreached } from '@/lib/security/password-breach-check';
 import { notifyWebmasterOfBreachedPasswordAttempt } from '@/lib/notifications/breached-password-alert';
+import { requireMemberSecurityEmailProof } from '@/lib/auth/member-security-step-up';
 import { issueEmailOtp, verifyEmailOtp } from '@/lib/auth/email-otp';
 import { requestOrigin } from '@/lib/security/rate-limit';
 import { consumeFreshStepUp, requireFreshStepUp } from '@/lib/auth/mfa/step-up';
@@ -29,14 +30,15 @@ import { prepareRecoveryCodes } from '@/lib/auth/mfa/recovery';
 import { regenerateRecoveryCodesWithEvidence } from '@/lib/auth/mfa/recovery-regeneration';
 import { authoritativeMfaRole, MFA_APPLICATION_ID } from '@/lib/auth/mfa/login';
 import { forgetAllLoginDevices, forgetCurrentLoginDevice } from '@/lib/auth/login-device-trust';
-import { revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
+import { readActiveSession, revokeOtherUserSessionsWithEvidence, revokeSession } from '@/lib/auth/session-registry';
 import { mfaStore } from '@/lib/auth/mfa/store';
 import { generatePendingCsrfNonce, setPendingPrimaryAuth } from '@/lib/auth/mfa/pending-primary-auth';
 import { mfaConfiguration } from '@/lib/runtime/configuration';
 
 const currentPasswordSchema = z.object({ currentPassword: passwordEntrySchema });
 const emptySchema = z.object({});
-const sessionSchema = z.object({ sessionId: z.string().uuid() });
+const memberSessionSchema = z.object({ memberSecurityCode: z.string().optional() });
+const sessionSchema = memberSessionSchema.extend({ sessionId: z.string().uuid() });
 
 async function canonicalSession(userId: number) {
   const session = await getSession();
@@ -55,19 +57,32 @@ function refreshSecurityPage() {
   revalidatePath('/dashboard/security');
 }
 
-export const logOutSession = validatedActionWithUser(sessionSchema, async ({ sessionId }, _, user) => {
-  if ((await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
+export const logOutSession = validatedActionWithUser(sessionSchema, async ({ sessionId, memberSecurityCode }, _, user) => {
+  const member = await authoritativeMfaRole(user.id) === 'member';
+  if (!member && (await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
   const current = await canonicalSession(user.id);
   if (sessionId === current.sessionId) return { error: 'Use the normal sign-out action to log out this browser.' };
+  // Reject forged or stale session IDs before emailing a one-time code. An unowned
+  // session must never trigger a useless challenge that blocks the next real action.
+  if (!(await readActiveSession(sessionId, user.id))) return { error: 'That session is no longer available.' };
+  if (member) {
+    const evidence = await requireMemberSecurityEmailProof(user, 'member_session_revoke', memberSecurityCode);
+    if (!evidence.approved) return evidence;
+  }
   await revokeSession(sessionId, user.id, 'member-security-session-signout');
   await audit(user.id, 'security.session.logged_out', 'member-security-page');
   refreshSecurityPage();
   return { success: 'That session has been logged out.' };
 }, { allowWithoutEntitlement: true });
 
-export const logOutOtherSessions = validatedActionWithUser(emptySchema, async (_, __, user) => {
-  if ((await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
+export const logOutOtherSessions = validatedActionWithUser(memberSessionSchema, async ({ memberSecurityCode }, __, user) => {
+  const member = await authoritativeMfaRole(user.id) === 'member';
+  if (!member && (await requireFreshStepUp(user, 'revoke-sessions', '/dashboard/security')).required) return { stepUpRequired: true };
   const current = await canonicalSession(user.id);
+  if (member) {
+    const evidence = await requireMemberSecurityEmailProof(user, 'member_session_revoke', memberSecurityCode);
+    if (!evidence.approved) return evidence;
+  }
   await revokeOtherUserSessionsWithEvidence({
     currentSessionId: current.sessionId,
     dedupeKey: `other-sessions:${user.id}:${randomUUID()}`,

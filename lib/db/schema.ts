@@ -729,7 +729,7 @@ export const emailOtpCodes = idocSchema.table('email_otp_codes', {
   attemptCount: integer('attempt_count').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  check('email_otp_codes_purpose_check', sql`${table.purpose} in ('signup_verification', 'login_verification', 'password_reset', 'google_disconnect_verification')`),
+  check('email_otp_codes_purpose_check', sql`${table.purpose} in ('signup_verification', 'login_verification', 'password_reset', 'google_disconnect_verification', 'member_password_change', 'member_session_revoke')`),
   index('email_otp_codes_lookup_idx').on(table.email, table.purpose, table.expiresAt).where(sql`${table.consumedAt} is null`),
 ]);
 
