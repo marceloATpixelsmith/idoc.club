@@ -206,7 +206,7 @@ async function trigger() {
   if (!response.ok) throw new Error('Production deploy hook failed with HTTP ' + response.status);
   const payload = await response.json();
   if (!payload?.job?.id) throw new Error('Production deploy hook did not return a queued job.');
-  appendFileSync(process.env.GITHUB_OUTPUT, 'triggered_at=' + startedAt + '\\n');
+  appendFileSync(process.env.GITHUB_OUTPUT, 'triggered_at=' + startedAt + '\n');
   console.log('Queued post-migration production build for exact merged commit ' + sha + '.');
 }
 
