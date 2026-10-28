@@ -76,6 +76,14 @@ test('the paid member directory rate-limits searches per account and per origin 
   assert.match(rateLimitSource, /takeBucket\(purpose, allEmailsMarker, originHash, windowStartedAt, originMax\)/);
 });
 
+test('admin-only directory visibility stays controlled across rejected form submissions', () => {
+  const source = readFileSync('app/(dashboard)/admin/members/admin-profile-form.tsx', 'utf8');
+  assert.match(source, /const \[directoryHidden, setDirectoryHidden\] = useState\(member\.profile\.directoryVisible === false\)/);
+  assert.match(source, /checked=\{directoryHidden\}/);
+  assert.match(source, /onChange=\{\(event\) => setDirectoryHidden\(event\.currentTarget\.checked\)\}/);
+  assert.doesNotMatch(source, /defaultChecked=\{member\.profile\.directoryVisible === false\}/);
+});
+
 test('directory and public map include administrators but exclude Super Admins', () => {
   assert.match(memberDirectorySource, /ar\.role = 'super_admin'/);
   assert.doesNotMatch(memberDirectorySource, /ar\.role in \('administrator', 'super_admin'\)/);
