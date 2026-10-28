@@ -164,14 +164,14 @@ export async function createOwnMemberProfile(untrustedInput: unknown, untrustedC
   return result.profile;
 }
 
-export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { board?: AdminBoardProfileInput; reason?: string }) {
+export async function updateMemberProfile(profileId: number, untrustedInput: unknown, options?: { board?: AdminBoardProfileInput; directoryVisible?: boolean; reason?: string }) {
   const input = memberProfileSchema.parse(untrustedInput);
   const actor = await authenticatedActor('profile_mutation');
   const [existing] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!existing) throw new Error('Member profile not found.');
   requireOwnerOrAdmin(actor, existing.userId);
   const isAdminEdit = actor.id !== existing.userId || options?.board !== undefined;
-  if (options?.board !== undefined) requireAdministrator(actor);
+  if (options?.board !== undefined || options?.directoryVisible !== undefined) requireAdministrator(actor);
   const reason = options?.reason?.trim() ?? '';
   if (isAdminEdit && reason.length === 0) throw new Error('An administrative reason is required for this correction.');
 
@@ -181,7 +181,8 @@ export async function updateMemberProfile(profileId: number, untrustedInput: unk
     const now = new Date();
     const profileValues = profileColumns(input);
     const boardValues = options?.board ?? {};
-    const [updated] = await tx.update(profiles).set({ ...profileValues, ...boardValues, updatedAt: now })
+    const directoryValues = options?.directoryVisible === undefined ? {} : { directoryVisible: options.directoryVisible };
+    const [updated] = await tx.update(profiles).set({ ...profileValues, ...boardValues, ...directoryValues, updatedAt: now })
       .where(eq(profiles.id, profileId)).returning();
     injectProfileTransactionFailure('profile-write');
     const desiredByType = new Map(input.roles.map((role) => [role.roleType, role]));

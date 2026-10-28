@@ -240,6 +240,8 @@ export const profiles = idocSchema.table('profiles', {
   boardSortOrder: integer('board_sort_order'),
   // Opt-in (default no): the member's email appears in the paid member directory only when true.
   directoryEmailOptIn: boolean('directory_email_opt_in').notNull().default(false),
+  // Admin-controlled opt-out for both public map counts and the private member directory.
+  directoryVisible: boolean('directory_visible').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

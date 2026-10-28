@@ -357,7 +357,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   // affected tables' definitions straight from the current 0072 snapshot -- generated from
   // the current lib/db/schema.ts (see tests/migration-immutability.test.ts), so it is exactly as
   // authoritative as the frozen 0051 snapshot was for everything else.
-  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0087_snapshot.json'), 'utf8'));
+  const currentSnapshot = JSON.parse(await readFile(join(migrationsFolder, 'meta', '0091_snapshot.json'), 'utf8'));
   expectedSchema['idoc.seminars'] = currentSnapshot.tables['idoc.seminars'];
   expectedSchema['idoc.seminar_registrations'] = currentSnapshot.tables['idoc.seminar_registrations'];
   expectedSchema['idoc.profiles'] = currentSnapshot.tables['idoc.profiles'];

@@ -29,6 +29,7 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
   const initial = judge && steward ? 'judge_steward' : (judge?.roleType ?? steward?.roleType ?? 'veterinarian');
   const [classification, setClassification] = useState(initial);
   const [isBoardMember, setIsBoardMember] = useState(Boolean(member.profile.isBoardMember));
+  const [directoryHidden, setDirectoryHidden] = useState(member.profile.directoryVisible === false);
   const [state, action, pending] = useActionState(saveMemberProfileByAdminForm, {} as { error?: string; success?: string });
   const official = judge ?? steward;
   useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
@@ -111,6 +112,23 @@ export function AdminProfileForm({ member, onSuccess, profileId }: { member: Mem
           </CardContent>
         </Card>
       ) : null}
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Member directory</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FormToggle
+            checked={directoryHidden}
+            description="Administrator-only. Checking this box hides the member from both the directory listing and public map country counts. Super Admins are always excluded."
+            id="directoryHidden"
+            label="Keep this member off the directory completely"
+            onChange={(event) => setDirectoryHidden(event.currentTarget.checked)}
+            name="directoryHidden"
+            value="1"
+          />
+          <input name="directoryVisibilityPresent" type="hidden" value="1" />
+        </CardContent>
+      </Card>
       <Card className="md:col-span-2">
         <CardHeader>
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">Board</CardTitle>

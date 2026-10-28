@@ -40,6 +40,8 @@ async function queryMemberConcentration(): Promise<ConcentrationArea[]> {
   const rows = await db.execute<ConcentrationRow>(sql`
     select c.country_code as country_code, count(*)::int as member_count
     from profiles p
+    join users u on u.id = p.user_id and u.deleted_at is null and u.account_state in ('active', 'migrated_pending')
+      and not exists (select 1 from application_roles ar where ar.user_id = u.id and ar.revoked_at is null and ar.role = 'super_admin')
     join lateral (
       select status, valid_until, grace_ends_on from memberships
       where profile_id = p.id order by valid_until desc, id desc limit 1
@@ -50,7 +52,7 @@ async function queryMemberConcentration(): Promise<ConcentrationArea[]> {
         nullif(p.country_code, '')
       ) as country_code
     ) c
-    where c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
+    where p.directory_visible and c.country_code in (${sql.join(ISO_COUNTRY_CODES.map((code) => sql`${code}`), sql`, `)})
       and ((m.status in ('active', 'complimentary', 'canceled') and m.valid_until >= current_date) or (m.status='grace' and coalesce(m.grace_ends_on,m.valid_until) >= current_date))
     group by c.country_code
     having count(*) >= ${DIRECTORY_MIN_AGGREGATION_THRESHOLD}
@@ -61,7 +63,7 @@ async function queryMemberConcentration(): Promise<ConcentrationArea[]> {
 
 // The map is identical for every visitor and only needs to be current to the day. The query throws on
 // failure, so an outage is never cached: the next request retries instead of showing "unavailable" for a day.
-const cachedMemberConcentration = dailyCache(queryMemberConcentration, ['public-member-concentration']);
+const cachedMemberConcentration = dailyCache(queryMemberConcentration, ['public-member-concentration-admin-visible-v2']);
 
 export async function getPublicMemberConcentration(): Promise<ConcentrationResult> {
   try {

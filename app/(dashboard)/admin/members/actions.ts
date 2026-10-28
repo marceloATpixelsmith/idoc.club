@@ -12,6 +12,8 @@ import { reinstateUserAccount, suspendUserAccount } from '@/lib/membership/accou
 import { forceRevokeAllAuthority } from '@/lib/membership/incident-response';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
+import { revalidateTag } from 'next/cache';
+import { MEMBER_DIRECTORY_CACHE_TAG } from '@/lib/cache/daily-cache';
 
 async function requireCsrf(formData: FormData): Promise<void> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
@@ -65,7 +67,8 @@ export async function saveMemberProfileByAdminForm(_state: FormState, formData: 
       boardTitle: formData.get('boardTitle'),
       isBoardMember: formData.get('isBoardMember') === '1',
     });
-    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, reason });
+    await updateMemberProfile(profileId, parseMemberProfileFormData(formData), { board, directoryVisible: formData.get('directoryVisibilityPresent') === '1' ? formData.get('directoryHidden') !== '1' : undefined, reason });
+    revalidateTag(MEMBER_DIRECTORY_CACHE_TAG, { expire: 0 });
     // An administrator can only switch marketing email off for a member; opting in is the member's own
     // consent (docs/19). The toggle is submitted only while the member is opted in, so an unchecked box
     // is an explicit switch-off. Isolated from the profile correction above.
