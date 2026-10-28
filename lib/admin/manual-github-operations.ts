@@ -6,6 +6,11 @@ export const MANUAL_GITHUB_WORKFLOWS = {
     label: 'Promote Staging to Production',
     url: 'https://github.com/marceloATpixelsmith/idoc.club/actions/workflows/monitored-production-promotion.yml',
   },
+  'production-recovery': {
+    file: 'auto-migrate-production.yml',
+    label: 'Recover merged Production release',
+    url: 'https://github.com/marceloATpixelsmith/idoc.club/actions/workflows/auto-migrate-production.yml',
+  },
   'live-auth': {
     file: 'live-auth-staging.yml',
     label: 'Live authentication staging suite',
@@ -13,10 +18,10 @@ export const MANUAL_GITHUB_WORKFLOWS = {
   },
 } as const;
 
-export type ManualGithubWorkflow = keyof typeof MANUAL_GITHUB_WORKFLOWS;
+export type ManualGithubWorkflow = 'production-promotion' | 'live-auth';
 export type ManualGithubRun = {
   id: number;
-  workflow: ManualGithubWorkflow;
+  workflow: ManualGithubWorkflow | 'production-recovery';
   runNumber: number;
   status: 'queued' | 'in_progress' | 'success' | 'failure' | 'cancelled' | 'other';
   event: string;
@@ -36,7 +41,7 @@ export class ManualGithubOperationsError extends Error {
 }
 
 export function isManualGithubWorkflow(value: unknown): value is ManualGithubWorkflow {
-  return typeof value === 'string' && Object.hasOwn(MANUAL_GITHUB_WORKFLOWS, value);
+  return value === 'production-promotion' || value === 'live-auth';
 }
 
 function token() {
@@ -71,7 +76,7 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
   }
   if (!response.ok && response.status !== 204) {
     if (response.status === 422) {
-      throw new ManualGithubOperationsError('GitHub could not perform this operation. For live-auth confirm workflow_dispatch exists on main; for promotion confirm staging differs from main and no conflicting pull request exists.', response.status);
+      throw new ManualGithubOperationsError('GitHub could not perform this operation. GitHub rejected this request. Check that the workflow is enabled on main, the GitHub token has Actions write permission, and the workflow inputs are valid.', response.status);
     }
     throw new ManualGithubOperationsError(`GitHub returned an unexpected status (${response.status}).`, response.status);
   }
@@ -91,23 +96,23 @@ async function loadPromotionSteps(runId: number): Promise<NonNullable<ManualGith
   const response = await github(`/actions/runs/${runId}/jobs?per_page=10`);
   const body = await response.json() as { jobs?: Array<{ steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
   return (body.jobs ?? []).flatMap((job) => job.steps ?? []).filter((step) =>
-    /Check PR, reviews|Merge verified promotion|Verify Vercel production|Verify production health/i.test(step.name));
+    /Check PR, reviews|Merge verified promotion|Verify Vercel production|Verify production health|Mandatory IDOC offsite pre-migration backup|Apply every pending committed migration|Verify the ledger reached|Rebuild production only after migrations/i.test(step.name));
 }
 
 export async function listManualGithubOperationRuns(): Promise<ManualGithubRun[]> {
   const entries = await Promise.all(Object.entries(MANUAL_GITHUB_WORKFLOWS).map(async ([workflow, config]) => {
     try {
-      const response = await github(`/actions/workflows/${config.file}/runs?branch=${workflow === 'production-promotion' ? 'main' : 'staging'}&per_page=5`);
+      const response = await github(`/actions/workflows/${config.file}/runs?branch=${workflow === 'live-auth' ? 'staging' : 'main'}&per_page=5`);
       const body = await response.json() as { workflow_runs?: Array<{ id: number; run_number: number; status: string; conclusion: string | null; event: string; created_at: string; html_url: string }> };
       return Promise.all((body.workflow_runs ?? []).map(async (run) => ({
         id: run.id,
-        workflow: workflow as ManualGithubWorkflow,
+        workflow: workflow as ManualGithubRun['workflow'],
         runNumber: run.run_number,
         status: runStatus(run.status, run.conclusion),
         event: run.event,
         startedAt: run.created_at,
         runUrl: run.html_url,
-        ...(workflow === 'production-promotion' ? { steps: await loadPromotionSteps(run.id) } : {}),
+        ...(workflow === 'production-promotion' || workflow === 'production-recovery' ? { steps: await loadPromotionSteps(run.id) } : {}),
       })));
     } catch (error) {
       // A workflow is not dispatchable until its definition reaches the default branch.
@@ -126,6 +131,21 @@ export async function dispatchManualGithubOperation(workflow: ManualGithubWorkfl
     const payload = await existing.json() as Array<{ head?: { ref?: string; repo?: { full_name?: string } }; html_url?: string }>;
     const pending = payload.find((pr) => pr.head?.ref === 'staging' && pr.head.repo?.full_name === 'marceloATpixelsmith/idoc.club');
     let url = pending?.html_url;
+    if (!url) {
+      // A merge may have already landed on main while the protected backup/migration/deploy
+      // sequence never ran. Never attempt an empty staging -> main PR: recover via the
+      // separately approved, backup-first production maintenance workflow instead.
+      const comparison = await github('/compare/main...staging');
+      const branches = await comparison.json() as { ahead_by?: number };
+      if (branches.ahead_by === 0) {
+        await github('/actions/workflows/auto-migrate-production.yml/dispatches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: 'main' }),
+        });
+        return MANUAL_GITHUB_WORKFLOWS['production-recovery'].url;
+      }
+    }
     if (!url) {
       const response = await github('/pulls', {
         method: 'POST',

@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   actions: read
+  statuses: read
 
 concurrency:
   group: idoc-production-release
@@ -89,13 +90,23 @@ jobs:
           IDOC_MIGRATION_DATABASE_URL: ${{ secrets.IDOC_MIGRATION_DATABASE_URL }}
           TARGET_SCHEMA: idoc_production
         run: node scripts/guard-pending-migrations.mjs after
-      #NEVER TRIGGER A NEW PRODUCTION DEPLOYMENT BEFORE THE BACKUP AND SCHEMA GATES PASS.
-      - name: Rebuild production only after migrations succeed
+      # No success without a deployment from the verified main SHA and a healthy production endpoint.
+      - name: Trigger production deploy only after schema verification succeeds
+        id: trigger
         env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ github.sha }}
           DEPLOY_HOOK: ${{ secrets.IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL }}
-        run: |
-          if [ -z "$DEPLOY_HOOK" ]; then
-            echo "::warning::IDOC_VERCEL_PRODUCTION_DEPLOY_HOOK_URL is unset; redeploy production manually after migrations."
-          else
-            curl --fail --silent --show-error --retry 3 --retry-delay 3 -X POST "$DEPLOY_HOOK" >/dev/null
-          fi
+        run: node scripts/monitored-production-promotion.mjs trigger
+      - name: Verify Vercel production deployment of exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ github.sha }}
+          PROMOTION_TRIGGERED_AT: ${{ steps.trigger.outputs.triggered_at }}
+        run: node scripts/monitored-production-promotion.mjs deploy
+      - name: Verify production health
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_MERGE_SHA: ${{ github.sha }}
+          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL || 'https://idoc.club/api/health' }}
+        run: node scripts/monitored-production-promotion.mjs health
