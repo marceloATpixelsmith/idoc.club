@@ -5,6 +5,8 @@ import test from 'node:test';
 const release = readFileSync('.github/workflows/monitored-production-promotion.yml', 'utf8');
 const recovery = readFileSync('.github/workflows/auto-migrate-production.yml', 'utf8');
 const runner = readFileSync('scripts/monitored-production-promotion.mjs', 'utf8');
+const manual = readFileSync('.github/workflows/manual-apply-migrations.yml', 'utf8');
+const legacy = readFileSync('.github/workflows/manual-promotion-0071.yml', 'utf8');
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
 
 test('production deploys only through the guarded promotion pipeline', () =>
@@ -15,6 +17,10 @@ test('production deploys only through the guarded promotion pipeline', () =>
     assert.match(release, /workflow_dispatch:/);
     assert.doesNotMatch(release, /\n  push:\n/);
     assert.doesNotMatch(recovery, /\n  push:\n/);
+    for (const workflow of [release, recovery, manual, legacy])
+    {
+        assert.match(workflow, /group: idoc-production-release/);
+    }
 });
 
 test('release order enforces backup, schema readiness, deployment and health', () =>
