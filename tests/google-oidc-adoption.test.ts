@@ -162,7 +162,7 @@ test('the test-provider override is gated so it can never resolve anywhere but a
 
 
 test('Google OAuth starts on the configured callback origin before binding a host-only cookie', () => {
-  const redirect = startRoute.indexOf('if (request.nextUrl.origin !== applicationOrigin)');
+  const redirect = startRoute.indexOf('if (request.nextUrl.origin !== applicationOrigin && !sameLocalServer)');
   const mintState = startRoute.indexOf('await createGoogleAuthorizationRequest({');
   assert.ok(redirect > 0 && redirect < mintState);
   assert.match(startRoute, /new URL\('\/api\/auth\/google\/start', applicationOrigin\)/);
