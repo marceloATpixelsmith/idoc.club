@@ -24,6 +24,12 @@ The selected range has a different meaning for different reports:
 - Checkout and payment totals: recorded transaction creation/payment dates.
 - Unresolved reconciliation issues: always visible, independent of range, so older critical incidents cannot disappear accidentally.
 
+## Grace reminders and historical cohort correction (migration 0093)
+
+A grace reminder may be keyed to the **grace-period end date**, which is not necessarily the actual membership expiration date. Migration 0092's original backfill incorrectly treated some of those reminder dates as additional expiration periods. **Migration 0093 corrects this already-applied historical data without rewriting migration 0092**: it deletes only inferred entries marked `reminder_dedupe_key` whose date matches a grace-reminder key, and only when there is no matching actual membership expiration and no independent renewal or expiration reminder for that same date. Periods captured from a membership or entitlement change, or supported by those other independent sources, remain intact.
+
+Apply migration **0093 to staging** through the existing auto-migration workflow and verify the migration ledger before deploying the fixed code. Before promoting to production, apply 0093 through the protected production migration workflow. Historical due-period and cohort totals may decrease when erroneous grace-end periods are removed; do not interpret that change as member renewals being reversed or payment history being deleted. The cleanup affects only the inferred renewal-period ledger, not payments, memberships or notification records.
+
 ## Operational use
 
 Start with **Issues & Alerts**; inspect unresolved Stripe findings, missing notifications, and checkout failures. Next use **Renewal Tracking** to open a specific member's history. Compare notification outbox and Brevo evidence, checkout attempts, payment entries, and entitlement dates. Use **Notification Performance** to investigate bounces and undelivered notices. Compare previous completed cohorts in **Trends & Cohorts**, noting grace periods and the early/late renewal rules.
