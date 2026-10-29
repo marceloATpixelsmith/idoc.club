@@ -71,7 +71,10 @@ const schemas = {
   communications_repeated_activations: readOnlyReportTable,
   reconciliation_findings: readOnlyReportTable,
   member_notifications: readOnlyReportTable,
-  membership_health_range: z.object({ from: date, to: date }).strict(),
+  membership_health_range: z.object({ from: date, to: date }).strict().refine(({ from, to }) => {
+    const valid = (value?: string) => value === undefined || (!Number.isNaN(Date.parse(value + 'T00:00:00Z')) && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value);
+    return valid(from) && valid(to) && (!from || !to || from <= to);
+  }, 'Invalid or reversed reporting date range.'),
   membership_health_cases: readOnlyReportTable,
   membership_health_tracking: readOnlyReportTable,
   membership_health_issues: readOnlyReportTable,
