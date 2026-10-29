@@ -531,6 +531,7 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
     where n.nspname='idoc' and not t.tgisinternal order by c.relname,t.tgname`;
   assert.deepEqual(triggers.map(({ table_name, name, function_name }) => ({ table_name, name, function_name })), [
     { table_name: 'audit_log', name: 'audit_log_immutable', function_name: 'reject_immutable_history_change' },
+    { table_name: 'memberships', name: 'membership_renewal_period_capture', function_name: 'capture_membership_renewal_period' },
     { table_name: 'profile_change_history', name: 'profile_change_history_immutable', function_name: 'reject_immutable_history_change' },
     { table_name: 'seminar_payment_methods', name: 'seminar_payment_methods_no_delete', function_name: 'protect_canonical_seminar_payment_methods' },
     { table_name: 'support_messages', name: 'support_messages_immutable', function_name: 'reject_support_message_change' },
@@ -538,7 +539,9 @@ test('final migrated catalog exactly agrees with the authoritative Drizzle snaps
   for (const trigger of triggers) {
     const expectedTiming = trigger.name === 'seminar_payment_methods_no_delete'
       ? /BEFORE DELETE ON/
-      : /BEFORE DELETE OR UPDATE/;
+      : trigger.name === 'membership_renewal_period_capture'
+        ? /AFTER INSERT OR UPDATE OF valid_until ON/
+        : /BEFORE DELETE OR UPDATE/;
     assert.match(trigger.definition, expectedTiming);
   }
   assert.equal((await sql`select count(*)::int as count from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='idoc' and t.typtype='e'`)[0].count, 0, 'enum semantics are represented by the compared checks');
