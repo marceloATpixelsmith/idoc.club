@@ -362,6 +362,41 @@ export const memberships = idocSchema.table('memberships', {
   index('memberships_profile_latest_idx').on(table.profileId, table.validUntil.desc().nullsFirst(), table.id.desc().nullsFirst()),
 ]);
 
+/** Durable expiration cohorts: a renewal mutates memberships.valid_until in place,
+ * so a trigger records both the old and new periods instead of losing history. */
+export const membershipRenewalPeriods = idocSchema.table('membership_renewal_periods', {
+  profileId: integer('profile_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  expiresOn: date('expires_on').notNull(),
+  firstObservedAt: timestamp('first_observed_at', { withTimezone: true }).notNull().defaultNow(),
+  evidenceSource: varchar('evidence_source', { length: 40 }).notNull().default('membership'),
+}, (table) => [
+  primaryKey({ columns: [table.profileId, table.expiresOn] }),
+  index('membership_renewal_periods_expiration_idx').on(table.expiresOn, table.profileId),
+]);
+
+/** Durable administrator investigation cases synchronized by the renewal health watcher. */
+export const membershipHealthCases = idocSchema.table('membership_health_cases', {
+  id: serial('id').primaryKey(),
+  issueKey: varchar('issue_key', { length: 200 }).notNull().unique(),
+  kind: varchar('kind', { length: 60 }).notNull(),
+  profileId: integer('profile_id').references(() => profiles.id, { onDelete: 'cascade' }),
+  severity: varchar('severity', { length: 10 }).notNull().default('high'),
+  status: varchar('status', { length: 20 }).notNull().default('new'),
+  title: text('title').notNull(),
+  evidence: jsonb('evidence').notNull().default({}),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  assignedToUserId: integer('assigned_to_user_id').references(() => users.id, { onDelete: 'set null' }),
+  resolutionNote: text('resolution_note'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('membership_health_cases_status_time_idx').on(table.status, table.lastSeenAt.desc()),
+  index('membership_health_cases_profile_idx').on(table.profileId, table.firstSeenAt.desc()),
+  check('membership_health_cases_severity_check', sql`${table.severity} in ('critical','high','medium')`),
+  check('membership_health_cases_status_check', sql`${table.status} in ('new','investigating','resolved','dismissed')`),
+]);
+
 export const profileChangeHistory = idocSchema.table('profile_change_history', {
   id: serial('id').primaryKey(),
   profileId: integer('profile_id').notNull().references(() => profiles.id),
