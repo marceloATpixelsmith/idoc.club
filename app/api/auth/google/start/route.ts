@@ -40,6 +40,28 @@ export async function GET(request: NextRequest) {
   let phase: 'transaction_purge' | 'authorization_request' = 'transaction_purge';
 
   try {
+    //KEEP THE HOST-ONLY OAUTH BINDING COOKIE ON THE SAME ORIGIN AS THE GOOGLE CALLBACK.
+    //OTHER PRODUCTION ALIASES MUST START THE FLOW ON THE CONFIGURED CALLBACK HOST.
+    //PRESERVE ONLY THE TWO RECOGNIZED INPUTS; NEVER ACCEPT A USER-SUPPLIED REDIRECT HOST.
+    const config = loadGoogleOidcConfig();
+    const applicationOrigin = new URL(config.redirectUri).origin;
+    //LOCAL TEST SERVERS MAY USE localhost AND 127.0.0.1 INTERCHANGEABLY.
+    //NEVER APPLY THIS EXCEPTION TO PUBLIC OR DEPLOYED HOSTNAMES.
+    const requestedHost = request.nextUrl.hostname;
+    const callbackHost = new URL(applicationOrigin).hostname;
+    const loopbackHosts = ['localhost', '127.0.0.1', '[::1]'];
+    const sameLocalServer = process.env.NODE_ENV !== 'production'
+      && loopbackHosts.includes(requestedHost)
+      && loopbackHosts.includes(callbackHost)
+      && request.nextUrl.port === new URL(applicationOrigin).port;
+    if (request.nextUrl.origin !== applicationOrigin && !sameLocalServer) {
+      const canonicalStart = new URL('/api/auth/google/start', applicationOrigin);
+      canonicalStart.searchParams.set('intent', intent);
+      const requestedReturnTo = request.nextUrl.searchParams.get('returnTo');
+      if (requestedReturnTo) canonicalStart.searchParams.set('returnTo', requestedReturnTo);
+      return NextResponse.redirect(canonicalStart, 302);
+    }
+
     const origin = await requestOrigin();
     if (!(await checkOriginRateLimit('google_oauth_start', origin))) {
       // Deliberately logWarn, not logError/notifyWebmasterOfGoogleOauthFailure: this is expected,
@@ -52,8 +74,6 @@ export async function GET(request: NextRequest) {
 
     await purgeExpiredGoogleOauthTransactions();
 
-    const config = loadGoogleOidcConfig();
-    const applicationOrigin = new URL(config.redirectUri).origin;
     const returnTo = request.nextUrl.searchParams.get('returnTo') ?? (intent === 'login' ? '/' : '/dashboard');
 
     phase = 'authorization_request';

@@ -159,3 +159,14 @@ test('the test-provider override is gated so it can never resolve anywhere but a
   assert.match(provider, /url\.hostname === 'localhost' \|\| url\.hostname === '127\.0\.0\.1' \|\| url\.hostname === '::1'/);
   assert.match(provider, /if \(url\.protocol !== 'http:' \|\| !isLoopback\) return GOOGLE_OIDC_PROVIDER;/);
 });
+
+
+test('Google OAuth starts on the configured callback origin before binding a host-only cookie', () => {
+  const redirect = startRoute.indexOf('if (request.nextUrl.origin !== applicationOrigin && !sameLocalServer)');
+  const mintState = startRoute.indexOf('await createGoogleAuthorizationRequest({');
+  assert.ok(redirect > 0 && redirect < mintState);
+  assert.match(startRoute, /new URL\('\/api\/auth\/google\/start', applicationOrigin\)/);
+  assert.match(startRoute, /canonicalStart\.searchParams\.set\('intent', intent\)/);
+  assert.match(startRoute, /return NextResponse\.redirect\(canonicalStart, 302\)/);
+  assert.match(binding, /const PRODUCTION_COOKIE = '__Host-idoc-google-oauth'/);
+});
