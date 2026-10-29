@@ -652,6 +652,13 @@
       "when": 1793200000000,
       "tag": "0092_membership_renewal_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793236000000,
+      "tag": "0093_grace_reminder_period_cleanup",
+      "breakpoints": true
     }
   ]
 }
