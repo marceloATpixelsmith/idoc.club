@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { AdminFormDrawer } from '@/components/admin/admin-form-drawer';
-import { CsrfField } from '@/components/security/csrf-field';
 import type { MembershipHealthCase } from '@/lib/membership/health-cases';
-import { updateMembershipHealthCase } from './actions';
+import { MembershipHealthCaseForm } from './membership-health-case-form';
 
 export function MembershipHealthCaseDrawer({ record }: { record: MembershipHealthCase }) {
   return <AdminFormDrawer closeHref="/admin/membership-health?tab=issues" title="Renewal investigation" wide>
@@ -17,31 +16,7 @@ export function MembershipHealthCaseDrawer({ record }: { record: MembershipHealt
           <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(record.evidence, null, 2)}</pre>
         </details>
       </section>
-      <form action={updateMembershipHealthCase} className="space-y-5 rounded-lg border p-5">
-        <CsrfField/>
-        <input type="hidden" name="id" value={record.id}/>
-        <div>
-          <label className="mb-2 block text-sm font-semibold" htmlFor="health-case-status">Investigation status</label>
-          <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={record.status} id="health-case-status" name="status" required>
-            <option value="new">New</option><option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option><option value="dismissed">Dismissed</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-2 block text-sm font-semibold" htmlFor="health-case-assignment">Assigned administrator</label>
-          <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="keep" id="health-case-assignment" name="assignment">
-            <option value="keep">{record.assigned_email ? `Keep assigned: ${record.assigned_email}` : 'Leave unassigned'}</option>
-            <option value="me">Assign to me</option>
-            <option value="unassigned">Unassign</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-2 block text-sm font-semibold" htmlFor="health-case-note">Investigation / resolution notes</label>
-          <textarea className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={record.resolution_note ?? ''} id="health-case-note" maxLength={2000} name="resolutionNote" placeholder="Document the provider evidence, action taken and outcome."/>
-          <p className="mt-1 text-xs text-muted-foreground">At least 10 characters are required when resolving or dismissing a case. Changes are audited.</p>
-        </div>
-        <button className="idoc-primary-button px-4 py-2 text-sm" type="submit">Save investigation</button>
-      </form>
+      <MembershipHealthCaseForm record={record} />
     </div>
   </AdminFormDrawer>;
 }

@@ -29,8 +29,8 @@ export default async function MembershipHealthPage({ searchParams }: { searchPar
   const params = await searchParams;
   const tab = TABS.find((value) => value.id === params.tab)?.id ?? 'overview';
   const [savedRange, casePrefs, trackingPrefs, issuePrefs, noticePrefs, cohortPrefs] = await Promise.all([
-    getTablePreferences('membership_health_cases'),
     getTablePreferences('membership_health_range'),
+    getTablePreferences('membership_health_cases'),
     getTablePreferences('membership_health_tracking'),
     getTablePreferences('membership_health_issues'),
     getTablePreferences('membership_health_notifications'),
