@@ -81,6 +81,7 @@ export const SECURITY_EVENT_TAXONOMY = {
   operational_alert_dead_lettered: { attribution: 'system', category: 'delivery', metadata: { kind: ['incident_response_action_taken', 'member_journey_attention', 'rate_limit_correlation_alert'] }, resource: 'operational-alert-outbox', retentionClass: 'operational', sentry: true },
   operational_alert_delivery_worker_failed: { attribution: 'system', category: 'operational', resource: 'operational-alert-outbox', retentionClass: 'operational' },
   rate_limit_correlation_alert_failed: { attribution: 'system', category: 'delivery', resource: 'rate-limit-correlation-alert', retentionClass: 'security', sentry: true },
+  membership_health_scan_failed: { attribution: 'system', category: 'operational', resource: 'membership-health-scan', retentionClass: 'operational', sentry: true },
   reconciliation_scan_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: true },
   reconciliation_orphan_cancel_paused: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: true },
   reconciliation_scan_notice_failed: { attribution: 'system', category: 'operational', resource: 'reconciliation-scan', retentionClass: 'operational', sentry: false },

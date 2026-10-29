@@ -645,6 +645,13 @@
       "when": 1793190000000,
       "tag": "0091_directory_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0092_membership_renewal_periods",
+      "breakpoints": true
     }
   ]
 }
