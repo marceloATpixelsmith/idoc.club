@@ -24,16 +24,22 @@ const updateSchema = z.object({
 
 // ONLY THE STATUS, OWNER AND RESOLUTION NOTE ARE EDITABLE. THE DETECTION
 // EVIDENCE IS SERVER-OWNED AND ALL HUMAN DECISIONS ARE WRITTEN TO AUDIT LOG.
-export async function updateMembershipHealthCase(formData: FormData): Promise<void> {
+export type CaseUpdateState = { error: string | null };
+
+export async function updateMembershipHealthCase(_previousState: CaseUpdateState, formData: FormData): Promise<CaseUpdateState> {
   await requireCsrfToken(formData, await rawCanonicalSessionId(), await rawCanonicalUserId());
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  const values = updateSchema.parse({
+  const parsed = updateSchema.safeParse({
     id: formData.get('id'),
     status: formData.get('status'),
     assignment: formData.get('assignment'),
     resolutionNote: formData.get('resolutionNote'),
   });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Check your investigation details.' };
+  }
+  const values = parsed.data;
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(membershipHealthCases)
       .where(eq(membershipHealthCases.id, values.id)).for('update').limit(1);
