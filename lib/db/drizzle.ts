@@ -2,7 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 import dotenv from 'dotenv';
-import { getPostgresConnectionUrl } from './connection-url';
+import { getApplicationPostgresConnectionUrl } from './connection-url';
 import { getDatabaseSchemaName } from './schema-name';
 import 'server-only';
 
@@ -25,7 +25,17 @@ const CONNECTION_OPTIONS = {
   connection: { application_name: 'idoc-club', search_path: getDatabaseSchemaName() },
 } as const;
 
-function getClient() { connection ??= postgres(getPostgresConnectionUrl(), CONNECTION_OPTIONS); return connection; }
+function getClient() {
+  if (!connection) {
+    const pooled = process.env.POSTGRES_POOL_ENABLED === 'true' && process.env.NODE_ENV !== 'test' && !process.env.TEST_DATABASE_URL;
+    //TRANSACTION POOLING MUST NOT USE SESSION-LEVEL SET OR NAMED PREPARED STATEMENTS.
+    //THE DATABASE ROLE ALREADY HAS THE CORRECT SEARCH_PATH DEFAULT IN POSTGRESQL.
+    connection = postgres(getApplicationPostgresConnectionUrl(), pooled
+      ? { ...CONNECTION_OPTIONS, prepare: false, connection: { application_name: 'idoc-club' } }
+      : CONNECTION_OPTIONS);
+  }
+  return connection;
+}
 function getDatabase() { database ??= drizzle(getClient(), { schema }); return database; }
 // `client` must remain callable as a tagged template (`client\`select ...\``), matching the real
 // postgres.js client it lazily wraps: a Proxy is only callable if its own target is callable, so the

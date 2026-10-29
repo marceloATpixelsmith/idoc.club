@@ -30,3 +30,21 @@ export function getPostgresConnectionUrl(): string {
 
   return parsedUrl.toString();
 }
+
+
+//USE RENDER'S TRANSACTION POOL FOR APPLICATION QUERIES ONLY WHEN EXPLICITLY ENABLED.
+//THE DIRECT URL REMAINS THE SOURCE FOR MIGRATIONS AND OTHER SESSION-DEPENDENT OPERATIONS.
+export function getApplicationPostgresConnectionUrl(): string {
+  const directUrl = getPostgresConnectionUrl();
+  if (process.env.POSTGRES_POOL_ENABLED !== 'true' || process.env.NODE_ENV === 'test' || process.env.TEST_DATABASE_URL) {
+    return directUrl;
+  }
+
+  const pooledUrl = new URL(directUrl);
+  //RENDER'S INTEGRATED PGBOUNCER LISTENS ON PORT 6432 ON THE SAME DATABASE HOST.
+  if (pooledUrl.port && pooledUrl.port !== '5432') {
+    throw new Error('A direct PostgreSQL URL on port 5432 is required to enable pooling.');
+  }
+  pooledUrl.port = '6432';
+  return pooledUrl.toString();
+}
