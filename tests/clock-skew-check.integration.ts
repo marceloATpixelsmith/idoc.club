@@ -32,8 +32,42 @@ beforeEach(async () => { await resetIdoc(); sentAlerts = []; Date.now = original
 after(async () => { Date.now = originalDateNow; globalThis.fetch = originalFetch; await closeHarness(); });
 
 test('measureClockSkewMs reports near-zero skew against the real, unaltered application clock', async () => {
-  const skewMs = await measureClockSkewMs();
+  const { skewMs, roundTripMs } = await measureClockSkewMs();
   assert.ok(Math.abs(skewMs) < 2_000, `expected the real app clock and the real test database clock to agree within 2s, got ${skewMs}ms`);
+  assert.ok(roundTripMs >= 0);
+});
+
+// Simulates a slow probe: the database answers immediately, but the app reads its clock again only
+// after a long delay (a frozen or busy serverless instance). Every call after the first `before` read
+// in a sample lands `delayMs` later, which is what produced the real false 7223ms "ahead" alert.
+function delayEveryResponseRead(delayMs: number) {
+  let call = 0;
+  Date.now = () => originalDateNow() + (call++ % 2 === 1 ? delayMs : 0);
+}
+
+test('a slow round trip with no real drift does not alert (regression: false 7223ms alert)', async () => {
+  delayEveryResponseRead(14_446);
+  try {
+    const result = await runClockSkewCheck();
+    assert.ok(result.skewMs > 5_000, `the naive midpoint estimate should exceed the bound, got ${result.skewMs}ms`);
+    assert.ok(result.roundTripMs >= 14_000);
+    assert.equal(result.alerted, 0);
+  } finally {
+    Date.now = originalDateNow;
+  }
+  assert.equal(sentAlerts.length, 0);
+});
+
+test('one slow sample among fast ones is discarded in favor of the fastest sample', async () => {
+  let call = 0;
+  Date.now = () => originalDateNow() + (call++ === 1 ? 14_446 : 0);
+  try {
+    const { skewMs, roundTripMs } = await measureClockSkewMs();
+    assert.ok(roundTripMs < 2_000, `expected the fastest sample to be kept, got a ${roundTripMs}ms round trip`);
+    assert.ok(Math.abs(skewMs) < 2_000, `expected near-zero skew from the fast sample, got ${skewMs}ms`);
+  } finally {
+    Date.now = originalDateNow;
+  }
 });
 
 test('a genuinely large forward skew (app clock far ahead of the database) is measured and alerted', async () => {
