@@ -5,7 +5,7 @@ import { suspendMembership } from '../lib/membership/status-actions.ts';
 import { isEntitled } from '../lib/membership/entitlement.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { cancelMemberSubscriptionAtPeriodEnd } from '../lib/payments/stripe.ts';
-import { closeHarness, createCompleteGraph, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
+import { adminUser, asAdmin, closeHarness, createCompleteGraph, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
 beforeEach(resetIdoc);
 after(closeHarness);
@@ -204,9 +204,9 @@ test('a schedule activating before its webhook is released and its subscription 
 test('administrator membership cancellation also stops a pending renewal schedule', async () => {
     const { profile } = await createCompleteGraph();
     await insertPendingSchedule(profile.id);
-    const admin = await createUser();
+    const admin = await adminUser();
     const { calls, client } = fakeScheduleClient();
-    const result = await withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () => suspendMembership(profile.id, 'Member requested cancellation.', client));
+    const result = await asAdmin(admin.id, () => suspendMembership(profile.id, 'Member requested cancellation.', client));
     assert.equal(result.stripeCancelled, true);
     assert.deepEqual(calls, ['release:sub_sched_fixture']);
 });
