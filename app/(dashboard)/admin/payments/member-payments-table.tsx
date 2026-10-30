@@ -1,8 +1,8 @@
 'use client';
 
-import { type ColumnDef, getCoreRowModel, getPaginationRowModel, useReactTable } from '@tanstack/react-table';
+import { AdminReadOnlyTable } from '@/components/admin/admin-read-only-table';
+import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 import { Undo2 } from 'lucide-react';
-import { DataTable } from '@/components/data-table/data-table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { formatTableDate } from '@/lib/format';
@@ -41,22 +41,39 @@ function RefundAction({ onSuccess, payment, profileId }: { onSuccess: () => void
     );
     }
 
-export function MemberPaymentsTable({ loading, onSuccess, payments, profileId }: { loading?: boolean; onSuccess: () => void; payments: StripePayment[]; profileId: string })
+const COLUMNS = [
+    { id: 'date', label: 'Date' },
+    { id: 'amount', label: 'Amount' },
+    { id: 'source', label: 'Source' },
+    { id: 'status', label: 'Status' },
+];
+
+export function MemberPaymentsTable({ initialPreferences, loading, onSuccess, payments, profileId }: { initialPreferences?: TablePreferenceState | null; loading?: boolean; onSuccess: () => void; payments: StripePayment[]; profileId: string })
     {
-    const columns: ColumnDef<StripePayment>[] = [
-        { accessorKey: 'paid_at', header: 'Date', cell: ({ row }) => formatTableDate(row.original.paid_at) },
-        { accessorKey: 'amount_cents', header: 'Amount', cell: ({ row }) => new Intl.NumberFormat('en-IE', { currency: row.original.currency, style: 'currency' }).format(row.original.amount_cents / 100) },
-        { accessorKey: 'source', header: 'Source', cell: ({ row }) => SOURCE_LABELS[row.original.source] ?? row.original.source },
-        { accessorKey: 'refund_status', header: 'Status', cell: ({ row }) => row.original.refund_status === 'succeeded' ? 'Refunded' : row.original.refund_status ? row.original.refund_status.replaceAll('_', ' ') : 'Paid' },
-        { id: 'actions', header: 'Actions', enableHiding: false, cell: ({ row }) => row.original.refund_status === 'succeeded' || !['stripe_recurring', 'stripe_one_time'].includes(row.original.source) ? '—' : <RefundAction onSuccess={onSuccess} payment={row.original} profileId={profileId} /> },
-    ];
-    const table = useReactTable({
-        columns,
-        data: payments,
-        getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getRowId: (payment) => String(payment.id),
-        initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
-    });
-    return <DataTable emptyState="No payments have been recorded for this member." loading={loading} pageSizeOptions={[10, 25, 50, 100]} table={table} />;
+    const rows = payments.map((payment) => ({
+        id: String(payment.id),
+        date: new Date(payment.paid_at).toISOString(),
+        amount: new Intl.NumberFormat('en-IE', { currency: payment.currency, style: 'currency' }).format(payment.amount_cents / 100),
+        source: SOURCE_LABELS[payment.source] ?? payment.source,
+        status: payment.refund_status === 'succeeded' ? 'Refunded' : payment.refund_status ? payment.refund_status.replaceAll('_', ' ') : 'Paid',
+    }));
+    return (
+        <AdminReadOnlyTable
+            columns={COLUMNS}
+            dateColumn="date"
+            empty="No payments have been recorded for this member."
+            initialPreferences={initialPreferences}
+            loading={loading}
+            preferenceKey="member_payments"
+            rowActions={(row) => {
+                const payment = payments.find((entry) => String(entry.id) === row.id);
+                return payment && payment.refund_status !== 'succeeded' && ['stripe_recurring', 'stripe_one_time'].includes(payment.source)
+                    ? <RefundAction onSuccess={onSuccess} payment={payment} profileId={profileId} />
+                    : '—';
+            }}
+            rows={rows}
+            searchLabel="Search payment history"
+            statusColumn="status"
+        />
+    );
     }

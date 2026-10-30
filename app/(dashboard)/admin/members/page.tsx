@@ -70,6 +70,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   }
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const hasValidProfileId = Boolean(profileId && Number.isInteger(profileId));
+  const paymentPreferences = hasValidProfileId ? await getTablePreferences('member_payments') : null;
   const notificationPreferences = hasValidProfileId ? await getTablePreferences('member_notifications') : null;
   // getPrivateMember, listAuditHistory and the Stripe payment query all depend only on profileId (the
   // payment query filters on the same profile id `selected.profile.id` resolves to), not on each other;
@@ -118,6 +119,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         notificationHistory={notificationHistory}
         notificationPreferences={notificationPreferences}
         paymentHistory={paymentHistory}
+        paymentPreferences={paymentPreferences}
         seminarHistory={seminarHistory}
         selected={selected}
         stripePayments={stripePayments}

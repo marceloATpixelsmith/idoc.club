@@ -26,7 +26,7 @@ const REFERENCE_LABELS: Partial<Record<ManualPaymentSource, string>> = {
 
 export function ManualPaymentForm({ currentValidUntil, onSuccess, profileId }: { currentValidUntil: string | null; onSuccess?: () => void; profileId: number }) {
   const [state, formAction, isPending] = useActionState<ManualPaymentActionState, FormData>(recordManualPaymentForm, {});
-  useEffect(() => { if (state.success) onSuccess?.(); }, [state.success, onSuccess]);
+  useEffect(() => { if (state.success) onSuccess?.(); }, [state, onSuccess]);
   // Every field is controlled: React resets uncontrolled fields after a form action finishes, which wiped the
   // administrator's input whenever the server rejected the submission.
   const [paidAt, setPaidAt] = useState(today());

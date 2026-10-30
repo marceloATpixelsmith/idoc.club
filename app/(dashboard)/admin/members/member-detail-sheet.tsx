@@ -66,6 +66,7 @@ export function MemberDetailSheet({
   notificationHistory,
   notificationPreferences,
   paymentHistory,
+  paymentPreferences,
   seminarHistory,
   selected,
   stripePayments,
@@ -79,6 +80,7 @@ export function MemberDetailSheet({
   notificationHistory: ReadOnlyRow[];
   notificationPreferences?: TablePreferenceState | null;
   paymentHistory: PaymentHistoryEntry[];
+  paymentPreferences?: TablePreferenceState | null;
   seminarHistory: SeminarHistoryEntry[];
   selected: Selected;
   stripePayments: StripePayment[];

@@ -43,9 +43,11 @@ function formatReadOnlyCell(value: string | undefined) {
 }
 
 export function AdminReadOnlyTable({
-  bulkActions, columns: definitions, dateColumn, empty, filterColumns, initialPreferences, preferenceKey, rows, searchLabel, statusColumn, tableType,
+  loading, rowActions, bulkActions, columns: definitions, dateColumn, empty, filterColumns, initialPreferences, preferenceKey, rows, searchLabel, statusColumn, tableType,
 }: {
   /** Extra items for the selection bar (rendered after Export), given the selected rows and a way to clear the selection. */
+  loading?: boolean;
+  rowActions?: (row: ReadOnlyRow) => ReactNode;
   bulkActions?: (context: { clearSelection: () => void; selected: ReadOnlyRow[] }) => ReactNode;
   columns: { id: string; label: string }[];
   /** Id of a column holding an ISO date/timestamp string to add a date-range filter for, rendered
@@ -119,8 +121,9 @@ export function AdminReadOnlyTable({
           : formatReadOnlyCell(row.original[id]),
       })),
     ];
+    if (rowActions) definedColumns.push({ id: 'actions', header: 'Actions', enableHiding: false, enableSorting: false, cell: ({ row }) => rowActions(row.original) });
     return definedColumns;
-  }, [definitions, filterIds, optionsById, dateColumn]);
+  }, [definitions, filterIds, optionsById, dateColumn, rowActions]);
   const table = useReactTable({
     columns, data: rows, getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(), getFilteredRowModel: getFilteredRowModel(),
@@ -177,7 +180,7 @@ export function AdminReadOnlyTable({
   }
   const dateFilterValue = dateColumn ? (table.getColumn(dateColumn)?.getFilterValue() as DateFilterValue | undefined) : undefined;
   const dateColumnLabel = definitions.find(({ id }) => id === dateColumn)?.label ?? dateColumn ?? '';
-  return <DataTable loading={viewChanging} table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup>{tableType ? <ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem> : null}{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
+  return <DataTable loading={loading || viewChanging} table={table} pageSizeOptions={[10, 25, 50, 100]} emptyState={<span className="text-muted-foreground">{empty}</span>} actionBar={<ActionBar open={actionBarVisibility.open} onOpenChange={actionBarVisibility.onOpenChange}><ActionBarSelection>{selected.length} selected</ActionBarSelection><ActionBarGroup>{tableType ? <ActionBarItem onSelect={exportSelected}>Export selected CSV</ActionBarItem> : null}{bulkActions?.({ clearSelection: () => table.resetRowSelection(), selected })}<ActionBarItem onSelect={() => table.resetRowSelection()}>Clear selection</ActionBarItem></ActionBarGroup><ActionBarClose aria-label="Close selected-row actions"><X /></ActionBarClose></ActionBar>}>
     <DataTableToolbar
       className="mt-4 rounded-xl border bg-background p-3"
       table={table}
