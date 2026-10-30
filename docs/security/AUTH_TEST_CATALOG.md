@@ -1094,7 +1094,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 - **Risk:** critical
 - **Applicability:** applicable
 - **Canonical controls:** AUTH-AUTHZ-001, AUTH-AUTHZ-004, AUTH-AUTHZ-005, AUTH-SESSION-002
-- **CI coverage:** mapped — `tests/checkout.integration.ts`, `tests/membership-cancellation.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts`, `tests/session-gate.test.ts`, `tests/status-actions.integration.ts`, `tests/stripe-webhook.integration.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form. Integration regressions also prove that cancellation stops a pending renewal Subscription Schedule with no subscription row, retains failed schedule evidence for retry, and ends an activated schedule subscription at period end.
+- **CI coverage:** mapped — `tests/checkout.integration.ts`, `tests/membership-cancellation.integration.ts`, `tests/security-e2e/membership-access-gate.spec.ts`, `tests/session-gate.test.ts`, `tests/status-actions.integration.ts`, `tests/stripe-webhook.integration.ts` — The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form. Integration regressions also prove that cancellation stops a pending renewal Subscription Schedule with no subscription row, retains failed schedule evidence for retry, and ends an activated schedule subscription at period end. A regression simulates activation between schedule retrieval and release.
 - **Live:** required; email=yes; admin=no; destructive=no
 
 ### Preconditions
@@ -1113,7 +1113,7 @@ A defect is not fully regression-covered until it maps to one of these IDs (or a
 6. Before the cancellation, open Pay on My Membership and leave the Stripe Checkout page unpaid. After the administrator cancels (or suspends) the membership, complete that Checkout Session with a Stripe test card.
 7. Confirm the membership status and paid-through date are unchanged, the payment is recorded, and a status_conflict reconciliation finding names the Checkout Session.
 8. With the membership suspended (or review required), confirm Pay refuses to create a new Checkout Session.
-9. Using only a disposable Stripe test-mode member, authorize a future automatic-renewal schedule, cancel membership, and confirm the schedule is canceled and cannot activate. Repeat through the administrator cancellation action.
+9. Using only a disposable Stripe test-mode member, authorize a future automatic-renewal schedule, cancel membership, and confirm the schedule is released and cannot activate. Repeat through the administrator cancellation action.
 
 ### PASS
 - Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.

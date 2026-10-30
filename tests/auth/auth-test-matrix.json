@@ -2014,7 +2014,7 @@
           "tests/status-actions.integration.ts",
           "tests/stripe-webhook.integration.ts"
         ],
-        "rationale": "The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form. Integration regressions also prove that cancellation stops a pending renewal Subscription Schedule with no subscription row, retains failed schedule evidence for retry, and ends an activated schedule subscription at period end."
+        "rationale": "The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form. Integration regressions also prove that cancellation stops a pending renewal Subscription Schedule with no subscription row, retains failed schedule evidence for retry, and ends an activated schedule subscription at period end. A regression simulates activation between schedule retrieval and release."
       },
       "live": {
         "enabled": true,
@@ -2037,7 +2037,7 @@
           "Before the cancellation, open Pay on My Membership and leave the Stripe Checkout page unpaid. After the administrator cancels (or suspends) the membership, complete that Checkout Session with a Stripe test card.",
           "Confirm the membership status and paid-through date are unchanged, the payment is recorded, and a status_conflict reconciliation finding names the Checkout Session.",
           "With the membership suspended (or review required), confirm Pay refuses to create a new Checkout Session.",
-          "Using only a disposable Stripe test-mode member, authorize a future automatic-renewal schedule, cancel membership, and confirm the schedule is canceled and cannot activate. Repeat through the administrator cancellation action."
+          "Using only a disposable Stripe test-mode member, authorize a future automatic-renewal schedule, cancel membership, and confirm the schedule is released and cannot activate. Repeat through the administrator cancellation action."
         ],
         "pass": [
           "Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.",

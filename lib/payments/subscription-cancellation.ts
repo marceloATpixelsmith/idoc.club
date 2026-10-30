@@ -34,16 +34,13 @@ export async function cancelOpenSubscriptionIfAny(profileId: number, testStripeC
             if (!stripe.subscriptionSchedules) throw new Error('Stripe schedule cancellation is unavailable.');
             const schedule = await stripe.subscriptionSchedules.retrieve(scheduleId);
             const subscriptionId = typeof schedule.subscription === 'string' ? schedule.subscription : schedule.subscription?.id;
-            if (schedule.status === 'not_started')
+            if (schedule.status === 'not_started' || schedule.status === 'active')
                 {
-                await stripe.subscriptionSchedules.cancel(scheduleId, { invoice_now: false, prorate: false });
-                }
-            else if (schedule.status === 'active')
-                {
-                //RELEASE THE SCHEDULE BEFORE SETTING ITS SUBSCRIPTION TO END AT PERIOD END; NEVER END A PAID TERM EARLY.
-                if (!subscriptionId) throw new Error('The active renewal schedule has no subscription.');
-                await stripe.subscriptionSchedules.release(scheduleId);
-                subscriptionIds.add(subscriptionId);
+                //RELEASE IS SAFE IF A FUTURE SCHEDULE ACTIVATES DURING THE REQUEST; IT NEVER CANCELS THE PAID SUBSCRIPTION.
+                const released = await stripe.subscriptionSchedules.release(scheduleId);
+                const releasedId = released.released_subscription ?? subscriptionId;
+                if (releasedId) subscriptionIds.add(releasedId);
+                else if (schedule.status === 'active') throw new Error('The released renewal schedule has no subscription.');
                 }
             else if (schedule.status === 'released' || schedule.status === 'completed')
                 {

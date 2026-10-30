@@ -133,7 +133,7 @@ async function insertPendingSchedule(profileId: number)
         values(${profileId},'non_recurring','recurring','2099-12-31','sub_sched_fixture','pending_activation')`;
     }
 
-function fakeScheduleClient(options: { fail?: boolean; status?: string } = {})
+function fakeScheduleClient(options: { fail?: boolean; status?: string; activateOnRelease?: boolean } = {})
     {
     const calls: string[] = [];
     return {
@@ -141,11 +141,11 @@ function fakeScheduleClient(options: { fail?: boolean; status?: string } = {})
         client: {
             subscriptionSchedules: {
                 retrieve: async (id: string) => ({ id, status: options.status ?? 'not_started', subscription: options.status === 'active' ? 'sub_schedule_activated' : null }),
-                cancel: async (id: string, params: { invoice_now: boolean; prorate: boolean }) => {
-                    calls.push(`cancel:${id}:${params.invoice_now}:${params.prorate}`);
+                release: async (id: string) => {
+                    calls.push(`release:${id}`);
                     if (options.fail) throw new Error('Schedule provider unavailable.');
+                    return { released_subscription: options.status === 'active' || options.activateOnRelease ? 'sub_schedule_activated' : null };
                 },
-                release: async (id: string) => { calls.push(`release:${id}`); },
             },
             subscriptions: {
                 update: async (id: string, params: { cancel_at_period_end: boolean }) => {
@@ -164,7 +164,7 @@ test('member cancellation stops a future schedule without a subscription and cle
     const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
     assert.equal(result.membership.status, 'canceled');
     assert.equal(result.stripeCancelled, true);
-    assert.deepEqual(calls, ['cancel:sub_sched_fixture:false:false']);
+    assert.deepEqual(calls, ['release:sub_sched_fixture']);
     const [preference] = await sql`select * from idoc.renewal_preferences where profile_id=${profile.id}`;
     assert.equal(preference.current_mode, 'non_recurring');
     assert.equal(preference.pending_mode, null);
@@ -180,7 +180,7 @@ test('schedule failure remains retryable and does not skip existing subscription
     assert.equal(result.membership.status, 'canceled');
     assert.equal(result.stripeCancelled, false);
     assert.match(result.stripeCancelError ?? '', /Schedule provider unavailable/);
-    assert.deepEqual(failed.calls, ['cancel:sub_sched_fixture:false:false', 'subscription:sub_fixture:true']);
+    assert.deepEqual(failed.calls, ['release:sub_sched_fixture', 'subscription:sub_fixture:true']);
     const [retained] = await sql`select external_subscription_schedule_id,pending_mode from idoc.renewal_preferences where profile_id=${profile.id}`;
     assert.equal(retained.external_subscription_schedule_id, 'sub_sched_fixture');
     assert.equal(retained.pending_mode, 'recurring');
@@ -208,5 +208,16 @@ test('administrator membership cancellation also stops a pending renewal schedul
     const { calls, client } = fakeScheduleClient();
     const result = await withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () => suspendMembership(profile.id, 'Member requested cancellation.', client));
     assert.equal(result.stripeCancelled, true);
-    assert.deepEqual(calls, ['cancel:sub_sched_fixture:false:false']);
+    assert.deepEqual(calls, ['release:sub_sched_fixture']);
+});
+
+test('activation between schedule retrieval and release preserves the active subscription through period end', async () => {
+    const { profile, user } = await createCompleteGraph();
+    await insertPendingSchedule(profile.id);
+    const { calls, client } = fakeScheduleClient({ activateOnRelease: true });
+    const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
+    assert.equal(result.stripeCancelled, true);
+    assert.deepEqual(calls, ['release:sub_sched_fixture', 'subscription:sub_schedule_activated:true']);
+    const [cleared] = await sql`select external_subscription_schedule_id from idoc.renewal_preferences where profile_id=${profile.id}`;
+    assert.equal(cleared.external_subscription_schedule_id, null);
 });
