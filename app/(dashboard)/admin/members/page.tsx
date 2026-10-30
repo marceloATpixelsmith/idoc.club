@@ -83,7 +83,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
     hasValidProfileId ? client<{ amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string }[]>`select p.id,p.source,p.amount_cents,p.currency,p.paid_at,
       (select status from payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
-      from payments p where p.profile_id=${profileId!} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : Promise.resolve([]),
+      from payments p where p.profile_id=${profileId!} order by p.paid_at desc` : Promise.resolve([]),
   ]);
   const [activeRoles, accountState, paymentHistory, seminarHistory, rawNotificationHistory] = await Promise.all([
     selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),

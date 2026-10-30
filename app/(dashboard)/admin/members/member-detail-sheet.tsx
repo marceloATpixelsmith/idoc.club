@@ -1,7 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useCallback, useState, useTransition } from 'react';
 import { useAdminDrawerClose } from '@/components/admin/admin-form-drawer';
 import { AdminReadOnlyTable, type ReadOnlyRow } from '@/components/admin/admin-read-only-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +19,7 @@ import { ForceRevokeAllAuthorityForm, ReinstateAccountForm, SuspendAccountForm }
 import { RolesSection } from './roles-section';
 import { ExtendExpirationForm } from './extend-expiration-form';
 import { ManualPaymentForm } from '../payments/manual-payment-form';
-import { MembershipRefundForm } from '../payments/refund-form';
+import { MemberPaymentsTable } from '../payments/member-payments-table';
 import { formatTableDate } from '@/lib/format';
 import type { TablePreferenceState } from '@/lib/admin/table-preferences';
 
@@ -85,6 +86,11 @@ export function MemberDetailSheet({
   const requestedTab = (TABS as readonly string[]).includes(initialTab ?? '') ? (initialTab as Tab) : 'overview';
   const [tab, setTab] = useState<Tab>(requestedTab === 'roles' && !isSuperAdmin ? 'overview' : requestedTab);
   const { profile } = selected;
+  const router = useRouter();
+  const [paymentsRefreshing, startPaymentRefresh] = useTransition();
+  const refreshPayments = useCallback(() => {
+    startPaymentRefresh(() => router.refresh());
+  }, [router]);
   // `open` was previously hardcoded to the literal `true` rather than real state, which made this a
   // Radix "controlled" component whose value never actually changed -- so closing (X, overlay click,
   // Escape) never played the exit animation at all; the Sheet just sat there, fully open, until the
@@ -159,15 +165,13 @@ export function MemberDetailSheet({
           </TabsContent>
 
           <TabsContent value="payment">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <Section title="Record a manual payment">
-                <ManualPaymentForm currentValidUntil={selected.entitlement?.validUntil ?? null} onSuccess={closeAndRefresh} profileId={profile.id} />
+                <ManualPaymentForm currentValidUntil={selected.entitlement?.validUntil ?? null} onSuccess={refreshPayments} profileId={profile.id} />
               </Section>
-              <Section title="Stripe payment history">
-                {stripePayments.length === 0 ? <p className="text-sm">No refundable Stripe payments.</p> : <div className="space-y-3">{stripePayments.map((payment) => <article className="border-t pt-3 first:border-t-0 first:pt-0" key={payment.id}>
-                  <p className="text-sm">{payment.source} · {new Intl.NumberFormat('en-IE', { currency: payment.currency, style: 'currency' }).format(payment.amount_cents / 100)} · {formatTableDate(payment.paid_at)}</p>
-                  {payment.refund_status === 'succeeded' ? <p className="text-sm font-medium">Refunded</p> : <MembershipRefundForm onSuccess={closeAndRefresh} paymentId={String(payment.id)} profileId={String(profile.id)} />}
-                </article>)}</div>}
+
+              <Section title="Payment history">
+                <MemberPaymentsTable onSuccess={closeAndRefresh} payments={stripePayments} profileId={String(profile.id)} />
               </Section>
             </div>
           </TabsContent>

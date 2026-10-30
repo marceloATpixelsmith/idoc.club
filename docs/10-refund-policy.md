@@ -56,3 +56,7 @@ before release and cannot be replaced by a source-code assertion or a manually i
 ## Entire-seminar cancellation exception
 
 The discretionary rule above governs an individual registrant cancellation. Canceling the seminar itself is different: IDOC automatically attempts a full Stripe refund for every confirmed Stripe seminar payment, expires open Checkout Sessions, and reconciles a Checkout completion racing with cancellation. A failed provider attempt leaves the registration canceled and `refund_failed`, with durable evidence and an administrator retry path. Offline pending or manually paid records are never represented as Stripe refunds and retain their payment evidence for administrator follow-up.
+
+## Member payment history interface
+
+The member drawer Payment tab places the manual payment form beside the shared administrator DataTable showing all recorded payments, with Date, Amount, Source, Status, and Actions columns. Recording a payment refreshes the adjacent history with a loading skeleton while keeping the drawer open. Only eligible Stripe payments offer a refund action. That action opens a branded dialog with payment details, a required controlled reason, Cancel, and the full-refund submission. Failed submissions preserve the reason; fresh authenticator verification resumes the action. Successful refunds close the drawer and refresh the member table. Refunded payments retain their history and have no refund action.
