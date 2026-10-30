@@ -157,6 +157,10 @@ export async function getOwnPaymentMethodSummary(testStripeClient?: PaymentMetho
 export type CancellationStripeClient = {
   // Optional: only the call that ends a member's open Checkout sessions on cancellation (checkout-session-expiry.ts) uses it.
   checkout?: { sessions?: { expire?: (id: string) => Promise<unknown> } };
+  subscriptionSchedules?: {
+    release: (id: string) => Promise<{ released_subscription: string | null }>;
+    retrieve: (id: string) => Promise<{ status: string; subscription?: string | { id: string } | null; released_subscription?: string | null }>;
+  };
   subscriptions: { update: (id: string, params: { cancel_at_period_end: boolean }) => Promise<{ id: string; status: string }> };
 };
 

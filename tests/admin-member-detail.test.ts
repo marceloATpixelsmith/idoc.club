@@ -22,7 +22,8 @@ test('a selected member opens a tabbed right-side Sheet, not flat anchor-jump se
   assert.match(sheet, /<ExtendExpirationForm/);
   assert.match(sheet, /<EntitlementCorrectionForm/);
   assert.match(sheet, /<ManualPaymentForm/);
-  assert.match(sheet, /<MembershipRefundForm/);
+  assert.match(sheet, /<MemberPaymentsTable/);
+  assert.match(readFileSync('app/(dashboard)/admin/payments/member-payments-table.tsx', 'utf8'), /<MembershipRefundForm/);
   assert.match(sheet, /<RolesSection/);
   assert.match(sheet, /<ForceRevokeAllAuthorityForm/);
   assert.match(sheet, /<AdminReadOnlyTable/);

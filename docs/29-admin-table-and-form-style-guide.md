@@ -75,3 +75,7 @@ Anything an administrator can filter, search, sort or range in the admin - inclu
 ## Filters and view state never use URL parameters (sitewide)
 
 Search, facet filters, sort, page and page size are never written to or read from the URL. Administrator tables persist them per user in `administrator_table_preferences` (see `lib/admin/table-preferences.ts`); the member directory, which has no administrator-only database table, persists them in the validated `idoc-directory-view` cookie (`lib/directory/member-directory-view.ts`). Either way the client saves the state and calls `router.refresh()` on the same URL. Navigation state such as `?tab=` or a record id may remain in the URL.
+
+## Member payment tab exception
+
+The Payment tab keeps Record a manual payment beside the shared payment history table. A successful manual payment keeps this drawer open and refreshes the adjacent table with its loading skeleton until refreshed server data arrives. Refunds are initiated from the table Actions column in a branded reason dialog; their successful completion retains the usual drawer-close and roster-refresh behavior. Payment history includes manual and Stripe payments and persists its admin table preferences under `member_payments`.

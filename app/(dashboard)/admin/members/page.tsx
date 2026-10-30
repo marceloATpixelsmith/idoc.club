@@ -70,6 +70,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   }
   const profileId = profileIdParam ? Number(profileIdParam) : null;
   const hasValidProfileId = Boolean(profileId && Number.isInteger(profileId));
+  const paymentPreferences = hasValidProfileId ? await getTablePreferences('member_payments') : null;
   const notificationPreferences = hasValidProfileId ? await getTablePreferences('member_notifications') : null;
   // getPrivateMember, listAuditHistory and the Stripe payment query all depend only on profileId (the
   // payment query filters on the same profile id `selected.profile.id` resolves to), not on each other;
@@ -83,7 +84,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     hasValidProfileId ? listAuditHistory(profileId!) : Promise.resolve([]),
     hasValidProfileId ? client<{ amount_cents: number; currency: string; id: number; paid_at: Date | string; refund_status: string | null; source: string }[]>`select p.id,p.source,p.amount_cents,p.currency,p.paid_at,
       (select status from payment_refunds r where r.membership_payment_id=p.id order by r.requested_at desc limit 1) refund_status
-      from payments p where p.profile_id=${profileId!} and p.source in ('stripe_recurring','stripe_one_time') order by p.paid_at desc` : Promise.resolve([]),
+      from payments p where p.profile_id=${profileId!} order by p.paid_at desc` : Promise.resolve([]),
   ]);
   const [activeRoles, accountState, paymentHistory, seminarHistory, rawNotificationHistory] = await Promise.all([
     selected && isSuperAdmin ? listActiveRoles(selected.profile.userId) : Promise.resolve([]),
@@ -118,6 +119,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
         notificationHistory={notificationHistory}
         notificationPreferences={notificationPreferences}
         paymentHistory={paymentHistory}
+        paymentPreferences={paymentPreferences}
         seminarHistory={seminarHistory}
         selected={selected}
         stripePayments={stripePayments}
