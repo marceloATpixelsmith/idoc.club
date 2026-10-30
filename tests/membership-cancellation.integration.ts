@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
 import { cancelOwnMembership } from '../lib/membership/data-access.ts';
+import { suspendMembership } from '../lib/membership/status-actions.ts';
 import { isEntitled } from '../lib/membership/entitlement.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { cancelMemberSubscriptionAtPeriodEnd } from '../lib/payments/stripe.ts';
@@ -124,4 +125,88 @@ test('cancelMemberSubscriptionAtPeriodEnd (the Stripe call cancelOpenSubscriptio
   } finally {
     Object.assign(process.env, { NODE_ENV: originalEnv });
   }
+});
+
+async function insertPendingSchedule(profileId: number)
+    {
+    await sql`insert into idoc.renewal_preferences(profile_id,current_mode,pending_mode,effective_on,external_subscription_schedule_id,transition_state)
+        values(${profileId},'non_recurring','recurring','2099-12-31','sub_sched_fixture','pending_activation')`;
+    }
+
+function fakeScheduleClient(options: { fail?: boolean; status?: string } = {})
+    {
+    const calls: string[] = [];
+    return {
+        calls,
+        client: {
+            subscriptionSchedules: {
+                retrieve: async (id: string) => ({ id, status: options.status ?? 'not_started', subscription: options.status === 'active' ? 'sub_schedule_activated' : null }),
+                cancel: async (id: string, params: { invoice_now: boolean; prorate: boolean }) => {
+                    calls.push(`cancel:${id}:${params.invoice_now}:${params.prorate}`);
+                    if (options.fail) throw new Error('Schedule provider unavailable.');
+                },
+                release: async (id: string) => { calls.push(`release:${id}`); },
+            },
+            subscriptions: {
+                update: async (id: string, params: { cancel_at_period_end: boolean }) => {
+                    calls.push(`subscription:${id}:${params.cancel_at_period_end}`);
+                    return { id, status: 'active' };
+                },
+            },
+        },
+    };
+    }
+
+test('member cancellation stops a future schedule without a subscription and clears pending renewal only after confirmation', async () => {
+    const { profile, user } = await createCompleteGraph();
+    await insertPendingSchedule(profile.id);
+    const { calls, client } = fakeScheduleClient();
+    const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
+    assert.equal(result.membership.status, 'canceled');
+    assert.equal(result.stripeCancelled, true);
+    assert.deepEqual(calls, ['cancel:sub_sched_fixture:false:false']);
+    const [preference] = await sql`select * from idoc.renewal_preferences where profile_id=${profile.id}`;
+    assert.equal(preference.current_mode, 'non_recurring');
+    assert.equal(preference.pending_mode, null);
+    assert.equal(preference.external_subscription_schedule_id, null);
+});
+
+test('schedule failure remains retryable and does not skip existing subscription cancellation', async () => {
+    const { profile, user } = await createCompleteGraph();
+    await insertPendingSchedule(profile.id);
+    await insertOpenSubscription(profile.id);
+    const failed = fakeScheduleClient({ fail: true });
+    const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(failed.client));
+    assert.equal(result.membership.status, 'canceled');
+    assert.equal(result.stripeCancelled, false);
+    assert.match(result.stripeCancelError ?? '', /Schedule provider unavailable/);
+    assert.deepEqual(failed.calls, ['cancel:sub_sched_fixture:false:false', 'subscription:sub_fixture:true']);
+    const [retained] = await sql`select external_subscription_schedule_id,pending_mode from idoc.renewal_preferences where profile_id=${profile.id}`;
+    assert.equal(retained.external_subscription_schedule_id, 'sub_sched_fixture');
+    assert.equal(retained.pending_mode, 'recurring');
+    const retry = fakeScheduleClient();
+    const retried = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(retry.client));
+    assert.equal(retried.stripeCancelled, true);
+    const [cleared] = await sql`select external_subscription_schedule_id from idoc.renewal_preferences where profile_id=${profile.id}`;
+    assert.equal(cleared.external_subscription_schedule_id, null);
+});
+
+test('a schedule activating before its webhook is released and its subscription ends at period end', async () => {
+    const { profile, user } = await createCompleteGraph();
+    await insertPendingSchedule(profile.id);
+    const { calls, client } = fakeScheduleClient({ status: 'active' });
+    const result = await withTestMembershipBoundary({ actor: { id: user.id, roles: [] } }, () => cancelOwnMembership(client));
+    assert.equal(result.stripeCancelled, true);
+    assert.deepEqual(calls, ['release:sub_sched_fixture', 'subscription:sub_schedule_activated:true']);
+    assert.equal(isEntitled({ status: result.membership.status, validUntil: result.membership.validUntil }, new Date().toISOString().slice(0, 10)), true);
+});
+
+test('administrator membership cancellation also stops a pending renewal schedule', async () => {
+    const { profile } = await createCompleteGraph();
+    await insertPendingSchedule(profile.id);
+    const admin = await createUser();
+    const { calls, client } = fakeScheduleClient();
+    const result = await withTestMembershipBoundary({ actor: { id: admin.id, roles: ['administrator'] } }, () => suspendMembership(profile.id, 'Member requested cancellation.', client));
+    assert.equal(result.stripeCancelled, true);
+    assert.deepEqual(calls, ['cancel:sub_sched_fixture:false:false']);
 });

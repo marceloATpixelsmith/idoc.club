@@ -363,3 +363,7 @@ New member onboarding requires an international phone number selected with its c
 ## Member communications and billing launch hold
 
 The server-only `DISABLE_MEMBER_COMMUNICATIONS_AND_BILLING` setting overrides outgoing communications and live billing initiation: only exact `false` releases it. Missing, empty and invalid values block. Validated Stripe test-mode mutations remain available, while all email remains held. Existing local accounting/entitlement rules and read-only reconciliation continue. Follow [the complete launch-hold runbook](27-member-communications-and-billing-launch-hold.md) for webhook/queue handling, staging isolation, migration verification and explicit operator release.
+
+## Cancellation of pending automatic renewal
+
+Member and administrator membership cancellation, including a correction into a billing-held status, stops future automatic-renewal Subscription Schedules as well as existing subscriptions. A schedule that has not started is canceled without a final invoice or proration. If it activated before the subscription webhook arrived, release the schedule and set its subscription to end at period end, preserving paid-through access. Clear pending renewal state only after provider confirmation and successful subscription cancellation. On failure, retain the schedule reference and return the existing actionable Stripe cancellation error so the same cancellation can retry. Attempt existing subscription cancellation even if the schedule request fails.
