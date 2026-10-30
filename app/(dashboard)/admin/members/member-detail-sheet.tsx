@@ -43,7 +43,7 @@ function money(amountCents: number, currency: string) {
  * rounded card, so cards -- not raw stacked fields -- are what flow into a responsive grid below. */
 function Section({ children, description, title }: { children: ReactNode; description?: string; title: string }) {
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-gold">{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
@@ -173,7 +173,7 @@ export function MemberDetailSheet({
               </Section>
 
               <Section title="Payment history">
-                <MemberPaymentsTable onSuccess={closeAndRefresh} payments={stripePayments} profileId={String(profile.id)} />
+                <MemberPaymentsTable initialPreferences={paymentPreferences} loading={paymentsRefreshing} onSuccess={closeAndRefresh} payments={stripePayments} profileId={String(profile.id)} />
               </Section>
             </div>
           </TabsContent>

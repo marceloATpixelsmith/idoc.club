@@ -37,7 +37,8 @@ test('every admin drawer closes back to the bare table URL and remounts per reco
   assert.match(table, /addEventListener\('idoc:table-refresh-end', end\)/);
   const members = readFileSync('app/(dashboard)/admin/members/member-detail-sheet.tsx', 'utf8');
   assert.match(members, /useAdminDrawerClose\(closeHref\)/);
-  assert.doesNotMatch(members, /router\.push\(closeHref\)|router\.refresh\(\)/);
+  assert.doesNotMatch(members, /router\.push\(closeHref\)/);
+  assert.match(members, /startPaymentRefresh\(\(\) => router\.refresh\(\)\)/);
   const mounts: Array<[string, RegExp]> = [
     ['app/(dashboard)/admin/seminars/registrations/page.tsx', /<RegistrationCreateDrawer key="new"[\s\S]*<RegistrationDetailSheet key=\{selected\.id\}/],
     ['app/(dashboard)/admin/seminars/page.tsx', /<AdminSeminarDrawer key="new" isNew \/>[\s\S]*<AdminSeminarDrawer key=\{seminarId\}/],
