@@ -15,7 +15,7 @@ import { APPROVAL_STATUSES, PAYMENT_STATUSES, SEMINAR_STATUSES } from '@/lib/sem
 // The database only checks the SHAPE of an identifier (migration 0086), so adding a saved view here never needs a migration; this list is the allow-list.
 export const ADMIN_TABLE_IDENTIFIERS = [
   'memberships', 'support', 'news', 'seminars', 'seminar_registrations', 'member_timeline',
-  'communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'communications_repeated_activations', 'reconciliation_findings', 'member_notifications',
+  'communications_renewal_notices', 'communications_upcoming_notices', 'communications_delivery_issues', 'communications_repeated_activations', 'reconciliation_findings', 'member_notifications', 'member_payments',
   'membership_health_range', 'membership_health_cases', 'membership_health_tracking', 'membership_health_issues', 'membership_health_notifications', 'membership_health_cohorts',
 ] as const;
 export type AdminTableIdentifier = typeof ADMIN_TABLE_IDENTIFIERS[number];
@@ -71,6 +71,7 @@ const schemas = {
   communications_repeated_activations: readOnlyReportTable,
   reconciliation_findings: readOnlyReportTable,
   member_notifications: readOnlyReportTable,
+  member_payments: readOnlyReportTable,
   membership_health_range: z.object({ from: date, to: date }).strict().refine(({ from, to }) => {
     const valid = (value?: string) => value === undefined || (!Number.isNaN(Date.parse(value + 'T00:00:00Z')) && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value);
     return valid(from) && valid(to) && (!from || !to || from <= to);

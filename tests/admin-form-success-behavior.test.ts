@@ -14,7 +14,7 @@ const successAwareForms = [
   'app/(dashboard)/admin/payments/refund-form.tsx',
 ].map((path) => ({ path, source: readFileSync(path, 'utf8') }));
 
-test('every mutating member admin form closes the sheet and refreshes the table on success', () => {
+test('member admin forms with drawer completion close the sheet and refreshes the table on success', () => {
   assert.match(memberDetailSheet, /const \{ closeAndRefresh, onOpenChange, open \} = useAdminDrawerClose\(closeHref\);/);
 
   const expectedBindings = [
@@ -23,8 +23,6 @@ test('every mutating member admin form closes the sheet and refreshes the table 
     'EntitlementCorrectionForm',
     'ReinstateForm',
     'SuspendForm',
-    'ManualPaymentForm',
-    'MembershipRefundForm',
     'ReinstateAccountForm',
     'SuspendAccountForm',
     'RolesSection',
@@ -85,4 +83,17 @@ test('News and Blog thumbnail preview follows a newly selected file and falls ba
   assert.match(drawer, /<ArticleThumbnailField allowRemoval=\{Boolean\(article\.thumbnail_url\)\}/);
   assert.doesNotMatch(drawer, /name="removeThumbnail"/);
   assert.equal((drawer.match(/<ArticleThumbnailField /g) ?? []).length, 2);
+});
+
+test('recording a manual payment refreshes adjacent history without closing the member drawer', () => {
+  assert.match(memberDetailSheet, /<ManualPaymentForm[^>]*onSuccess=\{refreshPayments\}/);
+  assert.match(memberDetailSheet, /startPaymentRefresh\(\(\) => router.refresh\(\)\)/);
+  assert.match(memberDetailSheet, /<MemberPaymentsTable[^>]*loading=\{paymentsRefreshing\}[^>]*onSuccess=\{closeAndRefresh\}/);
+  const paymentTable = readFileSync('app/(dashboard)/admin/payments/member-payments-table.tsx', 'utf8');
+  assert.match(paymentTable, /<AdminReadOnlyTable/);
+  assert.match(paymentTable, /rowActions=/);
+  assert.match(paymentTable, /<DialogContent>/);
+  assert.match(paymentTable, /<MembershipRefundForm onSuccess=\{onSuccess\}/);
+  const manualForm = readFileSync('app/(dashboard)/admin/payments/manual-payment-form.tsx', 'utf8');
+  assert.match(manualForm, /\[state, onSuccess\]/);
 });

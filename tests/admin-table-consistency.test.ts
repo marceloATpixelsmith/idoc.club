@@ -125,7 +125,7 @@ test('the one selection-bar action is Ignore: offered only for ignorable rows of
 
 test('read-only report tables show the loading skeleton when a filter, search or sort changes, and reconciliation downloads name the member and the reason', () => {
   const table = readFileSync('components/admin/admin-read-only-table.tsx', 'utf8');
-  assert.match(table, /loading=\{viewChanging\}/);
+  assert.match(table, /loading=\{loading \|\| viewChanging\}/);
   for (const handler of ['onColumnFiltersChange', 'onGlobalFilterChange', 'onSortingChange']) assert.match(table, new RegExp(`${handler}: \\(updater\\) => \\{ flashSkeleton\\(\\)`));
   const exportRoute = readFileSync('app/api/admin/export/selected-reports/route.ts', 'utf8');
   for (const column of ['memberFirstName', 'memberLastName', 'memberEmail', 'reasonForManualReview']) assert.match(exportRoute, new RegExp(column));

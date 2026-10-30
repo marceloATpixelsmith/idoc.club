@@ -2014,7 +2014,7 @@
           "tests/status-actions.integration.ts",
           "tests/stripe-webhook.integration.ts"
         ],
-        "rationale": "The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form."
+        "rationale": "The browser spec drives self-service cancellation through the real UI and moves the paid-through date to prove both sides of the boundary; sign-in refusal is exercised through the real password form. Integration regressions also prove that cancellation stops a pending renewal Subscription Schedule with no subscription row, retains failed schedule evidence for retry, and ends an activated schedule subscription at period end. A regression simulates activation between schedule retrieval and release."
       },
       "live": {
         "enabled": true,
@@ -2036,17 +2036,20 @@
           "Have an administrator reverse the cancellation and confirm sign-in works again.",
           "Before the cancellation, open Pay on My Membership and leave the Stripe Checkout page unpaid. After the administrator cancels (or suspends) the membership, complete that Checkout Session with a Stripe test card.",
           "Confirm the membership status and paid-through date are unchanged, the payment is recorded, and a status_conflict reconciliation finding names the Checkout Session.",
-          "With the membership suspended (or review required), confirm Pay refuses to create a new Checkout Session."
+          "With the membership suspended (or review required), confirm Pay refuses to create a new Checkout Session.",
+          "Using only a disposable Stripe test-mode member, authorize a future automatic-renewal schedule, cancel membership, and confirm the schedule is released and cannot activate. Repeat through the administrator cancellation action."
         ],
         "pass": [
           "Cancellation never removes access before the paid-through date and any Stripe subscription is set to end at period end.",
           "After the paid-through date the existing session ends and password sign-in is refused, with the canceled-membership message shown only after a correct password.",
           "An administrator's reversal restores sign-in.",
-          "Completing a Checkout Session never reactivates or extends a canceled, suspended or review-held membership (pentest finding 5): the payment is recorded, entitlement is unchanged, a reconciliation finding is raised, and only the audited administrator reinstatement restores access."
+          "Completing a Checkout Session never reactivates or extends a canceled, suspended or review-held membership (pentest finding 5): the payment is recorded, entitlement is unchanged, a reconciliation finding is raised, and only the audited administrator reinstatement restores access.",
+          "Cancellation stops pending automatic-renewal schedules even when no subscription exists; failed provider cancellation remains visible and retryable."
         ],
         "fail": [
           "Access ends before the paid-through date, continues after it, or the refusal message is shown for an incorrect password or an unknown email.",
-          "A payment reactivates a canceled, suspended or review-held membership, or extends its paid-through date, without an administrator's audited action."
+          "A payment reactivates a canceled, suspended or review-held membership, or extends its paid-through date, without an administrator's audited action.",
+          "A pending renewal schedule can charge after membership cancellation, or a failed provider attempt clears the schedule evidence."
         ],
         "cleanup": [
           "Remove disposable state only after evidence is captured; preserve failed-flow state when needed for debugging."
