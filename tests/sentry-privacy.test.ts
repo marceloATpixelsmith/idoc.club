@@ -85,6 +85,13 @@ test('Sentry drops only errors a visitor or scanner caused with a malformed or u
     assert.equal(isExpectedClientCausedEvent(serverError(type, value)), true, `${type}: ${value}`);
     assert.equal(prepareSentryEvent(serverError(type, value)), null);
   }
+  // The staff email alert uses the same list, keyed on the error itself.
+  const { isExpectedClientCausedError } = await import('../lib/observability/sentry-privacy.ts');
+  assert.equal(isExpectedClientCausedError(new Error('Failed to find Server Action. This request might be from an older or newer deployment.')), true);
+  assert.equal(isExpectedClientCausedError(Object.assign(new Error('x'), { name: 'CsrfError' })), true);
+  for (const error of [new TypeError('undefined is not iterable'), new Error('write CONNECT_TIMEOUT'), null, undefined, 'Failed to find Server Action']) {
+    assert.equal(isExpectedClientCausedError(error), false);
+  }
   // Real application errors, database failures and browser errors are kept.
   for (const event of [serverError('TypeError', 'undefined is not iterable'), serverError('Error', 'write CONNECT_TIMEOUT'),
     serverError('AuthorizationError', 'x', 'auto.browser.global_handlers.onerror'), serverError('Error', 'Connection closed.', 'generic'), {}, { exception: { values: [] } }]) {

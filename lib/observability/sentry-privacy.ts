@@ -103,6 +103,13 @@ const EXPECTED_REQUEST_ERROR_MESSAGES = [
 ];
 const EXPECTED_DENIAL_TYPES = new Set(['AuthorizationError', 'CsrfError']);
 
+/** True for a request error a visitor or scanner caused (including a browser holding a page from an earlier deployment); staff email alerts skip these too. */
+export function isExpectedClientCausedError(error: unknown): boolean {
+  const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
+  return (typeof name === 'string' && EXPECTED_DENIAL_TYPES.has(name))
+    || (typeof message === 'string' && EXPECTED_REQUEST_ERROR_MESSAGES.some((pattern) => pattern.test(message)));
+}
+
 export function isExpectedClientCausedEvent(event: unknown): boolean {
   const values = (event as { exception?: { values?: { type?: string; value?: string; mechanism?: { type?: string } }[] } })?.exception?.values;
   if (!values?.length) return false;
