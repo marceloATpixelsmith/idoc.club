@@ -32,9 +32,9 @@ export function ResolutionPanel({ summary }: { summary: ResolutionSummary }) {
       <h3 className="text-sm font-medium text-foreground">Resolved automatically before reporting</h3>
       <p className="mt-1 text-xs text-muted-foreground">
         {simulated && summary.simulatedBecause === 'safeguard'
-          ? 'Changes to the website database were made. Changes to Stripe are switched off for now: the import-verified safeguard (RECONCILIATION_LIVE_STRIPE_ACTIONS) is not enabled, so they are listed as if done and removed from the findings below, but nothing was changed in Stripe. Enable the safeguard once the legacy import has been checked.'
+          ? 'Changes to the website database were made. Changes to Stripe are switched off for now: the import-verified safeguard (RECONCILIATION_LIVE_STRIPE_ACTIONS) is not enabled, so nothing was changed in Stripe and the affected items stay in the findings below, where you can Ignore them. Enable the safeguard once the legacy import has been checked.'
           : simulated
-          ? 'Changes to the website database were made. Changes to Stripe are only simulated in this environment: they are listed as if done, and removed from the findings below, but nothing was changed in Stripe. A production scan makes the same changes for real.'
+          ? 'Changes to the website database were made. Changes to Stripe are not made in this environment: the affected items stay in the findings below, where you can Ignore them. A production scan makes those changes for real.'
           : 'Changes to the website database and to Stripe were made. Items resolved this way will not appear again.'}
       </p>
       <ul className="mt-2 space-y-2">

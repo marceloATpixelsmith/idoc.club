@@ -237,15 +237,15 @@ export async function resolveOrphanedSubscriptions(findings: ReconciliationFindi
       // The last check before the irreversible call: a notification may have created the local row since the scan read the table.
       const [local] = await db.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.externalSubscriptionId, orphan.externalSubscriptionId)).limit(1);
       if (local) continue;
-      if (log.stripeMode === 'apply') {
-        if (!client.subscriptions.cancel) continue;
-        await client.subscriptions.cancel(orphan.externalSubscriptionId, {}, { idempotencyKey: `idoc-orphan-subscription-cancel-${orphan.externalSubscriptionId}` });
-        await db.insert(auditLog).values({ action: 'reconciliation.orphan_subscription_canceled', entityType: 'stripe_subscription', entityId: orphan.externalSubscriptionId,
-          beforeJson: { customer: orphan.externalCustomerId, status: live.status }, reason: 'No matching IDOC subscription; IDOC records are authoritative.' });
-      }
+      // Not applied (staging, or the import-verified safeguard is off): nothing changes in Stripe, so the issue is still open. It stays in the report, where an
+      // administrator can Ignore it, instead of being counted as resolved on every scan and in every notification email.
+      if (log.stripeMode !== 'apply' || !client.subscriptions.cancel) continue;
+      await client.subscriptions.cancel(orphan.externalSubscriptionId, {}, { idempotencyKey: `idoc-orphan-subscription-cancel-${orphan.externalSubscriptionId}` });
+      await db.insert(auditLog).values({ action: 'reconciliation.orphan_subscription_canceled', entityType: 'stripe_subscription', entityId: orphan.externalSubscriptionId,
+        beforeJson: { customer: orphan.externalCustomerId, status: live.status }, reason: 'No matching IDOC subscription; IDOC records are authoritative.' });
       resolved.add(orphan.externalSubscriptionId);
-      note(log, { id: orphan.externalSubscriptionId, kind: 'orphan_subscription_canceled', outcome: log.stripeMode === 'apply' ? 'applied' : 'simulated',
-        summary: `Open Stripe subscription (${live.status}) with no record in IDOC ${log.stripeMode === 'apply' ? 'cancelled' : 'would be cancelled in production'}.` });
+      note(log, { id: orphan.externalSubscriptionId, kind: 'orphan_subscription_canceled', outcome: 'applied',
+        summary: `Open Stripe subscription (${live.status}) with no record in IDOC cancelled.` });
     } catch {
       note(log, { id: orphan.externalSubscriptionId, kind: 'orphan_subscription_canceled', outcome: 'failed', summary: 'The cancellation failed and will be retried by the next scan.' });
     }
@@ -286,15 +286,14 @@ export async function resolveUnlinkedCustomers(findings: ReconciliationFinding[]
       // The last check before the irreversible call: a checkout recovery, notification or import may have linked the customer during the Stripe reads above.
       const [linkedNow] = await db.select({ id: billingAccounts.id }).from(billingAccounts).where(eq(billingAccounts.externalCustomerId, id)).limit(1);
       if (linkedNow) return;
-      if (log.stripeMode === 'apply') {
-        if (!client.customers?.del) return;
-        await client.customers.del(id);
-        await db.insert(auditLog).values({ action: 'reconciliation.unlinked_customer_deleted', entityType: 'stripe_customer', entityId: id,
-          beforeJson: { created }, reason: 'No matching IDOC billing account; deleted by the reconciliation scan.' }).catch(() => undefined);
-      }
+      // Not applied: the customer still exists, so it stays in the report (where it can be ignored) rather than being counted as resolved on every scan.
+      if (log.stripeMode !== 'apply' || !client.customers?.del) return;
+      await client.customers.del(id);
+      await db.insert(auditLog).values({ action: 'reconciliation.unlinked_customer_deleted', entityType: 'stripe_customer', entityId: id,
+        beforeJson: { created }, reason: 'No matching IDOC billing account; deleted by the reconciliation scan.' }).catch(() => undefined);
       resolved.add(id);
-      note(log, { id, kind: 'unlinked_customer_deleted', outcome: log.stripeMode === 'apply' ? 'applied' : 'simulated',
-        summary: `Stripe customer with no record in IDOC, no live subscription, open invoice or recent charge ${log.stripeMode === 'apply' ? 'deleted' : 'would be deleted in production'}.` });
+      note(log, { id, kind: 'unlinked_customer_deleted', outcome: 'applied',
+        summary: 'Stripe customer with no record in IDOC, no live subscription, open invoice or recent charge deleted.' });
     } catch {
       note(log, { id, kind: 'unlinked_customer_deleted', outcome: 'failed', summary: 'The check or deletion failed and will be retried by the next scan.' });
     }
