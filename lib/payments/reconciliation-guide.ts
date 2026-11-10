@@ -34,7 +34,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
     severity: 'act',
     plain: 'Stripe is set to keep charging someone, but IDOC has no record of that subscription. The scan cancels these itself; one left here was deliberately not cancelled.',
     why: [
-      'The scan cancels an open Stripe subscription that IDOC has no record of, so it cannot charge someone who was removed. On production this is a real cancellation in Stripe; on staging it is only simulated (the report shows it as done, Stripe is untouched). Cancelled ones never appear here.',
+      'The scan cancels an open Stripe subscription that IDOC has no record of, so it cannot charge someone who was removed. On production this is a real cancellation in Stripe; on staging, or while the import-verified safeguard is off, nothing is changed in Stripe, so the subscription stays listed here until you Ignore it. Cancelled ones never appear here.',
       'Still listed: it is less than a day old (a checkout may not have reached IDOC yet), it could not be verified, the cancellation failed (retried next scan), or the scan paused because so many were unknown to IDOC compared with IDOC\'s own records that it looks like an unpopulated database or the wrong Stripe account. The Last run box says which.',
     ],
     investigate: [
@@ -97,7 +97,7 @@ export const FINDING_GUIDE: FindingGuide[] = [
     severity: 'check',
     plain: 'Stripe has a customer record that IDOC does not know about. The scan deletes the harmless ones itself; what is left here has something that needs a look.',
     why: [
-      'The scan deletes a Stripe customer that IDOC has no record of when it is more than a day old, has no subscription that is not cancelled, no open invoice and no charge in the last 90 days. On production that is a real deletion in Stripe; on staging it is only simulated.',
+      'The scan deletes a Stripe customer that IDOC has no record of when it is more than a day old, has no subscription that is not cancelled, no open invoice and no charge in the last 90 days. On production that is a real deletion in Stripe; on staging, or while the import-verified safeguard is off, nothing is deleted, so the customer stays listed here until you Ignore it.',
       'Still listed: it is less than a day old, or it has a live subscription, an open invoice or a recent charge (so it may be a real payer who has not been imported), or the scan paused because so many were unknown to IDOC that it looks like an unpopulated database or the wrong Stripe account.',
     ],
     investigate: [

@@ -216,18 +216,18 @@ test('a day-old orphaned subscription is cancelled in apply mode, audit-logged, 
   assert.deepEqual(summary.actions.map((action) => [action.kind, action.outcome]), [['orphan_subscription_canceled', 'applied']]);
 });
 
-test('in simulate mode the same orphan leaves the findings and is logged as simulated, with nothing changed in Stripe', async () => {
+test('in simulate mode the same orphan stays in the report (so it can be ignored) and nothing changes in Stripe', async () => {
   const { cancelled, client } = remediationClient();
   const result = await runReconciliationScan(
     fakeStripeClient({ subscriptions: [{ created: hoursBefore(72), customer: 'cus_x', id: 'sub_orphan', status: 'active' }] }),
     { now: NOW, remediationClient: client, stripeMode: 'simulate' },
   );
   assert.deepEqual(cancelled, []);
-  assert.equal(result.findingsCount, 0, 'the report looks as if it were done');
+  assert.equal(result.findingsCount, 1, 'nothing was resolved, so it is still reported');
   assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.orphan_subscription_canceled'`).length, 0);
   const summary = await lastSummary();
   assert.equal(summary.stripeMode, 'simulate');
-  assert.deepEqual(summary.actions.map((action) => [action.kind, action.outcome]), [['orphan_subscription_canceled', 'simulated']]);
+  assert.deepEqual(summary.actions, []);
 });
 
 test('an orphan younger than a day is reported and left alone', async () => {
@@ -434,13 +434,20 @@ test('unlinked customers are deleted automatically when old, unlinked and inacti
   assert.equal((await sql`select 1 from idoc.audit_log where action = 'reconciliation.unlinked_customer_deleted' and entity_id = 'cus_clean'`).length, 1);
 });
 
-test('in simulate mode the unlinked customer is removed from the report but never deleted', async () => {
+test('in simulate mode the unlinked customer stays in the report, can be ignored, and is never deleted', async () => {
   const known = await populatedAccounts(30);
   const { client, deleted } = customerClient();
   const result = await runReconciliationScan(fakeStripeClient({ customers: [...known, { created: hoursBefore(300), id: 'cus_clean' }] }), { now: NOW, remediationClient: client, stripeMode: 'simulate' });
   assert.deepEqual(deleted, []);
-  assert.equal(result.findingsCount, 0);
-  assert.deepEqual((await lastSummary()).actions.map((action) => [action.kind, action.outcome]), [['unlinked_customer_deleted', 'simulated']]);
+  assert.equal(result.findingsCount, 1);
+  assert.deepEqual((await lastSummary()).actions, []);
+  // Ignoring it removes it from the report and from every later scan's summary (and so from the notification email).
+  const admin = await adminUser();
+  const [finding] = await sql`select id from idoc.reconciliation_findings where external_customer_id = 'cus_clean'`;
+  assert.equal(await ignoreFindings(admin.id, [finding.id]), 1);
+  const again = await runReconciliationScan(fakeStripeClient({ customers: [...known, { created: hoursBefore(300), id: 'cus_clean' }] }), { now: NOW, remediationClient: client, stripeMode: 'simulate' });
+  assert.equal(again.findingsCount, 0);
+  assert.deepEqual((await lastSummary()).actions, []);
 });
 
 test('unlinked customers that dwarf the local database are paused as a wrong-database signal', async () => {
@@ -508,8 +515,6 @@ test('an ignored unlinked customer is also left out of the scan\'s automatic del
   });
   const first: string[] = [];
   await runReconciliationScan(fakeStripeClient({ customers: stripeCustomers }), { now: NOW, remediationClient: unlinkedClient(first), stripeMode: 'simulate' });
-  // Simulated: it left the findings, so ignore it by seeding the finding the way an unverifiable one would be recorded.
-  await sql`insert into idoc.reconciliation_findings(kind, external_customer_id, summary, details) values ('unlinked_customer', 'cus_keep', 'Stripe Customer cus_keep has no matching local billing account.', '{"kind":"unlinked_customer","externalCustomerId":"cus_keep"}')`;
   const [finding] = await sql`select id from idoc.reconciliation_findings where external_customer_id = 'cus_keep'`;
   await ignoreFindings(admin.id, [finding.id]);
   const deleted: string[] = [];
