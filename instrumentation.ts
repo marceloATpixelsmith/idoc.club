@@ -68,7 +68,11 @@ export const onRequestError: typeof Sentry.captureRequestError = async (error, r
   // notification reads the database. Best-effort -- it can never change how the failed request is answered.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   try {
-    const { notifyTechnicalError, reportedPagePath, reportedRequestPath, reportedUserAgent } = await import('./lib/notifications/admin-event-alerts');
+    // Same expected-error list Sentry drops (e.g. "Failed to find Server Action" from a browser still holding a page from a previous
+    // deployment): the application already answers these correctly, so they must not email Technical Support.
+    const { isExpectedClientCausedError } = await import('./lib/observability/sentry-privacy');
+    if (isExpectedClientCausedError(error)) return;
+    const { notifyTechnicalError,reportedPagePath, reportedRequestPath, reportedUserAgent } = await import('./lib/notifications/admin-event-alerts');
     const header = (name: string) => {
       const value = request.headers[name];
       return Array.isArray(value) ? value[0] : value;
