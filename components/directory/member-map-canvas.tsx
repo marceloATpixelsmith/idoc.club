@@ -19,6 +19,21 @@ const GOLD = '#d3af37';
 const PREVIEW_DOT_SCALE = 0.4;
 
 /**
+ * True only when the browser gives a real, usable WebGL context. Some privacy extensions, bots and
+ * partial WebGL implementations hand back a stub that lacks methods such as `blendEquation`; MapLibre
+ * then throws from its requestAnimationFrame render loop, where no try/catch can reach it (Sentry
+ * IDOC-2G: "this.gl.blendEquation is not a function").
+ */
+function hasUsableWebGL(): boolean {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl');
+    return !!gl && !gl.isContextLost() && typeof gl.blendEquation === 'function' && typeof gl.blendFuncSeparate === 'function';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * `preview` renders the same map as a small, static, non-interactive thumbnail (no zoom/pan, controls,
  * hover popup, click-through or first-visit hint); the homepage wraps it in a link to the full map.
  */
@@ -42,6 +57,10 @@ export function MemberMapCanvas({ canOpenDirectory = false, dots, preview = fals
 
     (async () => {
       try {
+        if (!hasUsableWebGL()) {
+          setFailed(true);
+          return;
+        }
         const maplibre = await import('maplibre-gl');
         if (cancelled) return;
         // MapLibre v6 resolves its worker next to the library file, which Next's bundler does not emit,
