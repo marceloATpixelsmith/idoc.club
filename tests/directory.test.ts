@@ -235,6 +235,9 @@ test('map dots sit at fixed country centers with area proportional to the member
 test('the dot map is MapLibre with bundled brand-colored shapes and makes no external tile request', () => {
   const canvas = readFileSync('components/directory/member-map-canvas.tsx', 'utf8');
   assert.match(canvas, /import\('maplibre-gl'\)/);
+  // Regression (Sentry IDOC-2G): a stubbed WebGL context must fall back before MapLibre starts rendering.
+  assert.match(canvas, /hasUsableWebGL\(\)/);
+  assert.match(canvas, /typeof gl\.blendEquation === 'function'/);
   assert.match(canvas, /'\/geo\/world-countries\.geojson'/);
   assert.doesNotMatch(canvas, /https?:\/\//);
   assert.match(canvas, /OCEAN = '#050c20'/);
