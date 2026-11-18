@@ -69,6 +69,17 @@ test('a sign-in code not delivered after 5 minutes is reported once, with everyt
   assert.equal((await alerts()).length, 1);
 });
 
+test('an email logged without a user id is still matched to the member who owns the address', async () => {
+  const user = await createUser();
+  const id = await logEmail({ email: user.email, kind: 'membership.expiration_reminder', minutes: 35, status: 'soft_bounced' });
+  await sql`insert into idoc.email_delivery_events(log_id, event, occurred_at, reason) values (${id}, 'soft_bounced', ${minutesAgo(8)}::timestamptz, '550 sending IP is listed')`;
+
+  assert.equal((await runEmailDeliveryWatch(now)).alerted, 1);
+  const [alert] = await alerts();
+  assert.ok(alert.body_html.includes(`user #${user.id}`), 'the member is shown');
+  assert.ok(!alert.body_html.includes('No account'), 'a real member is never reported as having no account');
+});
+
 test('nothing is reported for a delivered email, one still inside its deadline, or one sent to the administrator', async () => {
   await logEmail({ status: 'delivered' });
   await logEmail({ minutes: 2 });
