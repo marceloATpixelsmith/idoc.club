@@ -4,6 +4,7 @@ import * as schema from './schema';
 import dotenv from 'dotenv';
 import { getApplicationPostgresConnectionUrl } from './connection-url';
 import { getDatabaseSchemaName } from './schema-name';
+import { traceClient } from '../observability/db-spans';
 import 'server-only';
 
 dotenv.config();
@@ -30,9 +31,10 @@ function getClient() {
     const pooled = process.env.POSTGRES_POOL_ENABLED === 'true' && process.env.NODE_ENV !== 'test' && !process.env.TEST_DATABASE_URL;
     //TRANSACTION POOLING MUST NOT USE SESSION-LEVEL SET OR NAMED PREPARED STATEMENTS.
     //THE DATABASE ROLE ALREADY HAS THE CORRECT SEARCH_PATH DEFAULT IN POSTGRESQL.
-    connection = postgres(getApplicationPostgresConnectionUrl(), pooled
+    //EVERY QUERY IS TIMED AS A CLIENT SPAN SO A SLOW CONNECTION OR QUERY SHOWS UP UNDER THE REQUEST IN NEW RELIC.
+    connection = traceClient(postgres(getApplicationPostgresConnectionUrl(), pooled
       ? { ...CONNECTION_OPTIONS, prepare: false, connection: { application_name: 'idoc-club' } }
-      : CONNECTION_OPTIONS);
+      : CONNECTION_OPTIONS));
   }
   return connection;
 }
