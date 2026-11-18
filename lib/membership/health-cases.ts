@@ -113,13 +113,13 @@ export async function scanMembershipHealthCases(now = new Date()) {
       insert into membership_health_cases
         (issue_key, profile_id, kind, severity, title, evidence, first_seen_at, last_seen_at, updated_at)
       values (${item.issue_key},${item.profile_id},${item.kind},${item.severity},
-        ${item.title},${JSON.stringify(item.evidence)}::jsonb,now(),now(),now())
+        ${item.title},${JSON.stringify(item.evidence)}::text::jsonb,now(),now(),now())
       on conflict (issue_key) do nothing returning id
     `;
     if (inserted.length) created++;
     else await client`
       update membership_health_cases set last_seen_at=now(),
-        evidence=${JSON.stringify(item.evidence)}::jsonb, updated_at=now()
+        evidence=${JSON.stringify(item.evidence)}::text::jsonb, updated_at=now()
       where issue_key=${item.issue_key} and status in ('new','investigating')
     `;
   }
@@ -142,7 +142,7 @@ export async function scanMembershipHealthCases(now = new Date()) {
 export async function getMembershipHealthCases(): Promise<MembershipHealthCase[]> {
   const actor = await requireAccountAccess('administration');
   requireAdministrator(actor);
-  return client<MembershipHealthCase[]>`
+  const rows = await client<MembershipHealthCase[]>`
     select c.id, c.issue_key, c.profile_id, c.kind, c.severity,
       c.title, c.evidence, c.status, c.first_seen_at::text,
       c.last_seen_at::text, c.assigned_to_user_id,
@@ -154,4 +154,13 @@ export async function getMembershipHealthCases(): Promise<MembershipHealthCase[]
       c.last_seen_at desc
     limit 2000
   `;
+  // Earlier scans stored evidence as a JSON string scalar (double-encoded); unwrap it for display.
+  return rows.map((row) => ({ ...row, evidence: unwrapEvidence(row.evidence) }));
+}
+
+function unwrapEvidence(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try { return unwrapEvidence(JSON.parse(value)); } catch { return { raw: value }; }
+  }
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
