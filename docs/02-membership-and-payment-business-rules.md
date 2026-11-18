@@ -212,6 +212,8 @@ IDOC uses a rolling 12-month membership calendar. It does not use a common annua
 
 - Billing Settings presents automatic renewal as a changeable preference for the one membership. A member may switch it on or off at any time. A change takes effect at the next paid-through/renewal date, never immediately, never shortens paid time, and never creates a duplicate charge or subscription.
 
+- **Failed automatic renewal and grace.** On the first `invoice.payment_failed` for an active membership, the membership enters a five-day grace period counted from the renewal date that failed (day one) through day five, and the "We couldn't process your renewal" notice states that end date. The renewal date is the start of the billed period taken from the invoice lines' `period.start`, never the invoice's top-level `period_start`: on a renewal invoice Stripe reports the previous billing period there, which would put the grace end in the past and expire the membership at the next nightly scan. Later Smart Retry failures for the same invoice change nothing.
+
 - Switching automatic renewal off sets the existing Stripe subscription to cancel at period end. Access continues through the paid-through date and the following five-day grace period if no renewal payment is received.
 
 - Switching automatic renewal on for a non-recurring member collects and stores payment authorization without charging immediately, then schedules annual €80 billing to begin on the current paid-through date. The member may reverse a pending change before it becomes effective. Repeated or concurrent requests must be idempotent and must not create duplicate Customers, payment methods, schedules, or subscriptions.
