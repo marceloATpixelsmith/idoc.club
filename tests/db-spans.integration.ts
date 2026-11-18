@@ -45,6 +45,7 @@ test('Drizzle queries, including values() and transactions, are traced and retur
   const inTransaction = await db.transaction(async (tx) => (await tx.execute(drizzleSql`select 3::int as n`))[0].n);
   assert.equal(inTransaction, 3);
   assert.ok(names().includes('postgres SELECT'));
+  assert.ok(names().includes('postgres TRANSACTION'), 'the whole transaction is timed, including its BEGIN and COMMIT');
   assert.ok(spans.every((span) => span.ended === 1), 'every span ended');
   assert.ok(spans.length >= 2);
 });
@@ -57,4 +58,28 @@ test('a failing query still rejects with the original error and its span carries
   assert.equal(spans[0].attributes['db.error.code'], '42P01');
   assert.equal(spans[0].status, 2);
   assert.ok(!JSON.stringify(spans[0]).includes('table_that_does_not_exist'));
+});
+
+test('a transaction that throws rolls back, rejects with the original error and ends its span as an error', async () => {
+  spans.length = 0;
+  const failure = new Error('rollback me');
+  await assert.rejects(() => client.begin(async (tx) => { await tx`select 1`; throw failure; }), (error) => error === failure);
+  const transaction = spans.find((span) => span.name === 'postgres TRANSACTION');
+  assert.ok(transaction);
+  assert.equal(transaction.ended, 1);
+  assert.equal(transaction.status, 2);
+  assert.ok(!JSON.stringify(transaction).includes('rollback me'));
+});
+
+test('a transaction that cannot get a connection records the failure before its callback ever runs', async () => {
+  spans.length = 0;
+  const unreachable = traceClient(postgres('postgres://nobody@127.0.0.1:1/idoc_test_unreachable', { connect_timeout: 2, max: 1 }), tracer);
+  let callbackRan = false;
+  await assert.rejects(() => unreachable.begin(async () => { callbackRan = true; }));
+  assert.equal(callbackRan, false);
+  const transaction = spans.find((span) => span.name === 'postgres TRANSACTION');
+  assert.ok(transaction);
+  assert.equal(transaction.ended, 1);
+  assert.equal(transaction.status, 2);
+  assert.match(String(transaction.attributes['db.error.code']), /^(ECONNREFUSED|CONNECT_TIMEOUT)$/);
 });

@@ -107,7 +107,8 @@ test('a client wrapper traces tagged templates, unsafe and the client handed to 
     (tx() as unknown as ReturnType<typeof fakeQuery>).handle();
     (tx.unsafe() as unknown as ReturnType<typeof fakeQuery>).handle();
   });
-  assert.deepEqual(spans.map((span) => span.name), ['postgres SELECT', 'postgres UPDATE', 'postgres INSERT', 'postgres DELETE']);
+  assert.deepEqual(spans.map((span) => span.name), ['postgres SELECT', 'postgres UPDATE', 'postgres TRANSACTION', 'postgres INSERT', 'postgres DELETE']);
+  assert.ok(spans.every((span) => span.name === 'postgres TRANSACTION' ? span.ended === 1 : true), 'the transaction span ended');
 });
 
 test('a tracer that throws never breaks the query', () => {
@@ -116,4 +117,27 @@ test('a tracer that throws never breaks the query', () => {
   query.handle();
   assert.equal(query.handled, 1);
   assert.deepEqual(query.resolve({ count: 1 }), { count: 1 });
+});
+
+test('a transaction is timed as a whole and a failure before its callback runs still records the error code', async () => {
+  const { spans, tracer } = fakeTracer();
+  let callbackRan = false;
+  const failing = Object.assign(() => fakeQuery(['select 1']), {
+    begin: async (_callback: () => unknown) => { throw Object.assign(new Error('connect to member-db.internal failed for alice'), { code: 'CONNECT_TIMEOUT' }); },
+  });
+  const original = await traceClient(failing, tracer).begin(() => { callbackRan = true; }).catch((error: Error & { code?: string }) => error);
+  assert.equal(callbackRan, false);
+  assert.equal((original as { code?: string }).code, 'CONNECT_TIMEOUT', 'the caller still sees the original error');
+  assert.equal(spans.length, 1);
+  assert.equal(spans[0].name, 'postgres TRANSACTION');
+  assert.equal(spans[0].attributes['db.operation'], 'TRANSACTION');
+  assert.equal(spans[0].attributes['db.error.code'], 'CONNECT_TIMEOUT');
+  assert.equal(spans[0].status, SpanStatusCode.ERROR);
+  assert.equal(spans[0].ended, 1);
+  assert.ok(!JSON.stringify(spans[0]).includes('alice'));
+
+  const ok = Object.assign(() => fakeQuery(['select 1']), { begin: async (_callback?: () => unknown) => 'committed' });
+  assert.equal(await traceClient(ok, tracer).begin(), 'committed');
+  assert.equal(spans[1].status, undefined);
+  assert.equal(spans[1].ended, 1);
 });

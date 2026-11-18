@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { SpanKind, SpanStatusCode, trace, type Span, type Tracer } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, context, trace, type Span, type Tracer } from '@opentelemetry/api';
 
 /** The Postgres.js client has no OpenTelemetry instrumentation, so time spent waiting on the database (a new connection, a busy
  * pool, a slow query) was invisible: a page render that stalled for 40 seconds showed one long span with nothing under it. This
@@ -40,6 +40,43 @@ function isQuery(value: unknown): value is QueryLike {
   return typeof candidate.handle === 'function' && typeof candidate.resolve === 'function' && typeof candidate.reject === 'function' && 'executed' in candidate;
 }
 
+/** Marks a span as failed with only the error's short code (a SQLSTATE or the client's `CONNECT_TIMEOUT`), never its message. */
+function markError(span: Span, error: unknown): void {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && ERROR_CODE.test(code)) span.setAttribute('db.error.code', code);
+  span.setStatus({ code: SpanStatusCode.ERROR });
+}
+
+/** Times a whole Postgres.js transaction. Its `begin` waits for a free connection and runs BEGIN, COMMIT and ROLLBACK on the
+ * library's own internal client, which this wrapper cannot see, so the single span around the call is what shows a stall while
+ * acquiring the connection (including a `CONNECT_TIMEOUT` before the callback ever runs). The queries inside the callback nest
+ * under it. The caller sees the original result or the original error. */
+function traceTransaction<R>(run: () => Promise<R>, tracer: Tracer): Promise<R> {
+  let span: Span | undefined;
+  try {
+    span = tracer.startSpan('postgres TRANSACTION', { kind: SpanKind.CLIENT, attributes: { 'db.system': 'postgresql', 'db.operation': 'TRANSACTION' } });
+  } catch { span = undefined; }
+  if (!span) return run();
+  const started = span;
+  const finish = (error?: unknown) => {
+    try {
+      if (error !== undefined) markError(started, error);
+      started.end();
+    } catch { /* a tracing failure must never reach the transaction */ }
+  };
+  let result: Promise<R>;
+  try {
+    result = context.with(trace.setSpan(context.active(), started), run);
+  } catch (error) {
+    finish(error ?? new Error('transaction failed'));
+    throw error;
+  }
+  return result.then(
+    (value) => { finish(); return value; },
+    (error: unknown) => { finish(error ?? new Error('transaction failed')); throw error; },
+  );
+}
+
 /** Adds a timing span to one Postgres.js query, started when the query really runs. Returns the same object. */
 export function traceQuery<T>(query: T, tracer: Tracer = trace.getTracer('idoc-db')): T {
   if (!isQuery(query)) return query;
@@ -55,11 +92,7 @@ export function traceQuery<T>(query: T, tracer: Tracer = trace.getTracer('idoc-d
       try {
         const rows = (value as { count?: unknown } | undefined)?.count;
         if (typeof rows === 'number') current.setAttribute('db.rows', rows);
-        if (error !== undefined) {
-          const code = (error as { code?: unknown } | null)?.code;
-          if (typeof code === 'string' && ERROR_CODE.test(code)) current.setAttribute('db.error.code', code);
-          current.setStatus({ code: SpanStatusCode.ERROR });
-        }
+        if (error !== undefined) markError(current, error);
         current.end();
       } catch { /* a tracing failure must never reach the query */ }
     };
@@ -81,7 +114,8 @@ export function traceQuery<T>(query: T, tracer: Tracer = trace.getTracer('idoc-d
 type Callable = (...args: never[]) => unknown;
 
 /** Wraps a Postgres.js client (or a transaction's client) so every query it runs is timed: tagged templates, `unsafe` (which
- * Drizzle uses for all of its queries) and the client handed to a `begin` callback. Everything else passes straight through. */
+ * Drizzle uses for all of its queries) and transactions (one span around the whole `begin`, plus spans for the queries on the client
+ * handed to its callback). Everything else passes straight through. */
 export function traceClient<T extends Callable>(client: T, tracer: Tracer = trace.getTracer('idoc-db')): T {
   return new Proxy(client, {
     apply: (target, thisArg, args) => traceQuery(Reflect.apply(target as Callable, thisArg, args), tracer),
@@ -93,7 +127,7 @@ export function traceClient<T extends Callable>(client: T, tracer: Tracer = trac
         return (...args: unknown[]) => {
           const callback = args.at(-1);
           if (typeof callback === 'function') args[args.length - 1] = (transaction: Callable, ...rest: unknown[]) => callback(traceClient(transaction, tracer), ...rest);
-          return Reflect.apply(value, target, args);
+          return traceTransaction(() => Reflect.apply(value, target, args) as Promise<unknown>, tracer);
         };
       }
       return value;
