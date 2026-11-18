@@ -46,6 +46,10 @@ test('each renewal-notice kind delivers once with the right recipient and a stab
       const [stored] = await sql`select sent_at, attempt_count from idoc.notification_outbox where id=${row.id}`;
       assert.ok(stored.sent_at, kind);
       assert.equal(stored.attempt_count, 1, kind);
+      // The delivery log must tie the email to its member and record its kind, or a delivery-problem alert reports a real member as "No account".
+      const [logged] = await sql`select user_id, kind from idoc.email_delivery_log where recipient_email=${user.email.toLowerCase()}`;
+      assert.equal(logged?.user_id, user.id, kind);
+      assert.equal(logged?.kind, kind);
     } finally {
       globalThis.fetch = originalFetch;
     }

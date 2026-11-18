@@ -25,3 +25,17 @@ export function nextValidUntil({ currentValidUntil, paidAt }: { currentValidUnti
 export function gracePeriodEnd(failedRenewalDate: string): string {
   return addToIsoDate(failedRenewalDate, { days: GRACE_PERIOD_DAYS - 1 });
 }
+
+type InvoiceLinePeriods = { lines?: { data?: ({ period?: { start?: number | null } | null })[] | null } | null };
+
+/**
+ * The calendar date (UTC) on which a failed automatic renewal was due, used as day one of grace.
+ * Stripe's top-level `invoice.period_start` is NOT usable here: on a subscription renewal invoice it
+ * is the start of the PREVIOUS billing period (about a year earlier), which put the grace end in the
+ * past and expired the membership at the next nightly scan. The invoice lines' `period.start` is the
+ * start of the period being billed, i.e. the renewal date. Falls back to `now` when absent.
+ */
+export function failedRenewalDate(invoice: InvoiceLinePeriods, now: Date): string {
+  const starts = (invoice.lines?.data ?? []).flatMap((line) => (typeof line.period?.start === 'number' ? [line.period.start] : []));
+  return new Date(starts.length ? Math.max(...starts) * 1000 : now.getTime()).toISOString().slice(0, 10);
+}
