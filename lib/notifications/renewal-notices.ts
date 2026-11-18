@@ -402,14 +402,15 @@ export async function renderNotice(kind: string, payload: NoticePayload, context
 export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
   if (outboxDeliveryHeld()) return { status: 'blocked' as const };
   const kinds = sql.join(RENEWAL_NOTICE_KINDS.map((kind) => sql`${kind}`), sql`, `);
-  const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
+  const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload; userId: number | null }>(sql`
     with candidate as (select id from notification_outbox where kind in (${kinds})
       and sent_at is null and dead_lettered_at is null and available_at <= now()
       and (lease_expires_at is null or lease_expires_at < now())
       order by available_at, id for update skip locked limit 1)
     update notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
     from candidate where o.id = candidate.id
-    returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload
+    returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload,
+      (select p.user_id from profiles p where p.id = o.profile_id) as "userId"
   `);
   const record = rows[0];
   if (!record) return { status: 'empty' as const };
@@ -417,7 +418,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
     const { html, subject } = await renderNotice(record.kind, record.payload, { notificationId: record.id });
-    await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
+    await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to }, { kind: record.kind, userId: record.userId });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
       lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date(),
@@ -438,7 +439,7 @@ export async function deliverNextRenewalNotice(owner: string = randomUUID()) {
 
 export async function deliverNextStagingSeminarConfirmation(owner: string = randomUUID()) {
   if (outboxDeliveryHeld()) return { status: 'blocked' as const };
-  const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload }>(sql`
+  const rows = await db.execute<{ attemptCount: number; id: number; kind: string; payload: NoticePayload; userId: number | null }>(sql`
     with candidate as (
       select id from notification_outbox
       where kind in (${STAGING_SEMINAR_CONFIRMATION_KIND}, ${STAGING_SEMINAR_PAYMENT_KIND})
@@ -448,7 +449,8 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
     )
     update notification_outbox o set lease_owner = ${owner}, lease_expires_at = now() + interval '5 minutes'
     from candidate where o.id = candidate.id
-    returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload
+    returning o.id, o.attempt_count as "attemptCount", o.kind, o.payload,
+      (select p.user_id from profiles p where p.id = o.profile_id) as "userId"
   `);
   const record = rows[0];
   if (!record) return { status: 'empty' as const };
@@ -456,7 +458,7 @@ export async function deliverNextStagingSeminarConfirmation(owner: string = rand
     const to = record.payload.to;
     if (!to) throw new Error('not_configured');
     const { html, subject } = await renderNotice(record.kind, record.payload, { notificationId: record.id });
-    await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to });
+    await sendTransactionalEmail({ html, messageId: `${record.kind}-${record.id}`, subject, to }, { kind: record.kind, userId: record.userId });
     const finalized = await db.update(notificationOutbox).set({
       attemptCount: sql`${notificationOutbox.attemptCount} + 1`, lastAttemptAt: new Date(),
       lastErrorCode: null, leaseExpiresAt: null, leaseOwner: null, sentAt: new Date(),

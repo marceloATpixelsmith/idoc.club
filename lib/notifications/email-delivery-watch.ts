@@ -156,7 +156,8 @@ async function reportDeliveryProblems(now: Date, adminEmail: string | null) {
       domain,
       email: { id: row.id, kind: row.kind, messageId: row.provider_message_id, messageRef: row.message_ref, sentAt, status, statusAt, subject: row.subject, to: row.recipient_email },
       events,
-      member: row.user_id ? { accountState: row.account_state, name: fullName(row.first_name, row.last_name), profileId: row.profile_id, userId: row.user_id } : null,
+      // Older rows and senders that never record a user id still resolve through the address, so a real member is never reported as "No account".
+      member: row.user_id ? { accountState: row.account_state, name: fullName(row.first_name, row.last_name), profileId: row.profile_id, userId: row.user_id } : await memberByEmail(row.recipient_email),
       now, recent, tier,
     });
     if (await enqueueOperationalAlert({ bodyHtml: alert.html, dedupeKey: alert.dedupeKey, kind: 'email_delivery_problem', subject: taggedSubject('email.delivery_problem', alert.subject) })) summary.alerted += 1;
