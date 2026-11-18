@@ -257,6 +257,23 @@ test('invoice.payment_failed puts the membership into a five-day grace period an
   assert.equal(after.grace_ends_on, expected.toISOString().slice(0, 10));
 });
 
+test('invoice.payment_failed measures grace from the billed period start, not the previous period Stripe reports on invoice.period_start', async () => {
+  const profile = await billedProfile('cus_invoice_failed_renewal_period');
+  const membership = await createMembership(profile.id);
+  const now = Math.floor(Date.now() / 1000);
+  // Realistic subscription_cycle invoice: invoice.period_start is a year ago, the billed line starts today.
+  const response = await postWebhook(fixtureEvent('invoice.payment_failed', {
+    customer: 'cus_invoice_failed_renewal_period', id: 'in_failed_renewal_period_fixture',
+    period_start: now - 365 * 86_400, lines: { data: [{ period: { start: now, end: now + 365 * 86_400 } }] },
+  }));
+  assert.equal(response.status, 200);
+  const [after] = await sql`select status, grace_ends_on from idoc.memberships where id=${membership.id}`;
+  const expected = new Date();
+  expected.setUTCDate(expected.getUTCDate() + 4);
+  assert.equal(after.status, 'grace');
+  assert.equal(after.grace_ends_on, expected.toISOString().slice(0, 10), 'a stale period_start must not put the grace end in the past');
+});
+
 test('invoice.payment_failed enqueues a payment-failed notice with the right payload and a stable dedupe key', async () => {
   const user = await createUser();
   const profile = await createProfile(user.id);
