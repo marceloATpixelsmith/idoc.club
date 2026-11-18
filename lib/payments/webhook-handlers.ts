@@ -9,7 +9,7 @@ import { stripeMembershipProductIdForServer } from '@/lib/runtime/configuration'
 import { lockLatestMembership, type Transaction } from '@/lib/membership/locking';
 
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS } from './pricing';
-import { gracePeriodEnd, nextValidUntil } from './renewal';
+import { failedRenewalDate, gracePeriodEnd, nextValidUntil } from './renewal';
 
 // Only the one call this module makes, and only the fields it actually reads back, so tests can
 // inject a fake without satisfying the entire real Stripe SDK surface (same pattern as
@@ -160,12 +160,9 @@ async function handleInvoicePaymentFailed(tx: Transaction, event: Stripe.Event, 
   // membership (administrator action, or self-service cancellation) must not be moved into grace either -- that
   // would imply access continues until grace ends, contradicting the suspension/cancellation.
   if (!membership || membership.status === 'grace' || membership.status === 'suspended' || membership.status === 'canceled' || membership.status === 'review_required') return;
-  // Stripe's invoice period start is the authoritative scheduled-renewal date. The fallback is
-  // retained only for legacy/test invoices that predate that field.
-  const failedRenewalDate = invoice.period_start
-    ? new Date(invoice.period_start * 1000).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
-  const graceEnd = gracePeriodEnd(failedRenewalDate);
+  // Day one of grace is the renewal date that failed (the billed period's start), not invoice.period_start.
+  const renewalDate = failedRenewalDate(invoice, new Date());
+  const graceEnd = gracePeriodEnd(renewalDate);
   await tx.update(memberships).set({ graceEndsOn: graceEnd, status: 'grace', updatedAt: new Date() })
     .where(eq(memberships.id, membership.id));
   const [contact] = await tx.select({ email: users.email, firstName: profiles.firstName })
