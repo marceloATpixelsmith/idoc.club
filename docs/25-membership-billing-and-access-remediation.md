@@ -171,6 +171,10 @@ The production Stripe webhook must deliver every event consumed by current payme
 
 `createMembershipCheckoutSession` (`lib/payments/checkout.ts`) sets `cancel_url` to `${baseUrl}/dashboard/membership`. Stripe bakes this value into the Checkout Session at creation time, so it cannot be changed retroactively for a session that already exists. An earlier revision used `${baseUrl}/pricing`; once that page was removed from the app, `next.config.ts` gained a non-permanent redirect from `/pricing` to `/dashboard/membership` so a member who opened Checkout before the change and then cancels still lands back in the app instead of hitting a 404. Remove that redirect entry once enough time has passed that no pre-existing Checkout Session could still be open (Stripe Checkout Sessions expire after at most 24 hours by default), and confirm no other historical `cancel_url`/`success_url` value needs the same compatibility treatment before doing so.
 
+### 6.2 Checkout refusals and failure reporting
+
+`checkoutAction` (`lib/payments/actions.ts`) returns the three expected refusals of `createMembershipCheckoutSession` to the member as an inline form error on `/dashboard/membership` instead of letting them escape the Server Action as an HTTP 500: an open subscription already exists ("An active or pending subscription already exists for this membership."), the membership was canceled, or the membership is suspended/under review ("on hold"). These are the member's state, not server faults, so they are not reported to Sentry. Any other failure is captured to Sentry (`payment_operation: membership_checkout`) and the member sees a generic "Could not start checkout" retry message; no internal error text is shown. No entitlement, billing or authorization rule changed.
+
 ## 7. Required automated tests
 
 - one membership payment presentation; no second product/card/plan wording;
