@@ -75,7 +75,8 @@ jobs:
     name: Run live authentication suite
     needs: wait-for-staging-deployment
     environment: staging-live-e2e
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, which Playwright 1.55.1 cannot install Chromium on. Move back after upgrading Playwright.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
       contents: read
