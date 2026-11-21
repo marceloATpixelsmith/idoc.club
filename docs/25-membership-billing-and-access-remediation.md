@@ -171,6 +171,22 @@ The production Stripe webhook must deliver every event consumed by current payme
 
 `createMembershipCheckoutSession` (`lib/payments/checkout.ts`) sets `cancel_url` to `${baseUrl}/dashboard/membership`. Stripe bakes this value into the Checkout Session at creation time, so it cannot be changed retroactively for a session that already exists. An earlier revision used `${baseUrl}/pricing`; once that page was removed from the app, `next.config.ts` gained a non-permanent redirect from `/pricing` to `/dashboard/membership` so a member who opened Checkout before the change and then cancels still lands back in the app instead of hitting a 404. Remove that redirect entry once enough time has passed that no pre-existing Checkout Session could still be open (Stripe Checkout Sessions expire after at most 24 hours by default), and confirm no other historical `cancel_url`/`success_url` value needs the same compatibility treatment before doing so.
 
+### 6.2 Checkout refusals and failure reporting
+
+`checkoutAction` (`lib/payments/actions.ts`) returns the three expected refusals of `createMembershipCheckoutSession` to the member as an inline form error on `/dashboard/membership` instead of letting them escape the Server Action as an HTTP 500: an open subscription already exists ("An active or pending subscription already exists for this membership."), the membership was canceled, or the membership is suspended/under review ("on hold"). These are the member's state, not server faults, so they are not reported to Sentry. Any other failure is captured to Sentry (`payment_operation: membership_checkout`) and the member sees a generic "Could not start checkout" retry message; no internal error text is shown. No entitlement, billing or authorization rule changed.
+
+### 6.3 Replacing a stuck subscription at checkout
+
+A member whose automatic-renewal subscription is `past_due` or `incomplete` (for example a failed renewal card) and who is not paid up would otherwise be blocked from paying by the open-subscription guard. When such a member starts a *subscription-mode* checkout, `createMembershipCheckoutSession` (`lib/payments/checkout.ts`, `retireStuckSubscriptions`) replaces the stuck subscription, in this order, each step verified and retry-safe:
+
+1. Re-read the subscription from Stripe; IDOC's saved status is never trusted. Stripe `active`/`trialing`, or a latest invoice already `paid`, is refused with the normal "active or pending subscription" message and nothing is changed. Already `canceled`/`incomplete_expired`/missing in Stripe is only synced locally.
+2. Void the still-open latest renewal invoice (idempotency key per invoice), so nothing can collect on it later. An invoice that is already void is skipped.
+3. Cancel the subscription immediately in Stripe (idempotency key per subscription).
+4. Record it as `canceled` locally with an `audit_log` row (`billing.stuck_subscription_replaced`, before/after status and reason). Stripe's `customer.subscription.deleted` webhook and reconciliation also converge IDOC's copy.
+5. Only then create the new Checkout Session. A Checkout Session creates no subscription until the member pays.
+
+Failure behaviour: a failure in steps 1-4 is captured to Sentry (`payment_operation: membership_subscription_replace`) and shown to the member as "We could not replace your previous subscription. Nothing was charged; please try again..."; later steps are not run, so the worst case is the state the member was already in. A failure creating the new Checkout Session leaves the old subscription canceled and the member unblocked, so a retry proceeds directly. `memberships` is never changed by this path (the existing `customer.subscription.deleted` handler also leaves it alone), so no membership or entitlement date is lost. One-time payment mode is unaffected. Covered by `tests/checkout.integration.ts`. Before production release, this path needs the real Stripe test-mode signoff in section 8 (a past-due subscription with an open invoice), because the Stripe-side behaviour of voiding and canceling cannot be proven with the fake client.
+
 ## 7. Required automated tests
 
 - one membership payment presentation; no second product/card/plan wording;
