@@ -8,7 +8,7 @@ import { validatedAction } from '@/lib/auth/middleware';
 import { rawCanonicalSessionId, rawCanonicalUserId } from '@/lib/auth/session';
 import { requireCsrfToken } from '@/lib/security/csrf';
 import { createMembershipPortalSession } from './stripe';
-import { createMembershipCheckoutSession } from './checkout';
+import { createMembershipCheckoutSession, SUBSCRIPTION_REPLACE_FAILED } from './checkout';
 import { beginAutomaticRenewalSetup, cancelPendingRenewalChange, disableAutomaticRenewal } from './renewal-preferences';
 import { requireFreshStepUp } from '@/lib/auth/mfa/step-up';
 
@@ -16,6 +16,7 @@ const checkoutSchema = z.object({ mode: z.enum(['payment', 'subscription']) });
 
 const EXPECTED_CHECKOUT_REFUSALS = [
   'An active or pending subscription already exists for this membership.',
+  SUBSCRIPTION_REPLACE_FAILED,
   'This membership has been canceled and cannot be renewed.',
   'This membership is on hold and cannot be paid for. Contact support.',
 ];

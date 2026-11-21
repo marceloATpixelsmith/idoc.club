@@ -1,11 +1,12 @@
 import 'server-only';
 import { assertLiveBillingAllowed } from '@/lib/runtime/member-launch-hold';
 
+import * as Sentry from '@sentry/nextjs';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { deferAdminNotification, notifyCheckoutStartFailure } from '@/lib/notifications/admin-event-alerts';
 import { client, db } from '@/lib/db/drizzle';
-import { billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
+import { auditLog, billingAccounts, memberships, profiles, subscriptions, users } from '@/lib/db/schema';
 import { requireAccountAccess } from '@/lib/membership/data-access';
 import { baseUrlForServer, stripeMembershipProductIdForServer } from '@/lib/runtime/configuration';
 import { MEMBERSHIP_CURRENCY, MEMBERSHIP_FEE_CENTS, OPEN_SUBSCRIPTION_STATUSES } from './pricing';
@@ -19,12 +20,70 @@ export type CheckoutMode = 'payment' | 'subscription';
 export type CheckoutStripeClient = {
   checkout: { sessions: { retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ expires_at?: number | null; id?: string; status?: string | null; url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
+  // Used only to replace a member's stuck (past-due / incomplete) subscription; see retireStuckSubscriptions.
+  invoices?: { voidInvoice: (id: string, params?: Record<string, never>, options?: Stripe.RequestOptions) => Promise<{ id?: string }> };
+  subscriptions?: {
+    cancel: (id: string, params?: Record<string, never>, options?: Stripe.RequestOptions) => Promise<{ id?: string; status?: string }>;
+    retrieve: (id: string, params?: { expand?: string[] }) => Promise<{ id?: string; latest_invoice?: string | { id?: string; status?: string | null } | null; status: string }>;
+  };
 };
 
-async function hasOpenSubscription(profileId: number): Promise<boolean> {
-  const [existing] = await db.select({ id: subscriptions.id }).from(subscriptions)
-    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES))).limit(1);
-  return Boolean(existing);
+/** Shown when replacing a stuck subscription fails part-way. Every step is checked and retry-safe, so the member can simply try again. */
+export const SUBSCRIPTION_REPLACE_FAILED = 'We could not replace your previous subscription. Nothing was charged; please try again, or contact support if it keeps happening.';
+const ACTIVE_SUBSCRIPTION_REFUSAL = 'An active or pending subscription already exists for this membership.';
+// Only a subscription that is NOT successfully billing may be replaced. An active or trialing one never is.
+const REPLACEABLE_LOCAL_STATUSES = ['past_due', 'incomplete'];
+
+async function openSubscriptions(profileId: number): Promise<{ externalSubscriptionId: string; status: string }[]> {
+  return db.select({ externalSubscriptionId: subscriptions.externalSubscriptionId, status: subscriptions.status }).from(subscriptions)
+    .where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.status, OPEN_SUBSCRIPTION_STATUSES)));
+}
+
+async function markSubscriptionCanceledLocally(profileId: number, actorId: number, subscriptionId: string, previousStatus: string, stripeStatus: string, reason: string) {
+  await db.update(subscriptions).set({ status: 'canceled', cancelAtPeriodEnd: false, updatedAt: new Date() })
+    .where(and(eq(subscriptions.externalSubscriptionId, subscriptionId), eq(subscriptions.profileId, profileId)));
+  await db.insert(auditLog).values({ action: 'billing.stuck_subscription_replaced', actorId, afterJson: { status: 'canceled' },
+    beforeJson: { localStatus: previousStatus, stripeStatus }, entityId: subscriptionId, entityType: 'stripe_subscription', reason });
+}
+
+/**
+ * Replaces a member's stuck subscription so a new one can be created. Safe-by-order: every step is verified against Stripe, idempotent,
+ * and ordered so that a failure at any point leaves the member no worse off than before.
+ *  1. Re-read the subscription from Stripe (never trust IDOC's saved copy). Active/trialing is never replaced; already-canceled is just synced.
+ *  2. Void the still-open renewal invoice first, so nothing can collect on it later (a paid invoice cannot be voided: that aborts, nothing else changed).
+ *  3. Cancel the subscription with a stable idempotency key.
+ *  4. Only then record it locally. Stripe's customer.subscription.deleted webhook and reconciliation would also converge IDOC's copy.
+ * A new Checkout Session creates no subscription until the member pays, so if anything later fails the member simply retries.
+ */
+async function retireStuckSubscriptions(stripe: CheckoutStripeClient, profileId: number, actorId: number, open: { externalSubscriptionId: string; status: string }[]): Promise<void> {
+  if (open.some(({ status }) => !REPLACEABLE_LOCAL_STATUSES.includes(status))) throw new Error(ACTIVE_SUBSCRIPTION_REFUSAL);
+  if (!stripe.subscriptions || !stripe.invoices) throw new Error(ACTIVE_SUBSCRIPTION_REFUSAL);
+  for (const local of open) {
+    try {
+      let live;
+      try { live = await stripe.subscriptions.retrieve(local.externalSubscriptionId, { expand: ['latest_invoice'] }); } catch (error) {
+        if ((error as { code?: string }).code === 'resource_missing') {
+          await markSubscriptionCanceledLocally(profileId, actorId, local.externalSubscriptionId, local.status, 'missing', 'The subscription no longer exists in Stripe.');
+          continue;
+        }
+        throw error;
+      }
+      if (live.status === 'canceled' || live.status === 'incomplete_expired') {
+        await markSubscriptionCanceledLocally(profileId, actorId, local.externalSubscriptionId, local.status, live.status, 'Stripe had already ended this subscription; IDOC\'s copy was out of date.');
+        continue;
+      }
+      if (!['past_due', 'unpaid', 'incomplete'].includes(live.status)) throw new Error(ACTIVE_SUBSCRIPTION_REFUSAL);
+      const invoice = live.latest_invoice && typeof live.latest_invoice === 'object' ? live.latest_invoice : null;
+      if (invoice?.id && invoice.status === 'open') await stripe.invoices.voidInvoice(invoice.id, {}, { idempotencyKey: `idoc-membership-retire-invoice-${invoice.id}` });
+      else if (invoice?.status === 'paid') throw new Error(ACTIVE_SUBSCRIPTION_REFUSAL);
+      await stripe.subscriptions.cancel(local.externalSubscriptionId, {}, { idempotencyKey: `idoc-membership-retire-subscription-${local.externalSubscriptionId}` });
+      await markSubscriptionCanceledLocally(profileId, actorId, local.externalSubscriptionId, local.status, live.status, 'Member started a new subscription checkout while this one was unpaid; the unpaid invoice was voided and the subscription canceled.');
+    } catch (error) {
+      if (error instanceof Error && error.message === ACTIVE_SUBSCRIPTION_REFUSAL) throw error;
+      Sentry.captureException(error, { tags: { payment_operation: 'membership_subscription_replace' }, extra: { profileId, subscriptionId: local.externalSubscriptionId } });
+      throw new Error(SUBSCRIPTION_REPLACE_FAILED);
+    }
+  }
 }
 
 // The stable Stripe idempotency key and local profile uniqueness jointly make concurrent first
@@ -68,8 +127,9 @@ export async function createMembershipCheckoutSession(mode: CheckoutMode, testSt
   if (latestMembership?.status === 'canceled') throw new Error('This membership has been canceled and cannot be renewed.');
   // Suspended and review-held memberships are likewise decided by an administrator, so the payment page must not offer a path around it.
   if (latestMembership?.status === 'suspended' || latestMembership?.status === 'review_required') throw new Error('This membership is on hold and cannot be paid for. Contact support.');
-  if (mode === 'subscription' && await hasOpenSubscription(profile.id)) {
-    throw new Error('An active or pending subscription already exists for this membership.');
+  if (mode === 'subscription') {
+    const open = await openSubscriptions(profile.id);
+    if (open.length > 0) await retireStuckSubscriptions(stripe, profile.id, actor.id, open);
   }
   const customerId = await resolveOrCreateBillingAccount(stripe, actor.id, profile.id);
   const baseUrl = baseUrlForServer();
