@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { after, beforeEach } from 'node:test';
-import { createMembershipCheckoutSession } from '../lib/payments/checkout.ts';
+import { createMembershipCheckoutSession, SUBSCRIPTION_REPLACE_FAILED } from '../lib/payments/checkout.ts';
 import { withTestMembershipBoundary } from '../lib/membership/test-boundary.ts';
 import { closeHarness, createMembership, createProfile, createUser, resetIdoc, sql } from './postgres-harness.ts';
 
@@ -171,4 +171,171 @@ test('a missing product configuration fails closed rather than silently starting
     /STRIPE_MEMBERSHIP_PRODUCT_ID/,
   );
   assert.equal((await sql`select count(*)::int as count from idoc.billing_accounts where profile_id=${profile.id}`)[0].count, 0);
+});
+
+// ---- Replacing a stuck (past-due / incomplete) subscription so the member can pay again ----
+
+type LiveInvoice = { id: string; status: string } | null;
+type ReplaceOptions = {
+  // Checkout Sessions Stripe reports for the subscription; `expireEnds` models Stripe ending the subscription (and voiding its invoice) when its Session is expired.
+  sessions?: { id: string; status: string }[]; expireEnds?: boolean;
+};
+function replaceClient(initial: { invoice?: LiveInvoice; status: string; retrieveError?: unknown }, failures: { cancel?: boolean; checkout?: boolean; expire?: boolean; void?: boolean } = {}, options: ReplaceOptions = {}) {
+  const base = fakeStripeClient();
+  const order: string[] = [];
+  const live = { ...initial };
+  const sessionsCreate = base.client.checkout.sessions.create;
+  const client = {
+    ...base.client,
+    checkout: { sessions: { ...base.client.checkout.sessions,
+      create: async (params: unknown, createOptions: unknown) => { if (failures.checkout) throw new Error('stripe checkout down'); order.push('checkout'); return sessionsCreate(params, createOptions as never); },
+      expire: async (id: string) => { if (failures.expire) throw new Error('stripe expire down'); order.push(`expire:${id}`); if (options.expireEnds) { live.status = 'canceled'; live.invoice = { id: 'in_unpaid_fixture', status: 'void' }; } return { id, status: 'expired' }; },
+      list: async () => { order.push('list-sessions'); return { data: options.sessions ?? [] }; },
+    } },
+    invoices: { voidInvoice: async (id: string) => { if (failures.void) throw new Error('stripe void down'); order.push(`void:${id}`); return { id }; } },
+    subscriptions: {
+      cancel: async (id: string) => { if (failures.cancel) throw new Error('stripe cancel down'); order.push(`cancel:${id}`); return { id, status: 'canceled' }; },
+      retrieve: async (id: string) => { if (live.retrieveError) throw live.retrieveError; return { id, latest_invoice: live.invoice === undefined ? { id: 'in_unpaid_fixture', status: 'open' } : live.invoice, status: live.status }; },
+    },
+  };
+  return { client, order };
+}
+
+async function stuckMember(localStatus = 'past_due') {
+  const user = await createUser();
+  const profile = await createProfile(user.id);
+  await createMembership(profile.id);
+  await sql`insert into idoc.subscriptions(profile_id,external_subscription_id,price_id,status,current_period_end)
+    values(${profile.id},'sub_stuck_fixture','price_fixture',${localStatus},'2027-11-14')`;
+  return { actor: { id: user.id, roles: [] as string[] }, profile };
+}
+const subscriptionStatus = async () => (await sql`select status from idoc.subscriptions where external_subscription_id='sub_stuck_fixture'`)[0].status;
+const run = (actor: { id: number; roles: string[] }, client: unknown) => withTestMembershipBoundary({ actor }, () => createMembershipCheckoutSession('subscription', client as never));
+
+test('a past-due subscription is replaced: invoice voided, then canceled, then recorded, then checkout created', async () => {
+  const { actor, profile } = await stuckMember();
+  const { client, order } = replaceClient({ status: 'past_due' });
+  assert.equal(await run(actor, client), 'https://checkout.stripe.com/session/fixture');
+  assert.deepEqual(order, ['void:in_unpaid_fixture', 'cancel:sub_stuck_fixture', 'checkout']);
+  assert.equal(await subscriptionStatus(), 'canceled');
+  const [audit] = await sql`select action,entity_id,before_json,after_json from idoc.audit_log where action='billing.stuck_subscription_replaced'`;
+  assert.equal(audit.entity_id, 'sub_stuck_fixture');
+  assert.equal(audit.before_json.localStatus, 'past_due');
+  assert.equal((await sql`select count(*)::int c from idoc.membership_checkout_sessions where profile_id=${profile.id}`)[0].c, 1);
+});
+
+test('an incomplete subscription is replaced the same way', async () => {
+  const { actor } = await stuckMember('incomplete');
+  const { client, order } = replaceClient({ status: 'incomplete' });
+  await run(actor, client);
+  assert.deepEqual(order, ['list-sessions', 'void:in_unpaid_fixture', 'cancel:sub_stuck_fixture', 'checkout'], 'no originating Checkout Session is open, so nothing is expired');
+});
+
+test('a subscription that is actually active in Stripe is never replaced, even if IDOC still shows it past due', async () => {
+  const { actor } = await stuckMember();
+  const { client, order } = replaceClient({ status: 'active' });
+  await assert.rejects(run(actor, client), /active or pending subscription/);
+  assert.deepEqual(order, []);
+  assert.equal(await subscriptionStatus(), 'past_due');
+});
+
+test('an invoice that has been paid since is never voided and the subscription is left alone', async () => {
+  const { actor } = await stuckMember();
+  const { client, order } = replaceClient({ invoice: { id: 'in_paid_fixture', status: 'paid' }, status: 'past_due' });
+  await assert.rejects(run(actor, client), /active or pending subscription/);
+  assert.deepEqual(order, []);
+  assert.equal(await subscriptionStatus(), 'past_due');
+});
+
+test('if voiding the invoice fails nothing else is changed, and a retry succeeds', async () => {
+  const { actor } = await stuckMember();
+  const failing = replaceClient({ status: 'past_due' }, { void: true });
+  await assert.rejects(run(actor, failing.client), (error: Error) => error.message === SUBSCRIPTION_REPLACE_FAILED);
+  assert.deepEqual(failing.order, []);
+  assert.equal(await subscriptionStatus(), 'past_due');
+  assert.equal((await sql`select count(*)::int c from idoc.membership_checkout_sessions`)[0].c, 0);
+  const retry = replaceClient({ status: 'past_due' });
+  await run(actor, retry.client);
+  assert.equal(await subscriptionStatus(), 'canceled');
+});
+
+test('if the cancel fails after the invoice was voided, the retry skips the already-void invoice and finishes', async () => {
+  const { actor } = await stuckMember();
+  const failing = replaceClient({ status: 'past_due' }, { cancel: true });
+  await assert.rejects(run(actor, failing.client), (error: Error) => error.message === SUBSCRIPTION_REPLACE_FAILED);
+  assert.deepEqual(failing.order, ['void:in_unpaid_fixture']);
+  assert.equal(await subscriptionStatus(), 'past_due');
+  const retry = replaceClient({ invoice: { id: 'in_unpaid_fixture', status: 'void' }, status: 'past_due' });
+  await run(actor, retry.client);
+  assert.deepEqual(retry.order, ['cancel:sub_stuck_fixture', 'checkout']);
+  assert.equal(await subscriptionStatus(), 'canceled');
+});
+
+test('if the new checkout fails after the replacement, the member is not blocked and the retry works', async () => {
+  const { actor } = await stuckMember();
+  const failing = replaceClient({ status: 'past_due' }, { checkout: true });
+  await assert.rejects(run(actor, failing.client), /stripe checkout down/);
+  assert.equal(await subscriptionStatus(), 'canceled');
+  const retry = replaceClient({ status: 'canceled' });
+  assert.equal(await run(actor, retry.client), 'https://checkout.stripe.com/session/fixture');
+  assert.deepEqual(retry.order, ['checkout']);
+});
+
+test('a subscription Stripe already ended, or no longer has, is only synced locally', async () => {
+  for (const live of [{ status: 'canceled' }, { retrieveError: Object.assign(new Error('gone'), { code: 'resource_missing' }), status: 'x' }]) {
+    await resetIdoc();
+    const { actor } = await stuckMember();
+    const { client, order } = replaceClient(live);
+    await run(actor, client);
+    assert.deepEqual(order, ['checkout']);
+    assert.equal(await subscriptionStatus(), 'canceled');
+  }
+});
+
+test('an unpaid subscription with an already-voided invoice is canceled without a second void', async () => {
+  const { actor } = await stuckMember();
+  const { client, order } = replaceClient({ invoice: { id: 'in_x', status: 'void' }, status: 'unpaid' });
+  await run(actor, client);
+  assert.deepEqual(order, ['cancel:sub_stuck_fixture', 'checkout']);
+});
+
+test('an incomplete Checkout subscription has its open Checkout Session expired before anything else is changed', async () => {
+  const { actor } = await stuckMember('incomplete');
+  const { client, order } = replaceClient({ status: 'incomplete' }, {}, { sessions: [{ id: 'cs_origin_fixture', status: 'open' }] });
+  await run(actor, client);
+  assert.deepEqual(order, ['list-sessions', 'expire:cs_origin_fixture', 'void:in_unpaid_fixture', 'cancel:sub_stuck_fixture', 'checkout']);
+  assert.equal(await subscriptionStatus(), 'canceled');
+});
+
+test('when expiring the Checkout Session already ended the subscription in Stripe, it is only synced locally', async () => {
+  const { actor } = await stuckMember('incomplete');
+  const { client, order } = replaceClient({ status: 'incomplete' }, {}, { expireEnds: true, sessions: [{ id: 'cs_origin_fixture', status: 'open' }] });
+  await run(actor, client);
+  assert.deepEqual(order, ['list-sessions', 'expire:cs_origin_fixture', 'checkout'], 'no void or cancel is attempted on an already-ended subscription');
+  assert.equal(await subscriptionStatus(), 'canceled');
+});
+
+test('only open Checkout Sessions are expired', async () => {
+  const { actor } = await stuckMember('incomplete');
+  const { client, order } = replaceClient({ status: 'incomplete' }, {}, { sessions: [{ id: 'cs_done', status: 'complete' }, { id: 'cs_old', status: 'expired' }, { id: 'cs_open', status: 'open' }] });
+  await run(actor, client);
+  assert.deepEqual(order.filter((step) => step.startsWith('expire:')), ['expire:cs_open']);
+});
+
+test('if expiring the Checkout Session fails nothing else is changed, and a retry succeeds', async () => {
+  const { actor } = await stuckMember('incomplete');
+  const failing = replaceClient({ status: 'incomplete' }, { expire: true }, { sessions: [{ id: 'cs_origin_fixture', status: 'open' }] });
+  await assert.rejects(run(actor, failing.client), (error: Error) => error.message === SUBSCRIPTION_REPLACE_FAILED);
+  assert.deepEqual(failing.order, ['list-sessions']);
+  assert.equal(await subscriptionStatus(), 'incomplete');
+  const retry = replaceClient({ status: 'incomplete' }, {}, { sessions: [{ id: 'cs_origin_fixture', status: 'open' }] });
+  await run(actor, retry.client);
+  assert.equal(await subscriptionStatus(), 'canceled');
+});
+
+test('a past-due subscription never touches Checkout Sessions', async () => {
+  const { actor } = await stuckMember();
+  const { client, order } = replaceClient({ status: 'past_due' }, {}, { sessions: [{ id: 'cs_origin_fixture', status: 'open' }] });
+  await run(actor, client);
+  assert.equal(order.some((step) => step.startsWith('expire:') || step === 'list-sessions'), false);
 });
