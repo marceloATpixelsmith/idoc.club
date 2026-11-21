@@ -18,7 +18,7 @@ export type CheckoutMode = 'payment' | 'subscription';
 // inject a fake without satisfying the entire (very large) real Stripe SDK surface. The real
 // client structurally satisfies this already.
 export type CheckoutStripeClient = {
-  checkout: { sessions: { retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ expires_at?: number | null; id?: string; status?: string | null; url: string | null }> } };
+  checkout: { sessions: { expire?: (id: string, params?: Record<string, never>, options?: Stripe.RequestOptions) => Promise<{ id?: string; status?: string | null }>; list?: (params: { limit?: number; subscription?: string }) => Promise<{ data: { id: string; status?: string | null }[] }>; retrieve?: (id: string) => Promise<{ id?: string; status?: string | null; expires_at?: number | null; url: string | null }>; create: (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => Promise<{ expires_at?: number | null; id?: string; status?: string | null; url: string | null }> } };
   customers: { create: (params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions) => Promise<{ id: string }> };
   // Used only to replace a member's stuck (past-due / incomplete) subscription; see retireStuckSubscriptions.
   invoices?: { voidInvoice: (id: string, params?: Record<string, never>, options?: Stripe.RequestOptions) => Promise<{ id?: string }> };
@@ -60,13 +60,24 @@ async function retireStuckSubscriptions(stripe: CheckoutStripeClient, profileId:
   if (!stripe.subscriptions || !stripe.invoices) throw new Error(ACTIVE_SUBSCRIPTION_REFUSAL);
   for (const local of open) {
     try {
-      let live;
-      try { live = await stripe.subscriptions.retrieve(local.externalSubscriptionId, { expand: ['latest_invoice'] }); } catch (error) {
+      type Live = Awaited<ReturnType<NonNullable<CheckoutStripeClient['subscriptions']>['retrieve']>>;
+      const readLive = (): Promise<Live> => stripe.subscriptions!.retrieve(local.externalSubscriptionId, { expand: ['latest_invoice'] });
+      let live: Live;
+      try { live = await readLive(); } catch (error) {
         if ((error as { code?: string }).code === 'resource_missing') {
           await markSubscriptionCanceledLocally(profileId, actorId, local.externalSubscriptionId, local.status, 'missing', 'The subscription no longer exists in Stripe.');
           continue;
         }
         throw error;
+      }
+      // Stripe does not allow changing an `incomplete` Checkout subscription, or voiding its invoice, until the Checkout Session that created
+      // it is expired (https://docs.stripe.com/billing/subscriptions/overview). Expire it first; Stripe may then end the subscription itself,
+      // so read it again before deciding what is left to do.
+      if (live.status === 'incomplete' && stripe.checkout.sessions.list && stripe.checkout.sessions.expire) {
+        const sessions = await stripe.checkout.sessions.list({ limit: 10, subscription: local.externalSubscriptionId });
+        const openSessions = sessions.data.filter((session) => session.status === 'open');
+        for (const session of openSessions) await stripe.checkout.sessions.expire(session.id, {}, { idempotencyKey: `idoc-membership-retire-session-${session.id}` });
+        if (openSessions.length > 0) live = await readLive();
       }
       if (live.status === 'canceled' || live.status === 'incomplete_expired') {
         await markSubscriptionCanceledLocally(profileId, actorId, local.externalSubscriptionId, local.status, live.status, 'Stripe had already ended this subscription; IDOC\'s copy was out of date.');
